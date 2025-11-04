@@ -207,7 +207,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[220px_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 pb-16 lg:pb-0 lg:grid-cols-[220px_1fr]">
         <nav className="hidden lg:block">
           <ul className="space-y-1">
             <li><Nav to="/dashboard" label="Home" /></li>
@@ -239,8 +239,10 @@ function Nav({ to, label }: { to: string; label: string }) {
 }
 
 function BottomNav() {
+  const { open } = useTx();
+  if (open) return null; // hide while sheet is open
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-2 lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-20 h-14 border-t bg-white p-2 lg:hidden pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-center text-xs">
         <NavLink to="/dashboard">Home</NavLink>
         <NavLink to="/transfer">Transfer</NavLink>
@@ -269,8 +271,8 @@ function TxSheet() {
   const { open, status, close } = useTx();
   return (
 <Sheet open={open} onOpenChange={(v) => !v && close()}>
-  <SheetContent>
-    <div className="max-h-[60vh] overflow-y-auto">
+  <SheetContent className="z-[60] sm:max-w-md">
+    <div className="max-h-[60vh] overflow-y-auto pb-20">
         <SheetHeader>
           <SheetTitle>Transaction Status</SheetTitle>
         </SheetHeader>
