@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -14,7 +14,11 @@ import { Check, Clock, Loader2, Star, StarOff } from "lucide-react";
 import { create } from "zustand";
 import './index.css'
 import { get } from "http";
-import { ensureFalconPrivateKey, getAddress} from "./storage/keyStore";
+import { ensureFalconPrivateKey, getAddress, getFalconPublicKey} from "./storage/keyStore";
+import { stringToHex, bytesToHex } from "viem";
+import { sign } from "./crypto/falcon";
+import { createAccountToBytes, hexToBuffer } from "./lib/bytesEncoder";
+import { encodePkPackedHex } from "./crypto/falconPKPacked";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -95,7 +99,7 @@ const BundlerAPI = {
 
 const PaymasterAPI = {
   async createNewAccount(sender: Address, domain: string, publicKey: string, salt: string, signature: string): Promise<GenericResponse> {
-    return j<GenericResponse>(`${PAYMASTER}/paymaster/sponsor`, { method: "POST", body: JSON.stringify({ sender, domain, publicKey, salt, signature }) });
+    return j<GenericResponse>(`${PAYMASTER}/createfree`, { method: "POST", body: JSON.stringify({ sender, domain, publicKey, salt, signature }) });
   },
 };
 
@@ -252,7 +256,7 @@ async function initWallet(): Promise<string> {
 
 function AppContainer() {
   const [address, setAddress] = React.useState<string | null>(null);
-  const [domain, setDomain] = React.useState<string>("default"); // example
+  const [domain, setDomain] = React.useState<string>("LOCAL"); // example
   const [error, setError] = React.useState<string | null>(null);
 
 
@@ -299,7 +303,7 @@ function AppContainer() {
       </div>
     );
   }
-
+  // salt set in initWallet manually as well as below
   return (
     <AppShell address={address} domain={domain}>
       <Routes>
@@ -310,7 +314,7 @@ function AppContainer() {
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/contacts/add" element={<AddContact />} />
           <Route path="/favourites" element={<Favourites />} />
-          <Route path="/wallets" element={<Wallets />} />
+          <Route path="/wallets" element={<Wallets sender={address as Address} domain={domain} salt={`default`} />} /> 
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/privacy" element={<Privacy />} />
         </Routes>
@@ -639,11 +643,61 @@ export function Favourites() {  // this is just useless with this hardcoding
   );
 }
 
-export function Wallets() {
+type WalletsProps = {
+  sender: Address;      // your EOA that pays for / owns the QA
+  domain: string;       // whatever you’re using on the backend ("cointrol.app" etc.)
+  salt: string;         // random salt for QA creation
+};
+
+export function Wallets({
+  sender,
+  domain,
+  salt,
+}: WalletsProps) {
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<GenericResponse | null>(null);
+
+  const handleCreateQuantumAccount = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const publicKey = await getFalconPublicKey();
+      if (!publicKey) throw new Error("No Falcon public key available");
+      const rawMessage = createAccountToBytes({
+        sender: sender, 
+        domain: domain, 
+        publicKey: bytesToHex(publicKey), 
+        salt: stringToHex(salt),
+      });
+      const signature = await sign(rawMessage, domain);
+      const res = await PaymasterAPI.createNewAccount(
+        sender,
+        domain,
+        bytesToHex(publicKey),
+        stringToHex(salt),
+        signature
+      );
+
+      if (!res.success) {
+        throw new Error(String(res.result ?? "Paymaster returned success=false"));
+      }
+
+      setResponse(res);
+      // TODO: if res.result contains the new QA address, stash it in global state / context
+    } catch (e: any) {
+      setError(e.message ?? "Failed to create quantum account");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Wallets</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Wallets</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-3">
           <Tabs defaultValue="add">
             <TabsList className="grid w-full grid-cols-3">
@@ -651,22 +705,51 @@ export function Wallets() {
               <TabsTrigger value="import">Import</TabsTrigger>
               <TabsTrigger value="watch">Watch-only</TabsTrigger>
             </TabsList>
-            <TabsContent value="add" className="space-y-3"> // need to replace with real create wallet flow and remove initcode blurb
-              <Button>Create QuantumAccount</Button>
-              <div className="text-xs text-neutral-500">Deploy via EntryPoint initCode. Paymaster policy optional.</div>
+
+            <TabsContent
+              value="add"
+              className="space-y-3"
+            >
+              <Button
+                onClick={handleCreateQuantumAccount}
+                disabled={creating}
+              >
+                {creating ? "Creating…" : "Create QuantumAccount"}
+              </Button>
+
+              {error && (
+                <div className="text-xs text-red-500">
+                  {error}
+                </div>
+              )}
+
+              {response && (
+                <div className="text-xs text-emerald-500">
+                  QuantumAccount created via Paymaster.
+                </div>
+              )}
+
+              <div className="text-xs text-neutral-500">
+                Deploy via EntryPoint initCode. Paymaster policy optional.
+              </div>
             </TabsContent>
+
             <TabsContent value="import" className="space-y-3">
               <Label>Account Address</Label>
               <Input placeholder="0x…" />
-              <Button>Verify & Link</Button>
+              <Button>Verify &amp; Link</Button>
             </TabsContent>
+
             <TabsContent value="watch" className="space-y-3">
               <Label>Address</Label>
               <Input placeholder="0x…" />
               <Button>Add Watch-only</Button>
             </TabsContent>
           </Tabs>
-          <div className="pt-2 text-sm">Current: <Badge>QA#1</Badge>, Watch: 0xabc…</div>
+
+          <div className="pt-2 text-sm">
+            Current: <Badge>QA#1</Badge>, Watch: 0xabc…
+          </div>
         </CardContent>
       </Card>
     </div>
