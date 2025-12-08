@@ -9,6 +9,7 @@ const CURRENT_ADDRESS_SCHEMA_VERSION = 1;
 // Contact schema v1
 export type Address = {
   id: string;  // unique identifier of the contact or contract
+  name: string;  // copy of the name from contact or contract store
   isContact: boolean; // true for contacts and false for contracts
   isVisible: boolean; // whether to show in address book
   group?: string[]; // optional group tags for categorization
@@ -104,6 +105,7 @@ export async function getAllAddress(): Promise<Address[]> {
 
 export async function addAddress(input: {
   id: string;
+  name: string;
   group?: string[] | null;
   isContact: boolean;
   isVisible: boolean;
@@ -112,8 +114,9 @@ export async function addAddress(input: {
   const now = Date.now();
   const addresss = await loadAddressRaw();
 
-  const newaddress: Address = {
+  const newAddress: Address = {
     id: input.id,
+    name: input.name,
     group: input.group || undefined,
     isContact: input.isContact,
     isVisible: input.isVisible,
@@ -122,7 +125,7 @@ export async function addAddress(input: {
     updatedAt: now,
   };
 
-  const updated = [...addresss, newaddress];
+  const updated = [...addresss, newAddress];
   await saveAddressRaw(updated);
   return updated;
 }
