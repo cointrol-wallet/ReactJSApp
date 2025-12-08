@@ -24,13 +24,13 @@ export type Address = {
 type addressListener = (address: Address[]) => void;
 const listeners = new Set<addressListener>();
 
-function notifyAddresssUpdated(address: Address[]) {
+function notifyAddressUpdated(address: Address[]) {
   for (const listener of listeners) {
     listener(address);
   }
 }
 
-export function subscribeToAddresss(listener: addressListener): () => void {
+export function subscribeToAddress(listener: addressListener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -39,14 +39,14 @@ export function subscribeToAddresss(listener: addressListener): () => void {
 
 // --- Schema migration scaffolding -------------------------------------------
 
-async function getAddresssSchemaVersion(): Promise<number> {
+async function getAddressSchemaVersion(): Promise<number> {
   const v = await get<number | undefined>(ADDRESS_SCHEMA_VERSION_KEY);
   // If nothing stored yet, assume current version (fresh install)
   if (!v) return CURRENT_ADDRESS_SCHEMA_VERSION;
   return v;
 }
 
-async function setAddresssSchemaVersion(v: number): Promise<void> {
+async function setAddressSchemaVersion(v: number): Promise<void> {
   await set(ADDRESS_SCHEMA_VERSION_KEY, v);
 }
 
@@ -55,8 +55,8 @@ async function setAddresssSchemaVersion(v: number): Promise<void> {
  * Right now it's a no-op because v1 is the first schema.
  * When you introduce v2, add migration steps here.
  */
-async function ensureAddresssSchemaMigrated(): Promise<void> {
-  const storedVersion = await getAddresssSchemaVersion();
+async function ensureAddressSchemaMigrated(): Promise<void> {
+  const storedVersion = await getAddressSchemaVersion();
 
   if (storedVersion === CURRENT_ADDRESS_SCHEMA_VERSION) {
     return;
@@ -79,27 +79,27 @@ async function ensureAddresssSchemaMigrated(): Promise<void> {
   // For now we just bump the version if needed.
 
   if (storedVersion < CURRENT_ADDRESS_SCHEMA_VERSION) {
-    await setAddresssSchemaVersion(CURRENT_ADDRESS_SCHEMA_VERSION);
+    await setAddressSchemaVersion(CURRENT_ADDRESS_SCHEMA_VERSION);
   }
 }
 
 // --- Core load/save helpers --------------------------------------------------
 
-async function loadAddresssRaw(): Promise<Address[]> {
-  await ensureAddresssSchemaMigrated();
+async function loadAddressRaw(): Promise<Address[]> {
+  await ensureAddressSchemaMigrated();
   const addresss = await get<Address[] | undefined>(ADDRESS_KEY);
   return addresss ?? [];
 }
 
-async function saveAddresssRaw(addresss: Address[]): Promise<void> {
+async function saveAddressRaw(addresss: Address[]): Promise<void> {
   await set(ADDRESS_KEY, addresss);
-  notifyAddresssUpdated(addresss);
+  notifyAddressUpdated(addresss);
 }
 
 // --- Public API --------------------------------------------------------------
 
-export async function getAllAddresss(): Promise<Address[]> {
-  return loadAddresssRaw();
+export async function getAllAddress(): Promise<Address[]> {
+  return loadAddressRaw();
 }
 
 export async function addAddress(input: {
@@ -110,7 +110,7 @@ export async function addAddress(input: {
   indexOrder: number;
 }): Promise<Address[]> {
   const now = Date.now();
-  const addresss = await loadAddresssRaw();
+  const addresss = await loadAddressRaw();
 
   const newaddress: Address = {
     id: input.id,
@@ -123,7 +123,7 @@ export async function addAddress(input: {
   };
 
   const updated = [...addresss, newaddress];
-  await saveAddresssRaw(updated);
+  await saveAddressRaw(updated);
   return updated;
 }
 
@@ -131,7 +131,7 @@ export async function updateAddress(
   id: string,
   patch: Partial<Omit<Address, "id" | "createdAt">>
 ): Promise<Address[]> {
-  const addresss = await loadAddresssRaw();
+  const addresss = await loadAddressRaw();
   const now = Date.now();
   const updated = addresss.map(c =>
     c.id === id
@@ -143,17 +143,17 @@ export async function updateAddress(
       : c
   );
 
-  await saveAddresssRaw(updated);
+  await saveAddressRaw(updated);
   return updated;
 }
 
 export async function deleteAddress(id: string): Promise<Address[]> {
-  const addresss = await loadAddresssRaw();
+  const addresss = await loadAddressRaw();
   const updated = addresss.filter(c => c.id !== id);
-  await saveAddresssRaw(updated);
+  await saveAddressRaw(updated);
   return updated;
 }
 
-export async function clearAddresss(): Promise<void> {
-  await saveAddresssRaw([]);
+export async function clearAddress(): Promise<void> {
+  await saveAddressRaw([]);
 }

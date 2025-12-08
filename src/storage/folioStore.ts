@@ -105,7 +105,7 @@ async function saveFoliosRaw(folios: Folio[]): Promise<void> {
 
 // --- Public API --------------------------------------------------------------
 
-export async function getAllfolios(): Promise<Folio[]> {
+export async function getAllFolios(): Promise<Folio[]> {
   return loadFoliosRaw();
 }
 

@@ -8,7 +8,7 @@ import {
   deleteContact as storeDeleteContact,
   clearContacts as storeClearContacts,
   subscribeToContacts,
-} from "../lib/contactStore";
+} from "../storage/contactStore";
 
 type UseContactsResult = {
   contacts: Contact[];
