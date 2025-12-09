@@ -11,6 +11,7 @@ export type Coin = {
   id: string;  // unique identifier of the coin
   name: string;  // coin name
   symbol: string;  // coin symbol
+  decimals: number; // decimal places (should be 0 for NFTs)
   chainId: number;  // blockchain network ID
   address: string;  // contract coin
   type: string; // token type (e.g., ERC20, BEP20)
@@ -107,6 +108,7 @@ export async function getAllCoins(): Promise<Coin[]> {
 export async function addCoin(input: {
   name: string;  // coin name
   symbol: string;  // coin symbol
+  decimals: number; // decimal places (should be 0 for NFTs)
   chainId: number;  // blockchain network ID
   address: string;  // contract coin
   type: string; // token type (e.g., ERC20, BEP20)
@@ -119,6 +121,7 @@ export async function addCoin(input: {
     id: `coin:${crypto.randomUUID?.() ?? `${now}:${coins.length}`}`,
     tag: input.tag || undefined,
     name: input.name,
+    decimals: input.decimals,
     chainId: input.chainId,
     address: input.address,
     symbol: input.symbol,
