@@ -1,6 +1,6 @@
 import { Address } from "../storage/addressStore";
 
-export type AddressSortMode = "nameAsc" | "createdDesc" | "nameDesc" | "createdAsc";
+export type AddressSortMode = "nameAsc" | "createdDesc" | "nameDesc" | "createdAsc" | "none";
 
 export function sortAddresses(
   addresses: Address[],

@@ -19,6 +19,7 @@ import { stringToHex, bytesToHex } from "viem";
 import { sign } from "./crypto/falcon";
 import { createAccountToBytes, hexToBuffer } from "./lib/bytesEncoder";
 import { encodePkPackedHex } from "./crypto/falconPKPacked";
+import { Contact, Wallet } from "./storage/contactStore";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -34,7 +35,6 @@ import { encodePkPackedHex } from "./crypto/falconPKPacked";
 // --- Types ---
 export type Network = "Ethereum" | "Base";
 export type Address = `0x${string}`;
-export interface Contact { id: string; name: string; address: Address; favourite?: boolean; note?: string }
 export interface TxStatus { phase: "idle" | "preparing" | "sponsored" | "simulated" | "submitted" | "included" | "finalized" | "failed"; hash?: string; userOpHash?: string; message?: string }
 
 export interface PackedUserOperation {
@@ -543,8 +543,7 @@ export function Transfer() { // might rename as send
 export function Contacts() { // either add a type (wallet/contract) or remove favourite functionality (since favourites is for contracts with ABIs)
   const [q, setQ] = React.useState("");
   const [items] = React.useState<Contact[]>([ // need to store in localstorage or indexeddb
-    { id: "1", name: "Alice.eth", address: "0x1111111111111111111111111111111111111111" as Address, favourite: true },
-    { id: "2", name: "Bob", address: "0x2222222222222222222222222222222222222222" as Address },
+
   ]);
   const navigate = useNavigate();
 
@@ -566,19 +565,19 @@ export function Contacts() { // either add a type (wallet/contract) or remove fa
 }
 
 function ContactRow({ c }: { c: Contact }) {
-  const [fav, setFav] = React.useState(!!c.favourite);
+  const [fav, setFav] = React.useState(!!c.name);
   const { startFlow } = useTx();
   const navigate = useNavigate();
   return (
     <div className="flex items-center justify-between py-3 text-sm">
       <div>f
         <div className="font-medium">{c.name}</div>
-        <div className="font-mono text-xs text-neutral-500 truncate max-w-[60vw] lg:max-w-[40ch]">{c.address}</div>
+        <div className="font-mono text-xs text-neutral-500 truncate max-w-[60vw] lg:max-w-[40ch]">{c.name}</div>
       </div>
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => navigate(`/contacts/view/${c.id}`)}>View</Button>
         <Button size="icon" variant="ghost" onClick={() => setFav(v => !v)}>{fav ? <Star className="h-4 w-4" /> : <StarOff className="h-4 w-4" />}</Button>
-        <Button size="sm" onClick={() => startFlow({ sender: "0x0000000000000000000000000000000000000001" as Address, to: c.address, amountEth: "0.001", paymaster: "0x0000000000000000000000000000000000000000" as Address, domain: `LOCAL` })}>Send</Button> // change this to go to transfer screen with prefilled address
+        <Button size="sm" onClick={() => startFlow({ sender: "0x0000000000000000000000000000000000000001" as Address, to: c.name as Address, amountEth: "0.001", paymaster: "0x0000000000000000000000000000000000000000" as Address, domain: `LOCAL` })}>Send</Button> // change this to go to transfer screen with prefilled address
       </div>
     </div>
   );
