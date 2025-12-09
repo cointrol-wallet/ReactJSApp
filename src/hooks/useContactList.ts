@@ -5,7 +5,7 @@ import { sortContacts, ContactSortMode } from "@/lib/contactSorting";
 type UseContactsListOptions = {
   query?: string;
   tags?: string[];
-  tagMode?: boolean; // true = "any" | false = "all"
+  tagMode?: string; //  "any" | "all"
   sortMode?: ContactSortMode;
 };
 
@@ -27,7 +27,7 @@ export function useContactsList(options: UseContactsListOptions = {}) {
     }
 
     if (tags && tags.length > 0) {
-      if (tagMode) {
+      if (tagMode == "any") {
         // ANY MATCH (OR)
         list = list.filter(c =>
           c.tags?.some(tag => tags.includes(tag))
