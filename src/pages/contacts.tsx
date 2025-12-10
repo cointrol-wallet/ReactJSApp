@@ -188,7 +188,7 @@ export function Contacts() {
 
       {contacts.length === 0 ? (
         <div className="text-sm text-neutral-500">
-          No contacts yet. Add one from the transfer screen or here.
+          No contacts yet. Add one from the transaction screen or here.
         </div>
       ) : (
         <ul className="space-y-2">
@@ -204,7 +204,38 @@ export function Contacts() {
                 <div className="text-xs text-neutral-500">{c.surname}</div>
               </div>
 
+              {(c as any).wallets && (c as any).wallets.length > 0 && (
+                <div className="mt-1 text-[10px] text-neutral-500">
+                  {(c as any).wallets.map((w: Wallet, idx: number) => (
+                    <div key={idx}>
+                      <span className="font-mono">
+                        {w.chainId}: {w.address}
+                      </span>
+                     </div>
+                  ))}
+                </div>
+              )}
+
+              {c.tags && c.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-neutral-500">
+                    {c.tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="rounded-full border px-2 py-0.5"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
               <div className="flex items-center gap-2 text-xs">
+                <button
+                  className="underline"
+                  onClick={() => openEditModal(c)}
+                >
+                  Edit
+                </button>
                 <button
                   className="text-red-600 underline"
                   onClick={() => deleteContact(c.id)}
@@ -215,6 +246,152 @@ export function Contacts() {
             </li>
           ))}
         </ul>
+      )}
+
+{/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
+            <h2 className="mb-3 text-base font-semibold">
+              {editingContact ? "Edit contact" : "Add contact"}
+            </h2>
+
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Name</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Surname (optional)</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={formSurname}
+                  onChange={e => setFormSurname(e.target.value)}
+                />
+              </div>
+
+              {/* Tags input */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Tags</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 rounded-md border px-2 py-1 text-sm"
+                    placeholder="Type a tag and press Enter or comma…"
+                    value={tagInput}
+                    onChange={e => setTagInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        handleAddTagFromInput();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-md border px-2 py-1 text-xs"
+                    onClick={handleAddTagFromInput}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {formTags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-neutral-700">
+                    {formTags.map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="flex items-center gap-1 rounded-full border px-2 py-0.5"
+                        onClick={() => handleRemoveTag(tag)}
+                        title="Click to remove"
+                      >
+                        <span>#{tag}</span>
+                        <span aria-hidden>×</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Wallets */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Wallets</label>
+
+                {formWallets.length === 0 && (
+                  <div className="text-[11px] text-neutral-500">
+                    No wallets yet.
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {formWallets.map((w, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-md border px-2 py-1"
+                    >
+                      <select
+                        className="w-20 rounded-md border px-1 py-0.5 text-xs"
+                        value={w.chainId}
+                        onChange={e =>
+                          handleWalletChange(idx, "chainId", e.target.value)
+                        }
+                      >
+                        <option value={1}>Ethereum</option>
+                        <option value={11155111}>Sepolia</option>
+                        <option value={31337}>Local</option>
+                      </select>
+                      <input
+                        className="flex-1 rounded-md border px-2 py-0.5 text-xs font-mono"
+                        placeholder="0x..."
+                        value={w.address}
+                        onChange={e =>
+                          handleWalletChange(idx, "address", e.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="text-[11px] text-red-600 underline"
+                        onClick={() => handleRemoveWalletRow(idx)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-1 rounded-md border px-2 py-1 text-xs"
+                  onClick={handleAddWalletRow}
+                >
+                  + Add wallet
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-1 text-xs"
+                  onClick={closeModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
+                >
+                  {editingContact ? "Save changes" : "Create contact"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
