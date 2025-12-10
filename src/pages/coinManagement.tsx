@@ -152,6 +152,18 @@ export function Coins() {
 
           <select
             className="rounded-md border px-2 py-1 text-sm"
+            value={formChainId}
+            onChange={e => setFormChainId(e.target.value as any)}
+          >
+          {Object.entries(CHAIN_NAMES).map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+          </select>
+
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
             value={sortMode}
             onChange={e => setSortMode(e.target.value as any)}
           >
@@ -164,6 +176,19 @@ export function Coins() {
             <option value="createdDesc">Newest first</option>
             <option value="createdAsc">Oldest first</option>
           </select>
+
+          <select
+            className="w-full rounded-md border px-2 py-1 text-sm"
+            value={standard}
+            onChange={(e) => setStandard(e.target.value)}
+          >
+          {EVM_STANDARDS.map((std) => (
+            <option key={std} value={std}>
+              {std}
+            </option>
+          ))}
+          </select>
+
           <input
             className="..."
             placeholder="Filter by tags (comma-separated)…"
@@ -314,6 +339,22 @@ export function Coins() {
                             {label}
                         </option>
                     ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Standard</label>
+
+                <select
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={formStandard}
+                  onChange={(e) => setFormStandard(e.target.value)}
+                >
+                {EVM_STANDARDS.map((std) => (
+                  <option key={std} value={std}>
+                    {std}
+                  </option>
+                ))}
                 </select>
               </div>
 

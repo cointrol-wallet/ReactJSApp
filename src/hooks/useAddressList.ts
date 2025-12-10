@@ -5,7 +5,7 @@ import { sortAddresses, AddressSortMode } from "@/lib/addressSorting";
 type UseAddressListOptions = {
   query?: string;
   tags?: string[];
-  tagMode?: boolean; // true = "any" | false = "all"
+  tagMode?: string; // "any" | "all"
   sortMode?: AddressSortMode;
 };
 
@@ -26,7 +26,7 @@ export function useAddressList(options: UseAddressListOptions = {}) {
     }
 
     if (tags && tags.length > 0) {  // either need to copy tags from contracts/contacts to addresses or update this filter to use those tags
-      if (tagMode) {
+      if (tagMode == "any") {
         // ANY MATCH (OR)
         list = list.filter(c =>
           c.group?.some(tag => tags.includes(tag))
@@ -43,7 +43,7 @@ export function useAddressList(options: UseAddressListOptions = {}) {
   }, [address, query, sortMode]);
 
   return {
-    contracts: filteredAndSorted,
+    address: filteredAndSorted,
     loading,
     error,
     addAddress,

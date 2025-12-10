@@ -180,6 +180,12 @@ export function Contracts() {
             <option value="any">Match any</option>
             <option value="all">Match all</option>
           </select>
+          <button
+            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
+            onClick={openAddModal}
+          >
+            + Add contract
+          </button>
         </div>
       </div>
 

@@ -1,6 +1,9 @@
 import * as React from "react";
 import { useContactsList } from "../hooks/useContactList";
 import { Contact, Wallet } from "@/storage/contactStore";
+import { useAddress } from "../hooks/useAddresses";
+import { Address, deleteAddress } from "@/storage/addressStore";
+import { useMemo } from "react";
 
 export function Contacts() {
   const [query, setQuery] = React.useState("");
@@ -31,6 +34,16 @@ export function Contacts() {
   };
 
   const {
+      address,
+      loading: addLoading,
+      error: addError,
+      addAddress: storeAddAddress,
+      updateAddress: storeUpdateAddress,
+      deleteAddress: storeDeleteAddress,
+      clearAddress: storeClearAddress,
+    } = useAddress();
+
+  const {
     contacts,
     loading,
     error,
@@ -41,6 +54,32 @@ export function Contacts() {
 
   // --- Modal helpers ---------------------------------------------------------
 
+  function createAddressFromContact(contact: Contact) {
+    storeAddAddress({
+      id: contact.id,            
+      name: contact.name,
+      isContact: true,
+      isVisible: true,
+      group: contact.tags ?? [],
+      indexOrder: address.length,  
+    });
+  }
+
+  function updateAddressFromContact(contact: Contact, isVisible: boolean) {
+    storeUpdateAddress(contact.id,{
+      name: contact.name,
+      isVisible: isVisible,
+      group: contact.tags ?? [],
+    });
+  }
+
+  const addressMap = useMemo(() => {
+    const map: Record<string, Address> = {};
+    address.forEach(a => { map[a.id] = a });
+    return map;
+    }, address
+  );
+  
   function resetForm() {
     setFormName("");
     setFormSurname("");
@@ -142,9 +181,11 @@ export function Contacts() {
     };
 
     if (editingContact) {
-      await updateContact(editingContact.id, payload);
+      const forAddress = await updateContact(editingContact.id, payload);
+      updateAddressFromContact(forAddress.find(c => c.name === trimmedName)!, addressMap[editingContact.id]?.isVisible ?? true);
     } else {
-      await addContact(payload);
+      const forAddress = await addContact(payload);
+      createAddressFromContact(forAddress.find(c => c.name === trimmedName)!);
     }
 
     closeModal();
@@ -202,6 +243,12 @@ export function Contacts() {
             <option value="any">Match any</option>
             <option value="all">Match all</option>
           </select>
+          <button
+            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
+            onClick={openAddModal}
+          >
+            + Add contact
+          </button>
         </div>
       </div>
 
@@ -257,9 +304,18 @@ export function Contacts() {
                 </button>
                 <button
                   className="text-red-600 underline"
-                  onClick={() => deleteContact(c.id)}
+                  onClick={() => {
+                    deleteContact(c.id);
+                    deleteAddress(c.id);
+                  }}
                 >
                   Remove
+                </button>
+                <button
+                  className="underline"
+                  onClick={() => updateAddressFromContact(c, !addressMap[c.id]?.isVisible)}
+                >
+                  {addressMap[c.id]?.isVisible ? "Hide" : "Show"}
                 </button>
               </div>
             </li>

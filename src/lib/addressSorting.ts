@@ -20,6 +20,8 @@ export function sortAddresses(
     copy.sort((a, b) => a.createdAt - b.createdAt);
   } else if (mode === "createdDesc") {
     copy.sort((a, b) => b.createdAt - a.createdAt);
+  } else if (mode === "custom") {
+    copy.sort((a, b) => a.indexOrder - b.indexOrder);
   }
 
 
