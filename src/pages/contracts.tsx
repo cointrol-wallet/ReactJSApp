@@ -1,6 +1,9 @@
 import * as React from "react";
 import { useContractsList } from "../hooks/useContractList";
 import { Contract } from "@/storage/contractStore";
+import { useAddress } from "../hooks/useAddresses";
+import { Address, deleteAddress } from "@/storage/addressStore";
+import { useMemo } from "react";
 
 export function Contracts() {
   const [query, setQuery] = React.useState("");
@@ -32,6 +35,16 @@ export function Contracts() {
   };
 
   const {
+        address,
+        loading: addLoading,
+        error: addError,
+        addAddress: storeAddAddress,
+        updateAddress: storeUpdateAddress,
+        deleteAddress: storeDeleteAddress,
+        clearAddress: storeClearAddress,
+  } = useAddress();
+
+  const {
     contracts,
     loading,
     error,
@@ -41,6 +54,32 @@ export function Contracts() {
   } = useContractsList({ query, sortMode, tags, tagMode });
 
   // --- Modal helpers ---------------------------------------------------------
+
+  function createAddressFromContract(contract: Contract) {
+      storeAddAddress({
+        id: contract.id,            
+        name: contract.name,
+        isContact: false,
+        isVisible: true,
+        group: contract.tags ?? [],
+        indexOrder: address.length,  
+      });
+    }
+  
+    function updateAddressFromContract(contract: Contract, isVisible: boolean) {
+      storeUpdateAddress(contract.id,{
+        name: contract.name,
+        isVisible: isVisible,
+        group: contract.tags ?? [],
+      });
+    }
+  
+    const addressMap = useMemo(() => {
+      const map: Record<string, Address> = {};
+      address.forEach(a => { map[a.id] = a });
+      return map;
+      }, address
+    );
 
   function resetForm() {
     setFormName("");
@@ -118,9 +157,11 @@ export function Contracts() {
     };
 
     if (editingContract) {
-      await updateContract(editingContract.id, payload);
+      const forAddress = await updateContract(editingContract.id, payload);
+      updateAddressFromContract(forAddress.find(c => c.name === trimmedName)!, addressMap[editingContract.id]?.isVisible ?? true);
     } else {
-      await addContract(payload);
+      const forAddress = await addContract(payload);
+      createAddressFromContract(forAddress.find(c => c.name === trimmedName)!);
     }
 
     closeModal();
@@ -232,9 +273,18 @@ export function Contracts() {
                 </button>
                 <button
                   className="text-red-600 underline"
-                  onClick={() => deleteContract(c.id)}
+                  onClick={() => {
+                    deleteContract(c.id);
+                    deleteAddress(c.id);
+                  }}
                 >
                   Remove
+                </button>
+                <button
+                  className="underline"
+                  onClick={() => updateAddressFromContract(c, !addressMap[c.id]?.isVisible)}
+                >
+                  {addressMap[c.id]?.isVisible ? "Hide" : "Show"}
                 </button>
               </div>
             </li>
