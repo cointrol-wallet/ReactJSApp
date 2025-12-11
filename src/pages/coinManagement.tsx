@@ -153,7 +153,7 @@ export function Coins() {
           <select
             className="rounded-md border px-2 py-1 text-sm"
             value={formChainId}
-            onChange={e => setFormChainId(e.target.value as any)}
+            onChange={e => setChainId(e.target.value as any)}
           >
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
             <option key={id} value={id}>

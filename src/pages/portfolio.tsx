@@ -1,30 +1,28 @@
 import * as React from "react";
-import { useCoinList } from "../hooks/useCoinList";
-import { Coin } from "@/storage/coinStore";
+import { useFolioList } from "../hooks/useFolioList";
+import { Folio } from "@/storage/folioStore";
+import { useCoinList } from "@/hooks/useCoinList";
+import { Coin } from "@/storage/coinStore"; 
+import { useMemo } from "react";
 
-export function Coins() {
+export function Folios() {
   const [query, setQuery] = React.useState("");
-  const [sortMode, setSortMode] = React.useState<"nameAsc" | "createdDesc" | "nameDesc" | "symbolAsc" | "symbolDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc">(
+  const [sortMode, setSortMode] = React.useState< "createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc"  >(
     "nameAsc"
+  );
+  const [secondarySortMode, setSecondarySortMode] = React.useState< "folioSort" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc" >(
+    "folioSort"
   );
   const [tags, setTags] = React.useState<string[]>([]);
   const [tagMode, setTagSearchMode] = React.useState("any");
   const [tagSearch, setTagSearch] = React.useState<string>("");
-  const [standard, setStandard] = React.useState("");
   const [chainId, setChainId] = React.useState<number>(0);
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [editingCoin, setEditingCoin] = React.useState<Coin | null>(null);
+  const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
-  const [formSymbol, setFormSymbol] = React.useState("");   
-  const [formDecimals, setFormDecimals] = React.useState<number>(18);
-  const [formAddress, setFormAddress] = React.useState("");
-  const [formChainId, setFormChainId] = React.useState<number>(1);
-  const [formStandard, setFormStandard] = React.useState("ERC20");
-  const [formTags, setFormTags] = React.useState<string[]>([]);
-  const [tagInput, setTagInput] = React.useState("");
 
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
@@ -38,75 +36,42 @@ export function Coins() {
   const EVM_STANDARDS = ["NATIVE", "ERC20", "ERC721", "ERC1155", "ERC3643", "ERC7943"];
 
   const {
-    coins,
+      coins,
+      loading: cLoading,
+      error: cError,
+      addCoin,
+      deleteCoin,
+      updateCoin,
+    } = useCoinList({ query, sortMode: "nameAsc", tags, tagMode, standard: "", chainId });
+  
+  const {
+    folios,
     loading,
     error,
-    addCoin,
-    deleteCoin,
-    updateCoin,
-  } = useCoinList({ query, sortMode, tags, tagMode, standard, chainId });
+    addFolio,
+    deleteFolio,
+    updateFolio,
+  } = useFolioList({ query, sortMode, chainId });
 
   // --- Modal helpers ---------------------------------------------------------
 
   function resetForm() {
     setFormName("");
-    setFormAddress("");
-    setFormTags([]);
-    setFormChainId(1);
-    setTagInput("");
-    setFormSymbol("");
-    setFormDecimals(18);
-    setFormStandard("ERC20");
   }
 
   function openAddModal() {
-    setEditingCoin(null);
     resetForm();
     setIsModalOpen(true);
   }
 
-  function openEditModal(coin: Coin) {
-    setEditingCoin(coin);
-    setFormName(coin.name ?? "");
-    setFormAddress(coin.address ?? "");
-    setFormChainId(coin.chainId ?? 1);
-    setFormTags(coin.tags ?? []);
-    setTagInput("");
-    setFormSymbol(coin.symbol ?? "");
-    setFormDecimals(coin.decimals ?? 18);
-    setFormStandard(coin.type ?? "ERC20");
+  function openEditModal(folio: Folio) {
+    setFormName(folio.name ?? "");
     setIsModalOpen(true);
   }
 
   function closeModal() {
     setIsModalOpen(false);
-    setEditingCoin(null);
     resetForm();
-  }
-
-  function handleAddTagFromInput() {
-    const raw = tagInput.trim();
-    if (!raw) return;
-
-    const newTags = raw
-      .split(",")
-      .map(t => t.trim())
-      .filter(Boolean);
-
-    setFormTags(prev => {
-      const lowerPrev = new Set(prev.map(t => t.toLowerCase()));
-      const merged = [...prev];
-      for (const t of newTags) {
-        if (!lowerPrev.has(t.toLowerCase())) merged.push(t);
-      }
-      return merged;
-    });
-
-    setTagInput("");
-  }
-
-  function handleRemoveTag(tag: string) {
-    setFormTags(prev => prev.filter(t => t !== tag));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -117,18 +82,21 @@ export function Coins() {
 
     const payload: any = {
       name: trimmedName,
-      address: formAddress.trim() || undefined,
-      chainId: formChainId || undefined,
-      tags: formTags.length > 0 ? formTags : undefined,
-      symbol: formSymbol.trim() || undefined,
-      decimals: formDecimals,
-      type: formStandard,
     };
 
-    if (editingCoin) {
-      await updateCoin(editingCoin.id, payload);
+    if (editingFolio) {
+      await updateFolio(editingFolio.id, payload);
     } else {
-      await addCoin(payload);
+      const domainDetails = {
+        // fetch domain details and complete this
+        address: "0x0000000000000000000000000000000000000000",
+        chainId: 1,
+        paymaster: "0x0000000000000000000000000000000000000000",
+        type: 0,
+        bundler: "0x0000000000000000000000000000000000000000",
+        // add logic for wallet discovery using coins filtered by chainId
+      } 
+      await addFolio({...payload, ...domainDetails });
     }
 
     closeModal();

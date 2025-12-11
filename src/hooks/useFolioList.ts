@@ -33,7 +33,7 @@ export function useFolioList(options: UseFolioListOptions = {}) {
   }, [folios, query, sortMode]);
 
   return {
-    coins: filteredAndSorted,
+    folios: filteredAndSorted,
     loading,
     error,
     addFolio,
