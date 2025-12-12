@@ -1,3 +1,5 @@
+import { concat } from "viem";
+
 export type BytesLike = Uint8Array | string;
 export type Hex = `0x${string}`;
 
@@ -5,8 +7,7 @@ export interface CreateNewAccountUnsigned {
   sender: string;           // address
   domain: string;           // human-readable name
   publicKey: Hex;           // 0x-prefixed hex bytes
-  createPaymaster: string;  // address
-  registerPaymaster: string;// address
+  salt: Hex;                // nonce used to deterministically derive an address
 }
 
 export interface CreateNewAccount extends CreateNewAccountUnsigned {
@@ -15,7 +16,7 @@ export interface CreateNewAccount extends CreateNewAccountUnsigned {
 
 // --- helpers ---
 
-function hexToBytes(hex: string): Uint8Array {
+/* function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (clean.length % 2 !== 0) {
     throw new Error(`Invalid hex string length: ${hex}`);
@@ -36,46 +37,35 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
     offset += c.length;
   }
   return out;
-}
+} */
 
-// --- your encoder ---
+// --- encoder ---
 
 
 export function createAccountToBytes(
   newAccount: CreateNewAccountUnsigned
 ): Uint8Array {
   const encoder = new TextEncoder();
-
-  // Variable-length string → UTF-8
-  const domainBytes = encoder.encode(newAccount.domain);
-
-  // Addresses & public key are hex → raw bytes
-  const senderBytes         = hexToBytes(newAccount.sender);
-  const pubKeyBytes         = hexToBytes(newAccount.publicKey);
-  const createPayBytes      = hexToBytes(newAccount.createPaymaster);
-  const registerPayBytes    = hexToBytes(newAccount.registerPaymaster);
-
-  // Optional: prefix domain with its length (uint16) so it’s unambiguous
-  const domainLen = new Uint8Array(2);
-  domainLen[0] = (domainBytes.length >> 8) & 0xff;
-  domainLen[1] = domainBytes.length & 0xff;
-
-  const packed = concatBytes([
-    senderBytes,        // 20 bytes
-    createPayBytes,     // 20 bytes
-    registerPayBytes,   // 20 bytes
-    pubKeyBytes,        // whatever size your key is (e.g. 1792)
-    domainLen,          // 2 bytes
-    domainBytes,        // variable
-  ]);
+  
+    const senderBytes = encoder.encode(newAccount.sender); 
+    const domainBytes = encoder.encode(newAccount.domain);
+    const saltBytes = encoder.encode(newAccount.salt);
+    const pubKeyBytes = encoder.encode(newAccount.publicKey);
+  
+    const packed = concat([
+      senderBytes,
+      domainBytes,
+      pubKeyBytes,
+      saltBytes
+    ]);
 
   return packed;
 }
 
-export async function sendCreateAccountToBundler(
+export async function sendCreateAccountToPaymaster(
   account: CreateNewAccount
 ) {
-  const res = await fetch("http://localhost:8080/create", {
+  const res = await fetch(`http://localhost:8081/createfree`, { 
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -88,5 +78,37 @@ export async function sendCreateAccountToBundler(
     throw new Error(`Bundler /create error: ${res.status} ${text}`);
   }
 
-  return res.json(); // or res.text() depending on your API
+  return res.json(); 
+}
+
+export async function getDomainList(){
+  const res = await fetch(`http://localhost:8080/domain`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+    if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Domain error: ${res.status} ${text}`);
+  }
+
+  return res.json(); 
+}
+
+export async function getDomainDetails(
+  id: number
+){
+  const res = await fetch(`http://localhost:8080/domain/${id}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+    if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Domain error: ${res.status} ${text}`);
+  }
+
+  return res.json(); 
 }
