@@ -1,4 +1,29 @@
-import { concat } from "viem";
+
+import {
+  concat,
+  Address,
+  numberToHex,
+  encodeAbiParameters,
+  parseAbiParameters,
+  keccak256,
+} from "viem";
+
+export interface UserOperation {
+  sender: Address;
+  nonce: bigint;
+  initCode: Hex;
+  callData: Hex;
+  accountGasLimits: Hex;
+  preVerificationGas: bigint;
+  gasFees: Hex
+  paymasterAndData: Hex;
+  signature: Hex;
+}
+
+export interface PackedUserOperation extends UserOperation{
+  domain: string;
+  simulateOnly: boolean;
+}
 
 export type BytesLike = Uint8Array | string;
 export type Hex = `0x${string}`;
@@ -39,7 +64,7 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
   return out;
 } */
 
-// --- encoder ---
+// --- encoders ---
 
 
 export function createAccountToBytes(
@@ -62,6 +87,39 @@ export function createAccountToBytes(
   return packed;
 }
 
+export const calculateUserOpHash = (
+  userop: UserOperation,
+  entryPoint: Address,
+  chainId: number,
+) => {
+  const packed = encodeAbiParameters(
+    parseAbiParameters(
+      "address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32",
+    ),
+    [
+      userop.sender,
+      userop.nonce,
+      keccak256(userop.initCode),
+      keccak256(userop.callData),
+      userop.accountGasLimits,
+      userop.preVerificationGas,
+      userop.gasFees,
+      keccak256(userop.paymasterAndData),
+    ],
+  );
+
+  const enc = encodeAbiParameters(
+    parseAbiParameters("bytes32, address, uint256"),
+    [keccak256(packed), entryPoint, BigInt(chainId)],
+  );
+
+  return keccak256(enc);
+};
+
+// --- Interactions with bundler and paymaster ---
+
+// TODO - function to update public keys
+
 export async function sendCreateAccountToPaymaster(
   account: CreateNewAccount
 ) {
@@ -75,7 +133,26 @@ export async function sendCreateAccountToPaymaster(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Bundler /create error: ${res.status} ${text}`);
+    throw new Error(`Paymaster /create error: ${res.status} ${text}`);
+  }
+
+  return res.json(); 
+}
+
+export async function sendUserOpToBundler(
+  userOp: PackedUserOperation
+) {
+  const res = await fetch(`http://localhost:8080/submit`, { 
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(userOp),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Bundler /submit error: ${res.status} ${text}`);
   }
 
   return res.json(); 
@@ -112,3 +189,4 @@ export async function getDomainDetails(
 
   return res.json(); 
 }
+
