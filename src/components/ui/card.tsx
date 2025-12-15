@@ -13,3 +13,9 @@ export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHead
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("p-4", className)} {...props} />
 }
+export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
+  return <h5 className={cn("text-base font-semibold", className)} {...props} />
+}
+export function CardDescription({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("p-4", className)} {...props} />
+}
