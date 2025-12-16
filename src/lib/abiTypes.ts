@@ -1,5 +1,25 @@
 import type { Abi, AbiParameter } from "viem";
 
+export const nativeAbi: Abi = [{
+  "type":"function",
+  "name":"execute",
+  "inputs":[{
+    "name":"dest",
+    "type":"address",
+    "internalType":"address"
+  },{
+    "name":"value",
+    "type":"uint256",
+    "internalType":"uint256"
+  },{
+    "name":"funcCallData",
+    "type":"bytes",
+    "internalType":"bytes"
+  }],
+  "outputs":[],
+  "stateMutability":"nonpayable"
+}]
+
 export const erc20Abi: Abi = [{
     "constant": true,
     "inputs": [],

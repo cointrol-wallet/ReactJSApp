@@ -17,7 +17,7 @@ import { useTx } from "@/lib/submitTransaction";
 import { numberToBytes } from "viem";
 import { Abi, encodeFunctionData, getFunctionSelector, createPublicClient, http } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
-import { AbiFunctionFragment, getFunctions, getInputName, extractAbi, erc20Abi, erc721Abi, erc1155Abi } from "@/lib/abiTypes";
+import { AbiFunctionFragment, getFunctions, getInputName, extractAbi, erc20Abi, erc721Abi, erc1155Abi, nativeAbi } from "@/lib/abiTypes";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { TxStatus, parseBalanceSafe } from "@/lib/submitTransaction";
 
@@ -228,6 +228,8 @@ export function Transactions() {
           return erc721Abi;
         case "ERC1155":
           return erc1155Abi;
+        case "NATIVE":
+          return nativeAbi;
         default:
           return erc20Abi;
       }
@@ -235,6 +237,23 @@ export function Transactions() {
       return extractAbi(selectContract?.metadata);
     }
   }, [selectCoin, transferOrTransaction, selectContract]);
+
+  const coinBalance = React.useMemo(() => {
+    if (selectCoin != null && selectFolio!= null) {
+      const wallets = selectFolio?.wallet;
+      const walletCount = wallets?.length;
+      var balance = 0n;
+      if (walletCount && walletCount > 0) {
+        for (let i = 0; i < walletCount; i++) {
+          if (wallets[i].coin= selectCoin.id) {
+            balance = wallets[i].balance;
+          }
+        }
+      }
+      return balance;
+    } else return 0n;
+
+  }, [selectCoin, selectFolio])
 
   const functions = React.useMemo(() => getFunctions(abi), [abi]);
 
@@ -253,6 +272,8 @@ export function Transactions() {
       ),
     [functions]
   );
+
+  if (!selectDomain) setSelectDomain(domains[0]);
 
   React.useEffect(() => {
     // Whenever contract changes, reset function selection
@@ -514,6 +535,8 @@ export function Transactions() {
 
                 <div className="text-xs text-neutral-500">Chain: {chainName}</div>
 
+                <div className="text-xs text-neutral-500">Receiver: {addressName}</div>
+
                 <div className="text-xs text-neutral-500">Transaction: {item.transactionHash}</div>
 
                 <div className="text-xs text-neutral-500">UserOphash: {item.userOpHash}</div>
@@ -546,15 +569,33 @@ export function Transactions() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Contract selector */}
         <div className="space-y-1">
+          <label className="text-xs font-medium">Folio</label>
+          <select
+            className="w-full rounded-md border px-2 py-1 text-sm"
+            value={selectContract?.name}
+            onChange={(e) => setSelectContract(e.target.value as any)}
+          >
+            <option value="">{crLoading ? "Loading..." : "Select folio"}</option>
+            {folios.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.address})
+              </option>
+            ))}
+          </select>
+          {crError && (
+            <p className="text-xs text-red-600 mt-1">Error: {fError}</p>
+          )}
+        </div>
+        {/* Contract selector */}
+        {!transferOrTransaction && (<div className="space-y-1">
           <label className="text-xs font-medium">Contract</label>
           <select
             className="w-full rounded-md border px-2 py-1 text-sm"
             value={selectContract?.name}
             onChange={(e) => setSelectContract(e.target.value as any)}
           >
-            <option value="">{cLoading ? "Loading..." : "Select contract"}</option>
+            <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
             {contracts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.address})
@@ -564,7 +605,25 @@ export function Transactions() {
           {crError && (
             <p className="text-xs text-red-600 mt-1">Error: {crError}</p>
           )}
-        </div>
+        </div>)}
+        {transferOrTransaction && (<div className="space-y-1">
+          <label className="text-xs font-medium">Coin</label>
+          <select
+            className="w-full rounded-md border px-2 py-1 text-sm"
+            value={selectCoin?.name}
+            onChange={(e) => setSelectCoin(e.target.value as any)}
+          >
+            <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
+            {coins.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.symbol})
+              </option>
+            ))}
+          </select> 
+          {cError && (
+            <p className="text-xs text-red-600 mt-1">Error: {cError}</p>
+          )}
+        </div>)}
 
         {/* Selected contract summary */}
         {selectContract && (

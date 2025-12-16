@@ -18,6 +18,16 @@ export type Domain = {
   updatedAt: number;       // ms since epoch
 }
 
+const BUILTIN_DOMAINS = [{
+  name: "LOCAL",
+  chainId: 31337,
+  entryPoint: "0x00",  // need to add proper address
+  rpcUrl: "https://localhost/", // need to correct
+  transactionUrl: "https://www.google.com", //  there isn't one for google
+  createdAt: 0,
+  updatedAt: 0
+}];
+
 
 // --- In-memory subscribers for live updates ---------------------------------
 
@@ -25,6 +35,7 @@ type domainListener = (domain: Domain[]) => void;
 const listeners = new Set<domainListener>();
 
 function notifyDomainsUpdated(domain: Domain[]) {
+  const allDomains = [...domain, ...BUILTIN_DOMAINS];
   for (const listener of listeners) {
     listener(domain);
   }
