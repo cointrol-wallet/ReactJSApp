@@ -3,6 +3,10 @@ import { useFolioList } from "../hooks/useFolioList";
 import { PortfolioStore, Folio } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
+import { Wallets } from "@/lib/wallets";
+import { getAddress } from "@/storage/keyStore";
+import { Address } from "viem";
+import { useDomains } from "@/hooks/useDomains";
 
 export function Folios() {
   const [query, setQuery] = React.useState("");
@@ -20,7 +24,7 @@ export function Folios() {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
-
+  const [selectDomain, setSelectDomain] = React.useState<any>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -48,6 +52,16 @@ export function Folios() {
     deleteFolio,
     updateFolio,
   } = useFolioList({ query, sortMode: "createdAsc", chainId });
+
+  const {
+    domains,
+    loading: dLoading,
+    error: dError,
+    addDomain,
+    updateDomain,
+    deleteDomain,
+    clearDomain,  
+    } = useDomains();
 
   // Combine folios and coins into portfolio view
   const mapPortfolio = React.useMemo(() => {
@@ -100,7 +114,7 @@ export function Folios() {
       integer.toString() + (fractionStr.length > 0 ? "." + fractionStr : "");
 
     return negative ? "-" + result : result;
-  }
+  }"./pages/transactions"
 
   // --- Modal helpers ---------------------------------------------------------
 
@@ -122,7 +136,11 @@ export function Folios() {
   function closeModal() {
     setIsModalOpen(false);
     resetForm();
-  }
+  } 
+
+  React.useEffect(() => {
+      if (!selectDomain && domains.length) setSelectDomain(domains[0]);
+  }, [selectDomain, domains]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,16 +155,28 @@ export function Folios() {
     if (editingFolio) {
       await updateFolio(editingFolio.id, payload);
     } else {
+      const sender = await getAddress(`default`);  //TODO: replace with uuid from auth
+      if (!sender) {
+        console.error("No sender address available for new folio");
+        return;
+      }
+      const newWallet = Wallets({
+        sender: sender as Address, 
+        domain: selectDomain.name,
+        salt: "default", // replace with actual salt
+      });
       const domainDetails = {
         // fetch domain details and complete this
-        address: "0x0000000000000000000000000000000000000000",
-        chainId: 1,
-        paymaster: "0x0000000000000000000000000000000000000000",
-        type: 0,
-        bundler: "0x0000000000000000000000000000000000000000",
+        address: sender,
+        chainId: selectDomain.chainId,
+        paymaster: selectDomain.paymaster,
+        type: 0, // not currently used
+        bundler: selectDomain.bundler,
         // add logic for wallet discovery using coins filtered by chainId
       } 
-      await addFolio({...payload, ...domainDetails });
+      if (newWallet) {
+        await addFolio({...payload, ...domainDetails });
+      }
     }
 
     closeModal();

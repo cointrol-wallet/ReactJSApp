@@ -108,7 +108,7 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 // --- API clients (adjust paths to your servers) ---
-const BundlerAPI = {
+export const BundlerAPI = {
   async submit(userOp: PackedUserOperation, domain: string): Promise<SubmitResponse> {
     return j<SubmitResponse>(`${BUNDLER}/submit`, { method: "POST", body: JSON.stringify({ userOp, domain }) });
   },
@@ -132,7 +132,7 @@ const BundlerAPI = {
   },
 };
 
-const PaymasterAPI = {
+export const PaymasterAPI = {
   async createNewAccount(sender: Address, domain: string, publicKey: string, salt: string, signature: string): Promise<GenericResponse> {
     return j<GenericResponse>(`${PAYMASTER}/createfree`, { method: "POST", body: JSON.stringify({ sender, domain, publicKey, salt, signature }) });
   },
