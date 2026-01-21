@@ -15,8 +15,9 @@ import { useTx } from "@/lib/submitTransaction";
 import { Abi, encodeFunctionData, createPublicClient, http } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
 import { AbiFunctionFragment, getFunctions, getInputName, extractAbi, erc20Abi, erc721Abi, erc1155Abi, nativeAbi } from "@/lib/abiTypes";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { TxStatus } from "@/lib/submitTransaction";
+//import { set } from "idb-keyval";
 
 export function Transactions() {
 
@@ -49,13 +50,13 @@ export function Transactions() {
   const [selectContract, setSelectContract] = React.useState<Contract | null>(null);
   const [selectFolio, setSelectFolio] = React.useState<Folio | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<Domain | null>(null);
-  const [selectWallet, setSelectWallet] = React.useState<number>(-1);
+  //const [selectWallet, setSelectWallet] = React.useState<number>(-1);
 
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
 
-  const [calldata, setCalldata] = React.useState<`0x${string}` | null>(null);
-  const [selector, setSelector] = React.useState<`0x${string}` | null>(null);
+  //const [calldata, setCalldata] = React.useState<`0x${string}` | null>(null);
+  //const [selector, setSelector] = React.useState<`0x${string}` | null>(null);
 
   const [readResult, setReadResult] = React.useState<string | null>(null);
   const [formError, setError] = React.useState<string | null>(null);
@@ -84,7 +85,7 @@ export function Transactions() {
     addFolio,
     deleteFolio,
     updateFolio,
-  } = useFolioList({ query, sortMode: "createdAsc", chainId });
+  } = useFolioList({ query: "", sortMode: "createdAsc", chainId });
 
   const {
     coins,
@@ -93,7 +94,7 @@ export function Transactions() {
     addCoin,
     deleteCoin,
     updateCoin,
-  } = useCoinList({ query, sortMode: "nameAsc", standard: "", chainId });
+  } = useCoinList({ query: "", sortMode: "nameAsc", standard: "", chainId });
 
   const {
     address,
@@ -102,7 +103,7 @@ export function Transactions() {
     addAddress,
     deleteAddress,
     updateAddress,
-  } = useAddressList({ query, sortMode: "nameAsc" });
+  } = useAddressList({ query: "", sortMode: "nameAsc" });
 
   const { 
     domains,
@@ -225,27 +226,24 @@ export function Transactions() {
     }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
+    //e.preventDefault();
     var addressId;
     if (transferOrTransaction) {
         addressId = selectContact?.id;
     } else {
         addressId = selectContract?.id;
     }
-    // logic to build, sign and send user op can be inserted here (selector and calldata are ready since this is called from another function)
-    // response includes the userOphash and transactionHash
 
     const wallet = selectFolio?.wallet;
     const walLen = wallet?.length
+    var selectWallet = -1;
     if (selectCoin && walLen && walLen > 0) {
       for (let i = 0; i < walLen; i++) {
         if (wallet[i].coin == selectCoin.id) {
-          setSelectWallet(i);
+          selectWallet = i;
         }
       } 
-    } else {
-      setSelectWallet(-1);
     }
 
     const payload: any = {
@@ -291,7 +289,7 @@ export function Transactions() {
       var balance = 0n;
       if (walletCount && walletCount > 0) {
         for (let i = 0; i < walletCount; i++) {
-          if (wallets[i].coin= selectCoin.id) {
+          if (wallets[i].coin === selectCoin.id) {
             balance = wallets[i].balance;
           }
         }
@@ -319,14 +317,16 @@ export function Transactions() {
     [functions]
   );
 
-  if (!selectDomain) setSelectDomain(domains[0]);
+  React.useEffect(() => {
+    if (!selectDomain && domains.length) setSelectDomain(domains[0]);
+  }, [selectDomain, domains]);
 
   React.useEffect(() => {
     // Whenever contract changes, reset function selection
     setSelectedFnName("");
     setArgValues({});
-    setSelector(null);
-    setCalldata(null);
+    //setSelector(null);
+    //setCalldata(null);
     setReadResult(null);
     setError(null);
   }, [abi]);
@@ -366,9 +366,10 @@ export function Transactions() {
     });
   }
 
+  const { startFlow, status } = useTx();
 
-  async function handleBuildCalldata(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleBuildCalldata() {
+    //e.preventDefault();
     setError(null);
     setReadResult(null);
 
@@ -402,23 +403,24 @@ export function Transactions() {
         args,
       });
 
-      const _selector = (`0x${_calldata.slice(2, 10)}`) as `0x${string}`; // first 4 bytes
+      //const _selector = (`0x${_calldata.slice(2, 10)}`) as `0x${string}`; // first 4 bytes
 
-      setSelector(_selector);
-      setCalldata(_calldata as `0x${string}`);
-      if (selectFolio && selectDomain && calldata) {
-        const { startFlow, status } = useTx();
+      //setSelector(_selector);
+      //setCalldata(_calldata as `0x${string}`);
+      if (selectFolio && selectDomain && _calldata) {
         await startFlow({ 
           folio: selectFolio, 
-          encoded: calldata,
+          encoded: _calldata,
           domain: selectDomain 
         });
         setStatus(status);
-        handleSubmit;
+        handleSubmit();
       }
     } catch (err: any) {
       console.error(err);
       setError(err?.message ?? "Failed to build calldata");
+    } finally {
+      setIsReading(false);
     }
   }
 
@@ -696,8 +698,8 @@ export function Transactions() {
               onChange={(e) => {
                 setSelectedFnName(e.target.value);
                 setArgValues({});
-                setSelector(null);
-                setCalldata(null);
+                //setSelector(null);
+                //setCalldata(null);
                 setReadResult(null);
                 setError(null);
               }}
@@ -835,6 +837,38 @@ export function Transactions() {
           );
         })}
 
+        <div className="space-y-2">
+          <button
+                  type="button"
+                  className="rounded-md border px-3 py-1 text-xs"
+                  onClick={closeModal}
+                >
+                  Cancel
+                </button>
+          {isReadOnly ? (<button
+                  type="button"
+                  className="rounded-md border px-3 py-1 text-xs"
+                  onClick={handleReadCall}
+                >
+                  Query
+                </button>
+          ):(
+          <button
+                  type="button"
+                  className="rounded-md border px-3 py-1 text-xs"
+                  onClick={handleBuildCalldata}
+                >
+                  Submit
+                </button>
+          )}
+        </div>
+
+        {/* Read Result */}
+        {readResult && (
+          <div className="text-xs text-green-600 border border-green-200 rounded-md p-2">
+            <pre>{readResult}</pre>
+          </div>
+        )}
 
         {/* Error */}
         {formError && (
