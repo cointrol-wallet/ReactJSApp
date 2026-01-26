@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
 import { Label } from "./components/ui/label";
 import { Switch } from "./components/ui/switch";
@@ -26,11 +27,146 @@ import { initWallet } from "./lib/wallets";
  * NOTE: Endpoints are placeholders; adjust paths to match your servers.
  */
 
+function NavDropdown() {
+  const [open, setOpen] = React.useState(false);
+  const btnRef = React.useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  function toggle() {
+    const next = !open;
+
+    if (next && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      // position menu under the button, right-aligned
+      const top = r.bottom + 8;
+      const left = r.left;
+
+      setPos({ top, left });
+    }
+
+    setOpen(next);
+  }
+
+  // close on Escape
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  // keep position updated on resize/scroll while open
+  React.useEffect(() => {
+    if (!open) return;
+
+    const update = () => {
+      if (!btnRef.current) return;
+      const r = btnRef.current.getBoundingClientRect();
+      const menuWidth = 208;
+      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, r.right - menuWidth));
+      const top = r.bottom + 8;
+      setPos({ top, left });
+    };
+
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true); // true catches scroll in nested containers
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <Button
+        ref={btnRef}
+        size="sm"
+        variant="outline"
+        onClick={toggle}
+      >
+        Menu
+      </Button>
+
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            {/* Backdrop (dims + closes on click) */}
+            <div
+              onClick={() => setOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9998,
+                backgroundColor: "rgba(0,0,0,0.6)",
+              }}
+            />
+
+            {/* Menu (above backdrop) */}
+            <div
+              style={{
+                position: "fixed",
+                zIndex: 9999,
+                top: pos.top,
+                left: pos.left,
+                width: 208,
+                background: "white",
+                border: "1px solid #e5e5e5",
+                borderRadius: 12,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+                padding: 4,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <NavDropItem to="/dashboard" label="Home" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/transactions" label="Transactions" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/addressbook" label="Address Book" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/contacts" label="Contacts" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/contracts" label="Smart Contracts" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/coins" label="Coins" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/legal/terms" label="Terms" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
+            </div>
+          </>,
+          document.body
+        )}
+    </>
+  );
+}
+
+function NavDropItem({
+  to,
+  label,
+  onSelect,
+}: {
+  to: string;
+  label: string;
+  onSelect: () => void;
+}) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onSelect}
+      className={({ isActive }) =>
+        `block rounded-lg px-3 py-2 text-sm ${
+          isActive
+            ? "bg-neutral-900 text-white"
+            : "hover:bg-neutral-100"
+        }`
+      }
+    >
+      {label}
+    </NavLink>
+  );
+}
+
 
 // --- UI Shell & Navigation ---
 function AppShell({ children, address, domain }: {
   children: React.ReactNode,
-  address: string,
+  address?: string | null,
   domain: string
 }) {
   return (
@@ -39,24 +175,13 @@ function AppShell({ children, address, domain }: {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/dashboard" className="font-semibold">QuantumAccount</Link>
           <div className="flex items-center gap-2">
+            <NavDropdown />
             <NetworkPill address={address} />
             <WalletSwitcher domain={domain} />
-            <Link to="/settings" className="text-sm underline">Settings</Link>
           </div>
         </div>
       </header>
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 pb-16 lg:pb-0 lg:grid-cols-[220px_1fr]">
-        <nav className="hidden lg:block">
-          <ul className="space-y-1">
-            <li><Nav to="/dashboard" label="Home" /></li>
-            <li><Nav to="/transactions" label="Transactions" /></li>
-            <li><Nav to="/addressbook" label="Address Book" /></li>
-            <li><Nav to="/contacts" label="Contacts" /></li>
-            <li><Nav to="/contracts" label="Smart Contracts" /></li>
-            <li><Nav to="/coins" label="Coins" /></li>
-
-          </ul>
-        </nav>
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 pb-24 lg:pb-0 lg:grid-cols-[220px_1fr]">
         <section className="min-h-[60vh]">{children}</section>
       </main>
       <BottomNav />
@@ -94,29 +219,18 @@ function AppContainer() {
     };
   }, []);
 
-  if (error) {
-    return (
-      <div className="p-6 text-red-700">
-        <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
-        <p className="mb-2">{error}</p>
-        <p className="text-sm text-neutral-600">
-          Check the console for details.
-        </p>
-      </div>
-    );
-  }
-
-  if (!address) {
-    return (
-      <div className="p-6">
-        Initialising QuantumAccount wallet…
-      </div>
-    );
-  }
-  // salt set in initWallet manually as well as below
   return (
     <AppShell address={address} domain={domain}>
-      <Routes>
+      {error ? (
+        <div className="p-6 text-red-700">
+          <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
+          <p className="mb-2">{error}</p>
+          <p className="text-sm text-neutral-600">Check the console for details.</p>
+        </div>
+      ) : !address ? (
+        <div className="p-6">Initialising QuantumAccount wallet…</div>
+      ) : (
+        <Routes>
           <Route path="/" element={<Folios />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Folios />} />
@@ -125,10 +239,10 @@ function AppContainer() {
           <Route path="/contracts" element={<Contracts />} />
           <Route path="/coins" element={<Coins />} />
           <Route path="/addressbook" element={<AddressBook />} />
-          {/*<Route path="/wallets" element={<Wallets sender={address as Address} domain={domain} salt={`default`} />} /> */}
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/privacy" element={<Privacy />} />
         </Routes>
+      )}
     </AppShell>
   );
 }
@@ -147,14 +261,10 @@ function Nav({ to, label }: { to: string; label: string }) {
 
 function BottomNav() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 h-14 border-t bg-white p-2 lg:hidden pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-center text-xs">
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-2 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-2 text-center text-xs">
         <NavLink to="/dashboard">Home</NavLink>
         <NavLink to="/transactions">Transactions</NavLink>
-        <NavLink to="/addressbook">Address Book</NavLink>
-        <NavLink to="/contacts">Contacts</NavLink>
-        <NavLink to="/contracts">Smart Contracts</NavLink>
-        <NavLink to="/coins">Coins</NavLink>
         <NavLink to="/legal/terms">T&C</NavLink>
         <NavLink to="/legal/privacy">Privacy</NavLink>
       </div>
@@ -162,9 +272,11 @@ function BottomNav() {
   );
 }
 
-function NetworkPill({ address }: { address: string }) {  // either delete to switch to show network name
+function NetworkPill({ address }: { address?: string | null }) {
   return (
-    <Badge variant="secondary" className="rounded-full">{address}</Badge>
+    <Badge variant="secondary" className="rounded-full">
+      {address ? address : "Loading…"}
+    </Badge>
   );
 }
 

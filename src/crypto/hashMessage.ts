@@ -2,7 +2,7 @@
 // Implements Falcon-1024 hash-to-point driven by Keccak-256 (counter-mode XOF).
 // npm install @noble/hashes
 
-import { keccak_256 } from "../../node_modules/@noble/hashes/sha3";
+import { keccak_256 } from "@noble/hashes/sha3";
 
 // ==== Falcon-1024 parameters ====
 export const Q = 12289;
