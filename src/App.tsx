@@ -30,7 +30,7 @@ import { initWallet } from "./lib/wallets";
 function NavDropdown() {
   const [open, setOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [pos, setPos] = React.useState<{ top: number; right: number }>({ top: 0, right: 0 });
 
   function toggle() {
     const next = !open;
@@ -39,9 +39,9 @@ function NavDropdown() {
       const r = btnRef.current.getBoundingClientRect();
       // position menu under the button, right-aligned
       const top = r.bottom + 8;
-      const left = r.left;
+      const right = Math.max(8, window.innerWidth - r.right);
 
-      setPos({ top, left });
+      setPos({ top, right });
     }
 
     setOpen(next);
@@ -65,9 +65,9 @@ function NavDropdown() {
       if (!btnRef.current) return;
       const r = btnRef.current.getBoundingClientRect();
       const menuWidth = 208;
-      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, r.right - menuWidth));
+      const right = Math.max(8, window.innerWidth - r.right);
       const top = r.bottom + 8;
-      setPos({ top, left });
+      setPos({ top, right });
     };
 
     window.addEventListener("resize", update);
@@ -110,7 +110,8 @@ function NavDropdown() {
                 position: "fixed",
                 zIndex: 9999,
                 top: pos.top,
-                left: pos.left,
+                right: pos.right,
+                left: "auto",
                 width: 208,
                 background: "white",
                 border: "1px solid #e5e5e5",
@@ -175,8 +176,8 @@ function AppShell({ children, address, domain }: {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/dashboard" className="font-semibold">QuantumAccount</Link>
           <div className="flex items-center gap-2">
-            <NavDropdown />
             <NetworkPill address={address} />
+            <NavDropdown />
             <WalletSwitcher domain={domain} />
           </div>
         </div>

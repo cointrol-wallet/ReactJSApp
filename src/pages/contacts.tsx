@@ -4,6 +4,7 @@ import { Contact, Wallet } from "@/storage/contactStore";
 import { useAddress } from "../hooks/useAddresses";
 import { Address, deleteAddress } from "@/storage/addressStore";
 import { useMemo } from "react";
+import { createPortal } from "react-dom";
 
 export function Contacts() {
   const [query, setQuery] = React.useState("");
@@ -34,14 +35,14 @@ export function Contacts() {
   };
 
   const {
-      address,
-      loading: addLoading,
-      error: addError,
-      addAddress: storeAddAddress,
-      updateAddress: storeUpdateAddress,
-      deleteAddress: storeDeleteAddress,
-      clearAddress: storeClearAddress,
-    } = useAddress();
+    address,
+    loading: addLoading,
+    error: addError,
+    addAddress: storeAddAddress,
+    updateAddress: storeUpdateAddress,
+    deleteAddress: storeDeleteAddress,
+    clearAddress: storeClearAddress,
+  } = useAddress();
 
   const {
     contacts,
@@ -56,17 +57,17 @@ export function Contacts() {
 
   function createAddressFromContact(contact: Contact) {
     storeAddAddress({
-      id: contact.id,            
+      id: contact.id,
       name: contact.name,
       isContact: true,
       isVisible: true,
       group: contact.tags ?? [],
-      indexOrder: address.length,  
+      indexOrder: address.length,
     });
   }
 
   function updateAddressFromContact(contact: Contact, isVisible: boolean) {
-    storeUpdateAddress(contact.id,{
+    storeUpdateAddress(contact.id, {
       name: contact.name,
       isVisible: isVisible,
       group: contact.tags ?? [],
@@ -77,9 +78,36 @@ export function Contacts() {
     const map: Record<string, Address> = {};
     address.forEach(a => { map[a.id] = a });
     return map;
-    }, address
+  }, [address]
   );
-  
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+
+      // Ignore clicks inside any <details>
+      if (target.closest("details")) return;
+
+      // Close all open action menus
+      document.querySelectorAll("details[open]").forEach(d => {
+        d.removeAttribute("open");
+      });
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isModalOpen]);
+
   function resetForm() {
     setFormName("");
     setFormSurname("");
@@ -139,13 +167,13 @@ export function Contacts() {
     setFormWallets(prev => {
 
       if (field === "address") {
-      const trimmed = value.trim();
-      // Allow empty value while editing; only block non-empty invalid ones
-      if (trimmed !== "" && !EVM_ADDRESS_REGEX.test(trimmed) && !ENS_REGEX.test(trimmed)) {
-        // Invalid address → do not update state
-        return prev;
+        const trimmed = value.trim();
+        // Allow empty value while editing; only block non-empty invalid ones
+        if (trimmed !== "" && !EVM_ADDRESS_REGEX.test(trimmed) && !ENS_REGEX.test(trimmed)) {
+          // Invalid address → do not update state
+          return prev;
+        }
       }
-    }
 
       const next = [...prev];
       const w = { ...next[index] };
@@ -220,7 +248,7 @@ export function Contacts() {
             <option value="createdAsc">Oldest first</option>
           </select>
           <input
-            className="..."
+            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
             placeholder="Filter by tags (comma-separated)…"
             value={tagSearch}
             onChange={e => {
@@ -228,9 +256,9 @@ export function Contacts() {
               setTagSearch(raw);
 
               const tokens = raw
-              .split(",")
-              .map(t => t.trim())
-              .filter(Boolean);
+                .split(",")
+                .map(t => t.trim())
+                .filter(Boolean);
 
               setTags(tokens);
             }}
@@ -245,7 +273,10 @@ export function Contacts() {
           </select>
           <button
             className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={openAddModal}
+            onClick={() => {
+              console.log("Add clicked");
+              openAddModal();
+            }}
           >
             + Add contact
           </button>
@@ -257,76 +288,117 @@ export function Contacts() {
           No contacts yet. Add one from the transaction screen or here.
         </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 overflow-visible">
           {contacts.map(c => (
             <li
               key={c.id}
-              className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+              className="grid grid-cols-[80px_80px_1fr_110px] items-start gap-x-6 gap-y-2 rounded-lg border px-8 py-3 text-sm overflow-visible"
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{c.name}</span>
-                </div>
+              {/* Name / surname */}
+              <div className="min-w-0">
+                <div className="font-medium">{c.name}</div>
+              </div>
+              <div className="min-w-0">
                 <div className="text-xs text-neutral-500">{c.surname}</div>
               </div>
 
-              {(c as any).wallets && (c as any).wallets.length > 0 && (
-                <div className="mt-1 text-[10px] text-neutral-500">
-                  {(c as any).wallets.map((w: Wallet, idx: number) => (
-                    <div key={idx}>
-                      <span className="font-mono">
+              {/* Wallets + tags */}
+              <div className="min-w-0">
+                {(c as any).wallets?.length > 0 && (
+                  <div className="space-y-1 text-[11px] text-neutral-600">
+                    {(c as any).wallets.map((w: Wallet, idx: number) => (
+                      <div key={idx} className="font-mono break-all">
                         {w.chainId}: {w.address}
-                      </span>
-                     </div>
-                  ))}
-                </div>
-              )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              {c.tags && c.tags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-neutral-500">
+                {c.tags && c.tags?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-10 text-[11px] text-neutral-600">
                     {c.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="rounded-full border px-2 py-0.5"
-                      >
+                      <span key={tag} className="px-10 py-0.5">
                         #{tag}
                       </span>
                     ))}
                   </div>
                 )}
+              </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  className="underline"
-                  onClick={() => openEditModal(c)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="text-red-600 underline"
-                  onClick={() => {
-                    deleteContact(c.id);
-                    deleteAddress(c.id);
-                  }}
-                >
-                  Remove
-                </button>
-                <button
-                  className="underline"
-                  onClick={() => updateAddressFromContact(c, !addressMap[c.id]?.isVisible)}
-                >
-                  {addressMap[c.id]?.isVisible ? "Hide" : "Show"}
-                </button>
+              {/* Actions column */}
+              <div className="justify-self-start overflow-visible">
+                <details className="relative inline-block overflow-visible">
+                  <summary className="cursor-pointer list-none rounded-md border bg-white px-2 py-1 text-xs">
+                    Actions
+                  </summary>
+
+                  <div style={{ backgroundColor: "white" }} className="absolute left-0 mt-1 w-40 rounded-md border border-neutral-200 bg-white shadow-lg z-50">
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-neutral-50"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        openEditModal(c);
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-neutral-50"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        updateAddressFromContact(c, !(addressMap[c.id]?.isVisible ?? true));
+                      }}
+                    >
+                      {(addressMap[c.id]?.isVisible ?? true) ? "Hide" : "Show"}
+                    </button>
+                    <div className="my-1 border-t" />
+
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-neutral-50"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        deleteContact(c.id);
+                        storeDeleteAddress(c.id);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </details>
               </div>
             </li>
+
           ))}
         </ul>
       )}
 
-{/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
+      {/* Modal */}
+      {isModalOpen ? createPortal(
+        <div
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              background: "white",
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+          >
             <h2 className="mb-3 text-base font-semibold">
               {editingContact ? "Edit contact" : "Add contact"}
             </h2>
@@ -415,11 +487,11 @@ export function Contacts() {
                         value={w.chainId}
                         onChange={e => handleWalletChange(idx, "chainId", e.target.value)}
                       >
-                      {Object.entries(CHAIN_NAMES).map(([id, label]) => (
-                        <option key={id} value={id}>
-                          {label}
-                        </option>
-                      ))}
+                        {Object.entries(CHAIN_NAMES).map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
                       </select>
                       <input
                         className="flex-1 rounded-md border px-2 py-0.5 text-xs font-mono"
@@ -466,8 +538,9 @@ export function Contacts() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@ export function useContactsList(options: UseContactsListOptions = {}) {
   const { contacts, loading, error, addContact, updateContact, deleteContact, clearContacts } =
     useContacts();
 
-  const { query = "", sortMode = "nameAsc", tags=[], tagMode = true } = options;
+  const { query = "", sortMode = "nameAsc", tags=[], tagMode = "any" } = options;
 
   const filteredAndSorted = React.useMemo(() => {
     let list = contacts;
@@ -41,7 +41,7 @@ export function useContactsList(options: UseContactsListOptions = {}) {
     }
 
     return sortContacts(list, sortMode);
-  }, [contacts, query, sortMode]);
+  }, [contacts, query, sortMode, tags, tagMode]);
 
   return {
     contacts: filteredAndSorted,

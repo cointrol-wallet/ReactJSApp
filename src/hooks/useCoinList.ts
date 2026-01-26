@@ -15,7 +15,7 @@ export function useCoinList(options: UseCoinListOptions = {}) {
   const { coins, loading, error, addCoin, updateCoin, deleteCoin, clearCoins } =
     useCoins();
 
-  const { query = "", sortMode = "nameAsc", tags=[], tagMode = true, chainId = 0, standard = "" } = options;
+  const { query = "", sortMode = "nameAsc", tags=[], tagMode = "any", chainId = 0, standard = "" } = options;
 
   const filteredAndSorted = React.useMemo(() => {
     let list = coins;
@@ -52,7 +52,7 @@ export function useCoinList(options: UseCoinListOptions = {}) {
     }
 
     return sortCoins(list, sortMode);
-  }, [coins, query, sortMode]);
+  }, [coins, query, sortMode, tags, tagMode]);
 
   return {
     coins: filteredAndSorted,

@@ -30,7 +30,7 @@ export function useFolioList(options: UseFolioListOptions = {}) {
     }
 
     return sortFolios(list, sortMode);
-  }, [folios, query, sortMode]);
+  }, [folios, query, sortMode, chainId]);
 
   return {
     folios: filteredAndSorted,

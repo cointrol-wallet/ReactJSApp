@@ -30,7 +30,7 @@ export function useTxnList(options: UseTxnListOptions = {}) {
     }
 
     return sortTxns(list, sortMode);
-  }, [txns, query, sortMode]);
+  }, [txns, query, sortMode, chainId]);
 
   return {
     txns: filteredAndSorted,

@@ -13,7 +13,7 @@ export function useAddressList(options: UseAddressListOptions = {}) {
   const { address, loading, error, addAddress, updateAddress, deleteAddress, clearAddress } =
     useAddress();
 
-  const { query = "", sortMode = "createdAsc", tags=[], tagMode = true } = options;
+  const { query = "", sortMode = "createdAsc", tags=[], tagMode = "any" } = options;
 
   const filteredAndSorted = React.useMemo(() => {
     let list = address;
@@ -40,7 +40,7 @@ export function useAddressList(options: UseAddressListOptions = {}) {
     }
 
     return sortAddresses(list, sortMode);
-  }, [address, query, sortMode]);
+  }, [address, query, sortMode, tags, tagMode]);
 
   return {
     address: filteredAndSorted,

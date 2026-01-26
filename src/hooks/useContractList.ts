@@ -46,7 +46,7 @@ export function useContractsList(options: UseContractsListOptions = {}) {
     }
 
     return sortContracts(list, sortMode);
-  }, [contracts, query, sortMode]);
+  }, [contracts, query, sortMode, tagMode, tags, chainId]);
 
   return {
     contracts: filteredAndSorted,
