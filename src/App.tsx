@@ -15,6 +15,7 @@ import { Folios } from "./pages/portfolio";
 import { Privacy, Terms } from "./pages/legal";
 import { Transactions } from "./pages/transaction";
 import { initWallet } from "./lib/wallets";
+import logo from "./assets/logo.png";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -100,12 +101,13 @@ function NavDropdown() {
                 position: "fixed",
                 inset: 0,
                 zIndex: 9998,
-                backgroundColor: "rgba(0,0,0,0.6)",
+                backgroundColor: "rgba(0,0,0,0.5)",
               }}
             />
 
             {/* Menu (above backdrop) */}
             <div
+              className="rounded-xl border border-border bg-card shadow-lg"
               style={{
                 position: "fixed",
                 zIndex: 9999,
@@ -113,9 +115,6 @@ function NavDropdown() {
                 right: pos.right,
                 left: "auto",
                 width: 208,
-                background: "white",
-                border: "1px solid #e5e5e5",
-                borderRadius: 12,
                 boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
                 padding: 4,
               }}
@@ -171,18 +170,25 @@ function AppShell({ children, address, domain }: {
   domain: string
 }) {
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900">
-      <header className="sticky top-0 z-30 border-b bg-white/70 backdrop-blur">
+    <div className="min-h-[100dvh] bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/dashboard" className="font-semibold">QuantumAccount</Link>
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <img
+              src={logo}
+              alt="QuantumAccount"
+              style={{ height: 32, width: "auto" }}
+            />
+            {/* optional text next to it */}
+            {/* <span className="font-semibold">QuantumAccount</span> */}
+          </Link>
           <div className="flex items-center gap-2">
-            <NetworkPill address={address} />
             <NavDropdown />
             <WalletSwitcher domain={domain} />
           </div>
         </div>
       </header>
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 pb-24 lg:pb-0 lg:grid-cols-[220px_1fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 pb-[calc(56px+env(safe-area-inset-bottom))] lg:pb-0 lg:grid-cols-[220px_1fr]">
         <section className="min-h-[60vh]">{children}</section>
       </main>
       <BottomNav />
@@ -253,7 +259,7 @@ function Nav({ to, label }: { to: string; label: string }) {
   return (
     <NavLink
       to={to}
-      className={({ isActive }) => `block rounded-xl px-3 py-2 text-sm ${isActive ? "bg-neutral-900 text-white" : "hover:bg-neutral-100"}`}
+      className={({ isActive }) => `block rounded-xl px-3 py-2 text-sm ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-background"}`}
     >
       {label}
     </NavLink>
@@ -262,8 +268,8 @@ function Nav({ to, label }: { to: string; label: string }) {
 
 function BottomNav() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white p-2 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-2 text-center text-xs">
+    <div className="fixed inset-x-0 bottom-0 z-20 h-14 border-t border-border bg-background p-2 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto grid h-14 max-w-md grid-cols-4 gap-2 text-center text-xs text-muted">
         <NavLink to="/dashboard">Home</NavLink>
         <NavLink to="/transactions">Transactions</NavLink>
         <NavLink to="/legal/terms">T&C</NavLink>

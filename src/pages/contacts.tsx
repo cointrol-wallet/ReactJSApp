@@ -224,64 +224,67 @@ export function Contacts() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Contacts</h1>
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      Contacts
+    </h1>
+      <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
+        <input
+          className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Search by name or address…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
 
-        <div className="flex flex-1 gap-2 sm:justify-end">
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Search by name or address…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value as any)}
+        >
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="surnameAsc">Surname (A → Z)</option>
+          <option value="surnameDesc">Surname (Z → A)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
 
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={sortMode}
-            onChange={e => setSortMode(e.target.value as any)}
-          >
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="surnameAsc">Surname (A → Z)</option>
-            <option value="surnameDesc">Surname (Z → A)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Filter by tags (comma-separated)…"
-            value={tagSearch}
-            onChange={e => {
-              const raw = e.target.value;
-              setTagSearch(raw);
+        <input
+          className="h-9 min-w-[180px] max-w-[300px] flex-[1_1_240px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Filter by tags (comma-separated)…"
+          value={tagSearch}
+          onChange={e => {
+            const raw = e.target.value;
+            setTagSearch(raw);
 
-              const tokens = raw
-                .split(",")
-                .map(t => t.trim())
-                .filter(Boolean);
+            const tokens = raw
+              .split(",")
+              .map(t => t.trim())
+              .filter(Boolean);
 
-              setTags(tokens);
-            }}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-xs"
-            value={tagMode}
-            onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
-          >
-            <option value="any">Match any</option>
-            <option value="all">Match all</option>
-          </select>
-          <button
-            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={() => {
-              console.log("Add clicked");
-              openAddModal();
-            }}
-          >
-            + Add contact
-          </button>
-        </div>
+            setTags(tokens);
+          }}
+        />
+
+        <select
+          className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={tagMode}
+          onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
+        >
+          <option value="any">Match any</option>
+          <option value="all">Match all</option>
+        </select>
+
+        <button
+          className="h-9 whitespace-nowrap rounded-md bg-bg px-3 text-sm font-medium text-primary hover:opacity-90"
+          onClick={() => {
+            console.log("Add clicked");
+            openAddModal();
+          }}
+        >
+          + Add contact
+        </button>
       </div>
+
 
       {contacts.length === 0 ? (
         <div className="text-sm text-neutral-500">

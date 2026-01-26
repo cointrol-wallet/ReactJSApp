@@ -173,7 +173,7 @@ export function Contracts() {
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Contracts</h1>
+        <h1 className="text-lg font-semibold">Smart Contracts</h1>
 
         <div className="flex flex-1 gap-2 sm:justify-end">
           <input
