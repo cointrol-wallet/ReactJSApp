@@ -4,6 +4,7 @@ import { Contract } from "@/storage/contractStore";
 import { useAddress } from "../hooks/useAddresses";
 import { Address, deleteAddress } from "@/storage/addressStore";
 import { useMemo } from "react";
+import { createPortal } from "react-dom";
 
 export function Contracts() {
   const [query, setQuery] = React.useState("");
@@ -24,6 +25,7 @@ export function Contracts() {
   const [formTags, setFormTags] = React.useState<string[]>([]);
   const [tagInput, setTagInput] = React.useState("");
   const [metaDataInput, setMetaDataInput] = React.useState("");
+  const [itemToDelete, setItemToDelete] = React.useState<string | null>(null);
 
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
@@ -35,13 +37,13 @@ export function Contracts() {
   };
 
   const {
-        address,
-        loading: addLoading,
-        error: addError,
-        addAddress: storeAddAddress,
-        updateAddress: storeUpdateAddress,
-        deleteAddress: storeDeleteAddress,
-        clearAddress: storeClearAddress,
+    address,
+    loading: addLoading,
+    error: addError,
+    addAddress: storeAddAddress,
+    updateAddress: storeUpdateAddress,
+    deleteAddress: storeDeleteAddress,
+    clearAddress: storeClearAddress,
   } = useAddress();
 
   const {
@@ -56,30 +58,57 @@ export function Contracts() {
   // --- Modal helpers ---------------------------------------------------------
 
   function createAddressFromContract(contract: Contract) {
-      storeAddAddress({
-        id: contract.id,            
-        name: contract.name,
-        isContact: false,
-        isVisible: true,
-        group: contract.tags ?? [],
-        indexOrder: address.length,  
+    storeAddAddress({
+      id: contract.id,
+      name: contract.name,
+      isContact: false,
+      isVisible: true,
+      group: contract.tags ?? [],
+      indexOrder: address.length,
+    });
+  }
+
+  function updateAddressFromContract(contract: Contract, isVisible: boolean) {
+    storeUpdateAddress(contract.id, {
+      name: contract.name,
+      isVisible: isVisible,
+      group: contract.tags ?? [],
+    });
+  }
+
+  const addressMap = useMemo(() => {
+    const map: Record<string, Address> = {};
+    address.forEach(a => { map[a.id] = a });
+    return map;
+  }, [address]
+  );
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+
+      // Ignore clicks inside any <details>
+      if (target.closest("details")) return;
+
+      // Close all open action menus
+      document.querySelectorAll("details[open]").forEach(d => {
+        d.removeAttribute("open");
       });
     }
-  
-    function updateAddressFromContract(contract: Contract, isVisible: boolean) {
-      storeUpdateAddress(contract.id,{
-        name: contract.name,
-        isVisible: isVisible,
-        group: contract.tags ?? [],
-      });
-    }
-  
-    const addressMap = useMemo(() => {
-      const map: Record<string, Address> = {};
-      address.forEach(a => { map[a.id] = a });
-      return map;
-      }, [address]
-    );
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isModalOpen]);
 
   function resetForm() {
     setFormName("");
@@ -172,130 +201,166 @@ export function Contracts() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Smart Contracts</h1>
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+        Smart Contracts
+      </h1>
+      <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
+        <input
+          className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Search by name or address…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
 
-        <div className="flex flex-1 gap-2 sm:justify-end">
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Search by name or address…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value as any)}
+        >
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="addressAsc">Address (A → Z)</option>
+          <option value="addressDesc">Address (Z → A)</option>
+          <option value="chainIdAsc">Chain ID (Low → High)</option>
+          <option value="chainIdDesc">Chain ID (High → Low)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
+        <input
+          className="h-9 min-w-[180px] max-w-[300px] flex-[1_1_240px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Filter by tags (comma-separated)…"
+          value={tagSearch}
+          onChange={e => {
+            const raw = e.target.value;
+            setTagSearch(raw);
 
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={sortMode}
-            onChange={e => setSortMode(e.target.value as any)}
-          >
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="addressAsc">Address (A → Z)</option>
-            <option value="addressDesc">Address (Z → A)</option>
-            <option value="chainIdAsc">Chain ID (Low → High)</option>
-            <option value="chainIdDesc">Chain ID (High → Low)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <input
-            className="..."
-            placeholder="Filter by tags (comma-separated)…"
-            value={tagSearch}
-            onChange={e => {
-              const raw = e.target.value;
-              setTagSearch(raw);
-
-              const tokens = raw
+            const tokens = raw
               .split(",")
               .map(t => t.trim())
               .filter(Boolean);
 
-              setTags(tokens);
-            }}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-xs"
-            value={tagMode}
-            onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
-          >
-            <option value="any">Match any</option>
-            <option value="all">Match all</option>
-          </select>
-          <button
-            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={openAddModal}
-          >
-            + Add contract
-          </button>
-        </div>
+            setTags(tokens);
+          }}
+        />
+        <select
+          className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={tagMode}
+          onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
+        >
+          <option value="any">Match any</option>
+          <option value="all">Match all</option>
+        </select>
+        <button
+          className="h-9 whitespace-nowrap rounded-md bg-bg px-3 text-sm font-medium text-primary hover:opacity-90"
+          onClick={openAddModal}
+        >
+          + Add contract
+        </button>
       </div>
 
       {contracts.length === 0 ? (
-        <div className="text-sm text-neutral-500">
+        <div className="text-sm text-muted">
           No contracts yet. Add one from the transaction screen or here.
         </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 overflow-visible">
           {contracts.map(c => (
             <li
               key={c.id}
-              className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+              className="grid grid-cols-[80px_80px_80px_1fr_110px] items-start gap-x-6 gap-y-2 rounded-lg border px-8 py-3 text-sm overflow-visible"
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{c.name}</span>
-                </div>
-                <div className="text-xs text-neutral-500">{c.address}</div>
-                <div className="text-xs text-neutral-500">
-                    {CHAIN_NAMES[c.chainId] ?? c.chainId}
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{c.name}</span>
+              </div>
+              <div className="text-xs text-muted">{c.address}</div>
+              <div className="text-xs text-muted">
+                {CHAIN_NAMES[c.chainId] ?? c.chainId}
               </div>
 
               {c.tags && c.tags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-neutral-500">
-                    {c.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="rounded-full border px-2 py-0.5"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <div className="mt-2 flex flex-wrap gap-10 text-[11px] text-muted">
+                  {c.tags.map(tag => (
+                    <span
+                      key={tag}
+                      className="px-10 py-0.5"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
 
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  className="underline"
-                  onClick={() => openEditModal(c)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="text-red-600 underline"
-                  onClick={() => {
-                    deleteContract(c.id);
-                    deleteAddress(c.id);
-                  }}
-                >
-                  Remove
-                </button>
-                <button
-                  className="underline"
-                  onClick={() => updateAddressFromContract(c, !addressMap[c.id]?.isVisible)}
-                >
-                  {addressMap[c.id]?.isVisible ? "Hide" : "Show"}
-                </button>
+              {/* Actions column */}
+              <div className="justify-self-start overflow-visible">
+                <details className="relative inline-block overflow-visible">
+                  <summary className="cursor-pointer list-none rounded-md border bg-background px-2 py-1 text-xs">
+                    Actions
+                  </summary>
+
+                  <div className="absolute left-0 mt-1 w-40 rounded-md border border-neutral-200 bg-background shadow-lg z-50">
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        openEditModal(c);
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        updateAddressFromContract(c, !(addressMap[c.id]?.isVisible ?? true));
+                      }}
+                    >
+                      {(addressMap[c.id]?.isVisible ?? true) ? "Hide" : "Show"}
+                    </button>
+                    <div className="my-1 border-t" />
+
+                    <button
+                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                      onClick={(e) => {
+                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                        setItemToDelete(c.id);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </details>
               </div>
             </li>
           ))}
         </ul>
       )}
 
-{/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
+      {/* Modal */}
+      {isModalOpen ? createPortal(
+        <div
+          className="bg-background/80 backdrop-blur-sm"
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div className="bg-background"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+          >
             <h2 className="mb-3 text-base font-semibold">
               {editingContract ? "Edit contract" : "Add contract"}
             </h2>
@@ -318,12 +383,12 @@ export function Contracts() {
                   value={formAddress}
                   onChange={e => {
                     const trimmed = e.target.value.trim();
-  
+
                     const isEthAddress = EVM_ADDRESS_REGEX.test(trimmed);
                     const isENS = ENS_REGEX.test(trimmed);
 
                     if (trimmed === "" || isEthAddress || isENS) {
-                        setFormAddress(e.target.value);
+                      setFormAddress(e.target.value);
                     }
                   }}
                 />
@@ -332,15 +397,15 @@ export function Contracts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Chain</label>
                 <select
-                    className="w-full rounded-md border px-2 py-1 text-sm"
-                    value={formChainId}
-                    onChange={e => setFormChainId(e.target.value as any)}
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={formChainId}
+                  onChange={e => setFormChainId(e.target.value as any)}
                 >
-                    {Object.entries(CHAIN_NAMES).map(([id, label]) => (
-                        <option key={id} value={id}>
-                            {label}
-                        </option>
-                    ))}
+                  {Object.entries(CHAIN_NAMES).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -355,7 +420,7 @@ export function Contracts() {
                     const raw = e.target.value;
                     // allow clearing
                     if (raw.trim() === "") {
-                      setMetaDataInput(raw); 
+                      setMetaDataInput(raw);
                       return;
                     }
 
@@ -400,7 +465,7 @@ export function Contracts() {
                 </div>
 
                 {formTags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-neutral-700">
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted">
                     {formTags.map(tag => (
                       <button
                         key={tag}
@@ -417,7 +482,7 @@ export function Contracts() {
                 )}
               </div>
 
-              
+
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -429,15 +494,74 @@ export function Contracts() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
+                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
                 >
                   {editingContract ? "Save changes" : "Create contract"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
+
+      {/* Modal */}
+      {itemToDelete ? createPortal(
+        <div
+          className="bg-background/80 backdrop-blur-sm"
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div className="bg-background"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+          >
+            <h2 className="text-base font-semibold">Delete account?</h2>
+            <p className="mt-2 text-sm text-muted">
+              This will delete the contact and remove it from your address book. This action cannot be undone.
+            </p>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border px-3 py-1 text-sm"
+                onClick={() => setItemToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-primary px-3 py-1 text-sm text-background"
+                onClick={() => {
+                  if (itemToDelete) {
+                    deleteContract(itemToDelete);
+                    storeDeleteAddress(itemToDelete);
+                  }
+                  setItemToDelete(null);
+                }}
+              >
+                Yes, delete contract
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null
+      }
     </div>
   );
+
+
 }

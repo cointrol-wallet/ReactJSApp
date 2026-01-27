@@ -17,7 +17,7 @@ import { parseAbiArg } from "@/lib/parseAbiArgs";
 import { AbiFunctionFragment, getFunctions, getInputName, extractAbi, erc20Abi, erc721Abi, erc1155Abi, nativeAbi } from "@/lib/abiTypes";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { TxStatus } from "@/lib/submitTransaction";
-//import { set } from "idb-keyval";
+import { createPortal } from "react-dom";
 
 export function Transactions() {
 
@@ -34,7 +34,7 @@ export function Transactions() {
   const [addressFieldState, setAddressFieldState] = React.useState<Record<string, AddressFieldState>>({});
 
   const [query, setQuery] = React.useState("");
-  const [sortMode, setSortMode] = React.useState< "createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc"  >(
+  const [sortMode, setSortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc">(
     "createdDesc"
   );
   const [chainId, setChainId] = React.useState<number>(0);
@@ -70,14 +70,14 @@ export function Transactions() {
   };
 
   const {
-      txns,
-      loading: loading,
-      error: error,
-      addTxn,
-      deleteTxn,
-      updateTxn,
-    } = useTxnList({ query, sortMode, chainId });
-  
+    txns,
+    loading: loading,
+    error: error,
+    addTxn,
+    deleteTxn,
+    updateTxn,
+  } = useTxnList({ query, sortMode, chainId });
+
   const {
     folios,
     loading: fLoading,
@@ -105,31 +105,31 @@ export function Transactions() {
     updateAddress,
   } = useAddressList({ query: "", sortMode: "nameAsc" });
 
-  const { 
+  const {
     domains,
     loading: dLoading,
     error: dError,
     addDomain,
     deleteDomain,
-    updateDomain, 
+    updateDomain,
   } = useDomains();
 
-  const { 
+  const {
     contracts,
     loading: crLoading,
     error: crError,
     addContract,
     deleteContract,
-    updateContract, 
+    updateContract,
   } = useContracts();
 
-  const { 
+  const {
     contacts,
     loading: coLoading,
     error: coError,
     addContact,
     deleteContact,
-    updateContact, 
+    updateContact,
   } = useContacts();
 
   function formatBalance(balance: bigint, decimals: number): string {
@@ -155,6 +155,33 @@ export function Transactions() {
   }
 
   // --- Modal helpers ---------------------------------------------------------
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+
+      // Ignore clicks inside any <details>
+      if (target.closest("details")) return;
+
+      // Close all open action menus
+      document.querySelectorAll("details[open]").forEach(d => {
+        d.removeAttribute("open");
+      });
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isModalOpen]);
 
   function resetForm() {
     setSelectCoin(null);
@@ -192,7 +219,7 @@ export function Transactions() {
     if (!st) return "";
 
     if (st.mode === "manual") return (st.manual ?? "").trim();
-  
+
     const idx = st.selectedIndex;
     if (idx == null) return "";
 
@@ -230,9 +257,9 @@ export function Transactions() {
     //e.preventDefault();
     var addressId;
     if (transferOrTransaction) {
-        addressId = selectContact?.id;
+      addressId = selectContact?.id;
     } else {
-        addressId = selectContract?.id;
+      addressId = selectContract?.id;
     }
 
     const wallet = selectFolio?.wallet;
@@ -243,7 +270,7 @@ export function Transactions() {
         if (wallet[i].coin == selectCoin.id) {
           selectWallet = i;
         }
-      } 
+      }
     }
 
     const payload: any = {
@@ -256,9 +283,9 @@ export function Transactions() {
       walletId: selectWallet,
     };
 
-  
-    
-    await addTxn({...payload});
+
+
+    await addTxn({ ...payload });
 
     closeModal();
   }
@@ -283,7 +310,7 @@ export function Transactions() {
   }, [selectCoin, transferOrTransaction, selectContract]);
 
   const coinBalance = React.useMemo(() => {
-    if (selectCoin != null && selectFolio!= null) {
+    if (selectCoin != null && selectFolio != null) {
       const wallets = selectFolio?.wallet;
       const walletCount = wallets?.length;
       var balance = 0n;
@@ -408,10 +435,10 @@ export function Transactions() {
       //setSelector(_selector);
       //setCalldata(_calldata as `0x${string}`);
       if (selectFolio && selectDomain && _calldata) {
-        await startFlow({ 
-          folio: selectFolio, 
+        await startFlow({
+          folio: selectFolio,
           encoded: _calldata,
-          domain: selectDomain 
+          domain: selectDomain
         });
         setStatus(status);
         handleSubmit();
@@ -498,388 +525,409 @@ export function Transactions() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Transactions</h1>
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+        Transactions
+      </h1>
 
-        <div className="flex flex-1 gap-2 sm:justify-end">
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Search by userOpHash or transactionHash…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={chainId}
-            onChange={e => setChainId(e.target.value as any)}
-          >
+      <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
+        <input
+          className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Search by userOpHash or transactionHash…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+        <select
+          className="h-9 w-[100px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={chainId}
+          onChange={e => setChainId(e.target.value as any)}
+        >
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
             <option key={id} value={id}>
               {label}
             </option>
           ))}
-          </select>
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={sortMode}
-            onChange={e => setSortMode(e.target.value as any)} 
-          >
-            <option disabled>Primary sort</option>
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="coinSymbolAsc">Symbol (A → Z)</option>
-            <option value="coinSymbolDesc">Symbol (Z → A)</option>
-            <option value="addressAsc">Address (A → Z)</option>
-            <option value="addressDesc">Address (Z → A)</option>
-            <option value="chainIdAsc">Chain ID (Low → High)</option>
-            <option value="chainIdDesc">Chain ID (High → Low)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <button
-            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={openTransferModal}
-          >
-            Send coins
-          </button>
-          <button
-            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={openContractTransaction}
-          >
-            Use a smart contract
-          </button>
-        </div>
+        </select>
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value as any)}
+        >
+          <option disabled>Primary sort</option>
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="coinSymbolAsc">Symbol (A → Z)</option>
+          <option value="coinSymbolDesc">Symbol (Z → A)</option>
+          <option value="addressAsc">Address (A → Z)</option>
+          <option value="addressDesc">Address (Z → A)</option>
+          <option value="chainIdAsc">Chain ID (Low → High)</option>
+          <option value="chainIdDesc">Chain ID (High → Low)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
+        <button
+          className="h-9 whitespace-nowrap rounded-md bg-bg px-3 text-sm font-medium text-primary hover:opacity-90"
+          onClick={openTransferModal}
+        >
+          Send coins
+        </button>
+        <button
+          className="h-9 whitespace-nowrap rounded-md bg-bg px-3 text-sm font-medium text-primary hover:opacity-90"
+          onClick={openContractTransaction}
+        >
+          Use a smart contract
+        </button>
       </div>
 
       {txns.length === 0 ? (
-        <div className="text-sm text-neutral-500">
+        <div className="text-sm text-muted">
           No transactions
         </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 overflow-visible">
           {txns.map(item => {
-          // Look up associated folio and coin
-          const folio = folios.find(f => f.id === item.folioId);
-          const coin = coins.find(c => c.id === item.coinId);
-          const addressMap = address.find(a => a.id === item.addressId);
+            // Look up associated folio and coin
+            const folio = folios.find(f => f.id === item.folioId);
+            const coin = coins.find(c => c.id === item.coinId);
+            const addressMap = address.find(a => a.id === item.addressId);
 
-          const folioName = folio?.name ?? item.folioId;
-          const coinSymbol = coin?.symbol ?? "—";
-          const chainName =
-            folio && CHAIN_NAMES[folio.chainId]
-              ? CHAIN_NAMES[folio.chainId]
-              : folio
-              ? `Chain ${folio.chainId}`
-              : "Unknown chain";
+            const folioName = folio?.name ?? item.folioId;
+            const coinSymbol = coin?.symbol ?? "—";
+            const chainName =
+              folio && CHAIN_NAMES[folio.chainId]
+                ? CHAIN_NAMES[folio.chainId]
+                : folio
+                  ? `Chain ${folio.chainId}`
+                  : "Unknown chain";
 
-          const addressName = addressMap?.name ?? "";
+            const addressName = addressMap?.name ?? "";
 
-          return (
-            <li
-              key={`${item.folioId}-${item.coinId}-${item.walletId}`}
-              className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
-            >
-              <div>
+            return (
+              <li
+                key={`${item.folioId}-${item.coinId}-${item.walletId}`}
+                className="grid grid-cols-[80px_80px_80px_80px_80px_80px_110px] items-start gap-x-6 gap-y-2 rounded-lg border px-8 py-3 text-sm overflow-visible"
+              >
+
                 <div className="flex items-center gap-2">
 
                   <span className="font-medium">Sender: {folioName}</span>
                 </div>
 
-                <div className="text-xs text-neutral-500">Coin: {coinSymbol}</div>
+                <div className="text-xs text-muted">Coin: {coinSymbol}</div>
 
-                <div className="text-xs text-neutral-500">Chain: {chainName}</div>
+                <div className="text-xs text-muted">Chain: {chainName}</div>
 
-                <div className="text-xs text-neutral-500">Receiver: {addressName}</div>
+                <div className="text-xs text-muted">Receiver: {addressName}</div>
 
-                <div className="text-xs text-neutral-500">Transaction: {item.transactionHash}</div>
+                <div className="text-xs text-muted">Transaction: {item.transactionHash}</div>
 
-                <div className="text-xs text-neutral-500">UserOphash: {item.userOpHash}</div>
+                <div className="text-xs text-muted">UserOphash: {item.userOpHash}</div>
 
                 <div className="flex items-center gap-2 text-xs">
-                <button
-                  className="underline" // need to replace url with domain value (transactionUrl)
-                  onClick={() => {
-                    if (item.transactionHash) {
-                      window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");
-                    }
-                  }}
-                >
-                  View on Etherscan
-                </button>
+                  <button
+                    className="underline" // need to replace url with domain value (transactionUrl)
+                    onClick={() => {
+                      if (item.transactionHash) {
+                        window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                  >
+                    View on Etherscan
+                  </button>
                 </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-{/* Modal */}
-      {isModalOpen && (
-        <Card className="w-full">
-      <CardHeader>
-        <CardTitle>{cardTitle}</CardTitle>
-        <CardDescription>{cardDescription}</CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        <div className="space-y-1">
-          <label className="text-xs font-medium">Folio</label>
-          <select
-            className="w-full rounded-md border px-2 py-1 text-sm"
-            value={selectFolio?.name}
-            onChange={(e) => setSelectFolio(e.target.value as any)}
+      {/* Modal */}
+      {isModalOpen ? createPortal(
+        <div
+          className="bg-background/80 backdrop-blur-sm"
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div className="bg-background"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
           >
-            <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
-            {folios.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.address})
-              </option>
-            ))}
-          </select>
-          {fError && (
-            <p className="text-xs text-red-600 mt-1">Error: {fError}</p>
-          )}
-        </div>
-        {/* Contract selector */}
-        {!transferOrTransaction && (<div className="space-y-1">
-          <label className="text-xs font-medium">Contract</label>
-          <select
-            className="w-full rounded-md border px-2 py-1 text-sm"
-            value={selectContract?.name}
-            onChange={(e) => setSelectContract(e.target.value as any)}
-          >
-            <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
-            {contracts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.address})
-              </option>
-            ))}
-          </select>
-          {crError && (
-            <p className="text-xs text-red-600 mt-1">Error: {crError}</p>
-          )}
-        </div>)}
-        {transferOrTransaction && (<div className="space-y-1">
-          <label className="text-xs font-medium">Coin</label>
-          <select
-            className="w-full rounded-md border px-2 py-1 text-sm"
-            value={selectCoin?.name}
-            onChange={(e) => setSelectCoin(e.target.value as any)}
-          >
-            <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
-            {coins.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.symbol})
-              </option>
-            ))}
-          </select> 
-          {cError && (
-            <p className="text-xs text-red-600 mt-1">Error: {cError}</p>
-          )}
-        </div>)}
-
-        {/* Selected coin balance*/}
-        {transferOrTransaction && selectCoin && (
-          <div className="text-xs text-gray-600 space-y-1">
-            <div>
-              <span className="font-medium">Balance:</span> {coinBalance} {selectCoin.symbol}
+            <h2 className="mb-3 text-base font-semibold">
+              {cardTitle}
+            </h2>
+            <h3 className="mb-4 text-xs font-semibold">
+              {cardDescription}
+            </h3>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Folio</label>
+              <select
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                value={selectFolio?.name}
+                onChange={(e) => setSelectFolio(e.target.value as any)}
+              >
+                <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
+                {folios.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.address})
+                  </option>
+                ))}
+              </select>
+              {fError && (
+                <p className="text-xs text-red-600 mt-1">Error: {fError}</p>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Function selector */}
-        {hasAbi ? (
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Function</label>
-            <select
-              className="w-full rounded-md border px-2 py-1 text-sm"
-              value={selectedFnName}
-              onChange={(e) => {
-                setSelectedFnName(e.target.value);
-                setArgValues({});
-                //setSelector(null);
-                //setCalldata(null);
-                setReadResult(null);
-                setError(null);
-              }}
-            >
-              <optgroup label="Write (nonpayable/payable)">
-                {writeFunctions.map((fn) => (
-                  <option key={`w-${fn.name}`} value={fn.name}>
-                    {fn.name}({fn.inputs.map((i) => i.type).join(",")})
+            {/* Contract selector */}
+            {!transferOrTransaction && (<div className="space-y-1">
+              <label className="text-xs font-medium">Contract</label>
+              <select
+                className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                value={selectContract?.name}
+                onChange={(e) => setSelectContract(e.target.value as any)}
+              >
+                <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
+                {contracts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.address})
                   </option>
                 ))}
-              </optgroup>
-              <optgroup label="Read (view/pure)">
-                {readFunctions.map((fn) => (
-                  <option key={`r-${fn.name}`} value={fn.name}>
-                    {fn.name}({fn.inputs.map((i) => i.type).join(",")})
+              </select>
+              {crError && (
+                <p className="text-xs text-red-600 mt-1">Error: {crError}</p>
+              )}
+            </div>)}
+            {transferOrTransaction && (<div className="space-y-1">
+              <label className="text-xs font-medium">Coin</label>
+              <select
+                className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                value={selectCoin?.name}
+                onChange={(e) => setSelectCoin(e.target.value as any)}
+              >
+                <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
+                {coins.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.symbol})
                   </option>
                 ))}
-              </optgroup>
-            </select>
-          </div>
-        ) : (
-          selectContract && (
-            <p className="text-xs text-red-600">
-              No valid ABI found for this contract. Ensure you stored the ABI as
-              either an array or an object with an <code>abi</code> field.
-            </p>
-          )
-        )}
+              </select>
+              {cError && (
+                <p className="text-xs text-red-600 mt-1">Error: {cError}</p>
+              )}
+            </div>)}
 
-        {/* Dynamic inputs */}
-        {selectedFn?.inputs.map((input, index) => {
-          const key = getInputName(input, index);
-
-          // Special UI for address inputs
-          if (input.type === "address") {
-            // ensure it exists (one-time)
-            if (!addressFieldState[key]) ensureAddressField(key);
-
-            const st = addressFieldState[key] ?? { mode: "manual", manual: "", selectedIndex: null };
-
-            const list =
-              st.mode === "address" ? address :
-              st.mode === "coin" ? coins :
-              st.mode === "folio" ? folios :
-              [];
-
-            const resolved = getResolvedAddress(key);
-
-            return (
-              <div key={key} className="space-y-1">
-                <label className="text-xs font-medium">
-                  {key} <span className="text-gray-500">(address)</span>
-                </label>
-
-                {/* selector: manual/address/coin/folio */}
-                <select
-                    className="w-full rounded-md border px-2 py-1 text-sm"
-                    value={st.mode}
-                    onChange={(e) => {
-                      const mode = e.target.value as AddressMode;
-                      setAddressFieldState((prev) => ({
-                        ...prev,
-                        [key]: { mode, manual: "", selectedIndex: null },
-                      }));
-                    }}
-                >
-                 <option value="manual">Manual</option>
-                  <option value="address">Address</option>
-                  <option value="coin">Coin</option>
-                  <option value="folio">Folio</option>
-                </select>
-
-                {/* second control */}
-                {st.mode === "manual" ? (
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={st.manual}
-                  onChange={(e) => {
-                    const manual = e.target.value;
-                    setAddressFieldState((prev) => ({
-                      ...prev,
-                      [key]: { ...st, manual },
-                    }));
-                  }}
-                  placeholder="0x…"
-                />
-                ) : (
-                <select
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={st.selectedIndex ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setAddressFieldState((prev) => ({
-                      ...prev,
-                      [key]: { ...st, selectedIndex: v === "" ? null : Number(v) },
-                    }));
-                  }}
-                >
-                  <option value="">Select {st.mode}</option>
-                  {list.map((item: any, i: number) => (
-                    <option key={`${key}-${i}`} value={i}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-                )}
-
-                {/* resolved preview */}
-                <div className="text-[11px] text-gray-500 break-all">
-                  Resolved: <code>{resolved || "—"}</code>
+            {/* Selected coin balance*/}
+            {transferOrTransaction && selectCoin && (
+              <div className="text-xs text-muted space-y-1">
+                <div>
+                  <span className="font-medium">Balance:</span> {coinBalance} {selectCoin.symbol}
                 </div>
               </div>
-            );
-          }
+            )}
 
-          // Default UI for non-address inputs
-          return (
-            <div key={key} className="space-y-1">
-              <label className="text-xs font-medium">
-                {key} <span className="text-gray-500">({input.type})</span>
-              </label>
-              <input
-                className="w-full rounded-md border px-2 py-1 text-sm"
-                value={argValues[key] ?? ""}
-                onChange={(e) => handleArgChange(key, e.target.value)}
-                placeholder={
-                  input.type.endsWith("[]")
-                  ? `JSON array for ${input.type}`
-                  : input.type === "bool"
-                  ? "true / false"
-                  : ""
-                }
-              />
-            </div>
-          );
-        })}
+            {/* Function selector */}
+            {hasAbi ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Function</label>
+                <select
+                  className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                  value={selectedFnName}
+                  onChange={(e) => {
+                    setSelectedFnName(e.target.value);
+                    setArgValues({});
+                    //setSelector(null);
+                    //setCalldata(null);
+                    setReadResult(null);
+                    setError(null);
+                  }}
+                >
+                  <optgroup label="Write (nonpayable/payable)">
+                    {writeFunctions.map((fn) => (
+                      <option key={`w-${fn.name}`} value={fn.name}>
+                        {fn.name}({fn.inputs.map((i) => i.type).join(",")})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Read (view/pure)">
+                    {readFunctions.map((fn) => (
+                      <option key={`r-${fn.name}`} value={fn.name}>
+                        {fn.name}({fn.inputs.map((i) => i.type).join(",")})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            ) : (
+              selectContract && (
+                <p className="text-xs text-red-600">
+                  No valid ABI found for this contract. Ensure you stored the ABI as
+                  either an array or an object with an <code>abi</code> field.
+                </p>
+              )
+            )}
 
-        <div className="space-y-2">
-          <button
+            {/* Dynamic inputs */}
+            {selectedFn?.inputs.map((input, index) => {
+              const key = getInputName(input, index);
+
+              // Special UI for address inputs
+              if (input.type === "address") {
+                // ensure it exists (one-time)
+                if (!addressFieldState[key]) ensureAddressField(key);
+
+                const st = addressFieldState[key] ?? { mode: "manual", manual: "", selectedIndex: null };
+
+                const list =
+                  st.mode === "address" ? address :
+                    st.mode === "coin" ? coins :
+                      st.mode === "folio" ? folios :
+                        [];
+
+                const resolved = getResolvedAddress(key);
+
+                return (
+                  <div key={key} className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {key} <span className="text-muted">(address)</span>
+                    </label>
+
+                    {/* selector: manual/address/coin/folio */}
+                    <select
+                      className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                      value={st.mode}
+                      onChange={(e) => {
+                        const mode = e.target.value as AddressMode;
+                        setAddressFieldState((prev) => ({
+                          ...prev,
+                          [key]: { mode, manual: "", selectedIndex: null },
+                        }));
+                      }}
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="address">Address</option>
+                      <option value="coin">Coin</option>
+                      <option value="folio">Folio</option>
+                    </select>
+
+                    {/* second control */}
+                    {st.mode === "manual" ? (
+                      <input
+                        className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                        value={st.manual}
+                        onChange={(e) => {
+                          const manual = e.target.value;
+                          setAddressFieldState((prev) => ({
+                            ...prev,
+                            [key]: { ...st, manual },
+                          }));
+                        }}
+                        placeholder="0x…"
+                      />
+                    ) : (
+                      <select
+                        className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                        value={st.selectedIndex ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setAddressFieldState((prev) => ({
+                            ...prev,
+                            [key]: { ...st, selectedIndex: v === "" ? null : Number(v) },
+                          }));
+                        }}
+                      >
+                        <option value="">Select {st.mode}</option>
+                        {list.map((item: any, i: number) => (
+                          <option key={`${key}-${i}`} value={i}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* resolved preview */}
+                    <div className="text-[11px] text-muted break-all">
+                      Resolved: <code>{resolved || "—"}</code>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Default UI for non-address inputs
+              return (
+                <div key={key} className="space-y-1">
+                  <label className="text-xs font-medium">
+                    {key} <span className="text-muted">({input.type})</span>
+                  </label>
+                  <input
+                    className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                    value={argValues[key] ?? ""}
+                    onChange={(e) => handleArgChange(key, e.target.value)}
+                    placeholder={
+                      input.type.endsWith("[]")
+                        ? `JSON array for ${input.type}`
+                        : input.type === "bool"
+                          ? "true / false"
+                          : ""
+                    }
+                  />
+                </div>
+              );
+            })}
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1 text-xs"
+                onClick={closeModal}
+              >
+                Cancel
+              </button>
+              {isReadOnly ? (<button
+                type="button"
+                className="rounded-md border px-3 py-1 text-xs"
+                onClick={handleReadCall}
+              >
+                Query
+              </button>
+              ) : (
+                <button
                   type="button"
-                  className="rounded-md border px-3 py-1 text-xs"
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-          {isReadOnly ? (<button
-                  type="button"
-                  className="rounded-md border px-3 py-1 text-xs"
-                  onClick={handleReadCall}
-                >
-                  Query
-                </button>
-          ):(
-          <button
-                  type="button"
-                  className="rounded-md border px-3 py-1 text-xs"
+                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
                   onClick={handleBuildCalldata}
                 >
                   Submit
                 </button>
-          )}
-        </div>
+              )}
+            </div>
 
-        {/* Read Result */}
-        {readResult && (
-          <div className="text-xs text-green-600 border border-green-200 rounded-md p-2">
-            <pre>{readResult}</pre>
+            {/* Read Result */}
+            {readResult && (
+              <div className="text-xs text-primary border border-primary rounded-md p-2">
+                <pre>{readResult}</pre>
+              </div>
+            )}
+
+            {/* Error */}
+            {formError && (
+              <div className="text-xs text-red-600 border border-red-200 rounded-md p-2">
+                {formError}
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Error */}
-        {formError && (
-          <div className="text-xs text-red-600 border border-red-200 rounded-md p-2">
-            {formError}
-          </div>
-        )}
-      </CardContent>
-
-    </Card>
-      )}
+        </div>,
+        document.body
+      ) : null}
 
 
     </div>

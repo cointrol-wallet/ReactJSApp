@@ -229,8 +229,8 @@ export function Contacts() {
   return (
     <div className="space-y-4 p-4">
       <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
-      Contacts
-    </h1>
+        Contacts
+      </h1>
       <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
         <input
           className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
@@ -548,7 +548,7 @@ export function Contacts() {
       ) : null}
 
       {/* Modal */}
-      {contactToDelete ? createPortal (
+      {contactToDelete ? createPortal(
         <div
           className="bg-background/80 backdrop-blur-sm"
           onMouseDown={closeModal}
@@ -572,36 +572,36 @@ export function Contacts() {
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             }}
           >
-          <h2 className="text-base font-semibold">Delete account?</h2>
-          <p className="mt-2 text-sm text-muted">
-          This will delete the contact and remove it from your address book. This action cannot be undone.
-          </p>
+            <h2 className="text-base font-semibold">Delete account?</h2>
+            <p className="mt-2 text-sm text-muted">
+              This will delete the contact and remove it from your address book. This action cannot be undone.
+            </p>
 
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="rounded-md border px-3 py-1 text-sm"
-              onClick={() => setContactToDelete(null)}
-            >
-              Cancel
-            </button>
-            <button
-              className="rounded-md bg-primary px-3 py-1 text-sm text-background"
-              onClick={() => {
-                if (contactToDelete) {
-                  deleteContact(contactToDelete);
-                  storeDeleteAddress(contactToDelete);
-                }
-                setContactToDelete(null);
-              }}
-            >
-              Yes, delete account
-            </button>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border px-3 py-1 text-sm"
+                onClick={() => setContactToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-primary px-3 py-1 text-sm text-background"
+                onClick={() => {
+                  if (contactToDelete) {
+                    deleteContact(contactToDelete);
+                    storeDeleteAddress(contactToDelete);
+                  }
+                  setContactToDelete(null);
+                }}
+              >
+                Yes, delete contact
+              </button>
+            </div>
           </div>
-        </div>
-      </div>,
-      document.body
+        </div>,
+        document.body
       ) : null
-    }
+      }
 
     </div>
   );

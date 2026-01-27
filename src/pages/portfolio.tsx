@@ -7,13 +7,14 @@ import { Wallets } from "@/lib/wallets";
 import { getAddress } from "@/storage/keyStore";
 import { Address } from "viem";
 import { useDomains } from "@/hooks/useDomains";
+import { createPortal } from "react-dom";
 
 export function Folios() {
   const [query, setQuery] = React.useState("");
-  const [primarySortMode, setPrimarySortMode] = React.useState< "createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc" >(
+  const [primarySortMode, setPrimarySortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc">(
     "nameAsc"
   );
-  const [secondarySortMode, setSecondarySortMode] = React.useState< "createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc" >(
+  const [secondarySortMode, setSecondarySortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc">(
     "coinBalanceDesc"
   );
   const [tags, setTags] = React.useState<string[]>([]);
@@ -36,14 +37,14 @@ export function Folios() {
   };
 
   const {
-      coins,
-      loading: cLoading,
-      error: cError,
-      addCoin,
-      deleteCoin,
-      updateCoin,
-    } = useCoinList({ query, sortMode: "nameAsc", tags, tagMode, standard: "", chainId });
-  
+    coins,
+    loading: cLoading,
+    error: cError,
+    addCoin,
+    deleteCoin,
+    updateCoin,
+  } = useCoinList({ query, sortMode: "nameAsc", tags, tagMode, standard: "", chainId });
+
   const {
     folios,
     loading,
@@ -60,8 +61,8 @@ export function Folios() {
     addDomain,
     updateDomain,
     deleteDomain,
-    clearDomain,  
-    } = useDomains();
+    clearDomain,
+  } = useDomains();
 
   // Combine folios and coins into portfolio view
   const mapPortfolio = React.useMemo(() => {
@@ -90,6 +91,33 @@ export function Folios() {
     return portfolio;
   }, [folios, coins]);
 
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+
+      // Ignore clicks inside any <details>
+      if (target.closest("details")) return;
+
+      // Close all open action menus
+      document.querySelectorAll("details[open]").forEach(d => {
+        d.removeAttribute("open");
+      });
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isModalOpen]);
+
   const sortedPortfolio = React.useMemo(() => {
     return sortPortfolio(mapPortfolio, folios, coins, primarySortMode, secondarySortMode);
   }, [mapPortfolio, folios, coins, primarySortMode, secondarySortMode]);
@@ -114,7 +142,7 @@ export function Folios() {
       integer.toString() + (fractionStr.length > 0 ? "." + fractionStr : "");
 
     return negative ? "-" + result : result;
-  }"./pages/transactions"
+  } "./pages/transactions"
 
   // --- Modal helpers ---------------------------------------------------------
 
@@ -136,10 +164,10 @@ export function Folios() {
   function closeModal() {
     setIsModalOpen(false);
     resetForm();
-  } 
+  }
 
   React.useEffect(() => {
-      if (!selectDomain && domains.length) setSelectDomain(domains[0]);
+    if (!selectDomain && domains.length) setSelectDomain(domains[0]);
   }, [selectDomain, domains]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -161,7 +189,7 @@ export function Folios() {
         return;
       }
       const newWallet = Wallets({
-        sender: sender as Address, 
+        sender: sender as Address,
         domain: selectDomain.name,
         salt: "default", // replace with actual salt
       });
@@ -173,9 +201,9 @@ export function Folios() {
         type: 0, // not currently used
         bundler: selectDomain.bundler,
         // add logic for wallet discovery using coins filtered by chainId
-      } 
+      }
       if (newWallet) {
-        await addFolio({...payload, ...domainDetails });
+        await addFolio({ ...payload, ...domainDetails });
       }
     }
 
@@ -187,166 +215,197 @@ export function Folios() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Portfolio</h1>
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+        Portfolio
+      </h1>
 
-        <div className="flex flex-1 gap-2 sm:justify-end">
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Search by name or address…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={chainId}
-            onChange={e => setChainId(e.target.value as any)}
-          >
+      <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
+        <input
+          className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Search by name or address…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={chainId}
+          onChange={e => setChainId(e.target.value as any)}
+        >
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
             <option key={id} value={id}>
               {label}
             </option>
           ))}
-          </select>
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={primarySortMode}
-            onChange={e => setPrimarySortMode(e.target.value as any)} 
-          >
-            <option disabled>Primary sort</option>
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="symbolAsc">Symbol (A → Z)</option>
-            <option value="symbolDesc">Symbol (Z → A)</option>
-            <option value="chainIdAsc">Chain ID (Low → High)</option>
-            <option value="chainIdDesc">Chain ID (High → Low)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={secondarySortMode}
-            onChange={e => setSecondarySortMode(e.target.value as any)}  
-          >
-            <option disabled>Secondary sort</option>
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="symbolAsc">Symbol (A → Z)</option>
-            <option value="symbolDesc">Symbol (Z → A)</option>
-            <option value="chainIdAsc">Chain ID (Low → High)</option>
-            <option value="chainIdDesc">Chain ID (High → Low)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <input
-            className="..."
-            placeholder="Filter by coin tags (comma-separated)…"
-            value={tagSearch}
-            onChange={e => {
-              const raw = e.target.value;
-              setTagSearch(raw);
+        </select>
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={primarySortMode}
+          onChange={e => setPrimarySortMode(e.target.value as any)}
+        >
+          <option disabled>Primary sort</option>
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="symbolAsc">Symbol (A → Z)</option>
+          <option value="symbolDesc">Symbol (Z → A)</option>
+          <option value="chainIdAsc">Chain ID (Low → High)</option>
+          <option value="chainIdDesc">Chain ID (High → Low)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={secondarySortMode}
+          onChange={e => setSecondarySortMode(e.target.value as any)}
+        >
+          <option disabled>Secondary sort</option>
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="symbolAsc">Symbol (A → Z)</option>
+          <option value="symbolDesc">Symbol (Z → A)</option>
+          <option value="chainIdAsc">Chain ID (Low → High)</option>
+          <option value="chainIdDesc">Chain ID (High → Low)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
+        <input
+          className="h-9 min-w-[180px] max-w-[300px] flex-[1_1_240px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Filter by coin tags (comma-separated)…"
+          value={tagSearch}
+          onChange={e => {
+            const raw = e.target.value;
+            setTagSearch(raw);
 
-              const tokens = raw
+            const tokens = raw
               .split(",")
               .map(t => t.trim())
               .filter(Boolean);
 
-              setTags(tokens);
-            }}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-xs"
-            value={tagMode}
-            onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
-          >
-            <option value="any">Match any</option>
-            <option value="all">Match all</option>
-          </select>
-          <button
-            className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
-            onClick={openAddModal}
-          >
-            Create account
-          </button>
-        </div>
+            setTags(tokens);
+          }}
+        />
+        <select
+          className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={tagMode}
+          onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
+        >
+          <option value="any">Match any</option>
+          <option value="all">Match all</option>
+        </select>
+        <button
+          className="h-9 whitespace-nowrap rounded-md bg-bg px-3 text-sm font-medium text-primary hover:opacity-90"
+          onClick={openAddModal}
+        >
+          Create account
+        </button>
       </div>
 
       {sortedPortfolio.length === 0 ? (
-        <div className="text-sm text-neutral-500">
+        <div className="text-sm text-muted">
           No accounts created yet. Click &quot;Create account&quot; to get started.
         </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 overflow-visible">
           {sortedPortfolio.map(item => {
-          // Look up associated folio and coin
-          const folio = folios.find(f => f.id === item.folioId);
-          const coin = coins.find(c => c.id === item.coinId);
-          const wallet = folio?.wallet?.[item.walletId];
+            // Look up associated folio and coin
+            const folio = folios.find(f => f.id === item.folioId);
+            const coin = coins.find(c => c.id === item.coinId);
+            const wallet = folio?.wallet?.[item.walletId];
 
-          const folioName = folio?.name ?? item.folioId;
-          const coinSymbol = coin?.symbol ?? "—";
-          const chainName =
-            folio && CHAIN_NAMES[folio.chainId]
-              ? CHAIN_NAMES[folio.chainId]
-              : folio
-              ? `Chain ${folio.chainId}`
-              : "Unknown chain";
+            const folioName = folio?.name ?? item.folioId;
+            const coinSymbol = coin?.symbol ?? "—";
+            const chainName =
+              folio && CHAIN_NAMES[folio.chainId]
+                ? CHAIN_NAMES[folio.chainId]
+                : folio
+                  ? `Chain ${folio.chainId}`
+                  : "Unknown chain";
 
-          const balanceStr =
-            wallet && coin
-              ? formatBalance(wallet.balance, coin.decimals)
-              : "0";
+            const balanceStr =
+              wallet && coin
+                ? formatBalance(wallet.balance, coin.decimals)
+                : "0";
 
-          return (
-            <li
-              key={`${item.folioId}-${item.coinId}-${item.walletId}`}
-              className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
-            >
-              <div>
+            return (
+              <li
+                key={`${item.folioId}-${item.coinId}-${item.walletId}`}
+                className="grid grid-cols-[80px_80px_80px_80px_1fr_110px] items-start gap-x-6 gap-y-2 rounded-lg border px-8 py-3 text-sm overflow-visible"
+              >
                 <div className="flex items-center gap-2">
 
                   <span className="font-medium">{folioName}</span>
                 </div>
 
-                <div className="text-xs text-neutral-500">{coinSymbol}</div>
+                <div className="text-xs text-muted">{coinSymbol}</div>
 
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-muted">
                   Balance: {balanceStr} {coinSymbol}
                 </div>
 
-                <div className="text-xs text-neutral-500">{chainName}</div>
+                <div className="text-xs text-muted">{chainName}</div>
 
-              </div>
+                {/* Actions column */}
+                <div className="justify-self-start overflow-visible">
+                  <details className="relative inline-block overflow-visible">
+                    <summary className="cursor-pointer list-none rounded-md border bg-background px-2 py-1 text-xs">
+                      Actions
+                    </summary>
 
-              <div className="flex flex-col items-end gap-1 text-xs">
-                <button
-                  className="underline"
-                  disabled={!folio}
-                  onClick={() => folio && openEditModal(folio)}
-                >
-                  Edit Label
-                </button>
-                <button
-                  className="text-red-600 underline"
-                  onClick={() => setFolioToDelete(item.folioId)}
-                >
-                  Remove Account
-                </button>
+                    <div className="absolute left-0 mt-1 w-40 rounded-md border border-neutral-200 bg-background shadow-lg z-50">
+                      <button
+                        className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                        onClick={(e) => {
+                          (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                          folio && openEditModal(folio);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <div className="my-1 border-t" />
 
-                <span className="text-[10px] text-neutral-500">
-                  wallet #{item.walletId}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                      <button
+                        className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                        onClick={(e) => {
+                          (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                          setFolioToDelete(item.folioId);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </details>
+                </div>
+
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-{/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
+      {/* Modal */}
+      {isModalOpen ? createPortal(
+        <div
+          className="bg-background/80 backdrop-blur-sm"
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div className="bg-background"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+          >
             <h2 className="mb-3 text-base font-semibold">
               {editingFolio ? "Change Label" : "Create Account"}
             </h2>
@@ -372,48 +431,70 @@ export function Folios() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white"
+                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
                 >
                   {editingFolio ? "Save changes" : "Create account"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
 
       {/* Modal */}
       {folioToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-4 shadow-lg">
-          <h2 className="text-base font-semibold">Delete account?</h2>
-          <p className="mt-2 text-sm text-neutral-600">
-          This will remove the entire portfolio account and its balances from your list.
-          This action cannot be undone and you could lose access to your assets.
-          </p>
+        <div
+          className="bg-background/80 backdrop-blur-sm"
+          onMouseDown={closeModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div className="bg-background"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 448,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+          >
+            <h2 className="text-base font-semibold">Delete account?</h2>
+            <p className="mt-2 text-sm text-muted">
+              This will remove the entire portfolio account and its balances from your list.
+              This action cannot be undone and you could lose access to your assets.
+            </p>
 
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="rounded-md border px-3 py-1 text-sm"
-              onClick={() => setFolioToDelete(null)}
-            >
-              Cancel
-            </button>
-            <button
-              className="rounded-md bg-red-600 px-3 py-1 text-sm text-white"
-              onClick={() => {
-                if (folioToDelete) {
-                  deleteFolio(folioToDelete);
-                }
-                setFolioToDelete(null);
-              }}
-            >
-              Yes, delete account
-            </button>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border px-3 py-1 text-sm"
+                onClick={() => setFolioToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-primary px-3 py-1 text-sm text-background"
+                onClick={() => {
+                  if (folioToDelete) {
+                    deleteFolio(folioToDelete);
+                  }
+                  setFolioToDelete(null);
+                }}
+              >
+                Yes, delete account
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
 
     </div>

@@ -48,57 +48,57 @@ export function AddressBook() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-lg font-semibold">Address Book</h1>
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+        Address Book
+      </h1>
 
-        <div className="flex flex-1 gap-2 sm:justify-end">
-          <input
-            className="w-full max-w-xs rounded-md border px-2 py-1 text-sm"
-            placeholder="Search by name or address…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+      <div className="flex flex-1 min-w-0 flex-nowrap items-center gap-2 sm:justify-end sm:mt-1">
+        <input
+          className="h-9 min-w-[160px] max-w-[260px] flex-[1_1_220px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Search by name or address…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
 
-          <select
-            className="rounded-md border px-2 py-1 text-sm"
-            value={sortMode}
-            onChange={e => setSortMode(e.target.value as any)}
-          >
-            <option value="custom">Template</option>
-            <option value="nameAsc">Name (A → Z)</option>
-            <option value="nameDesc">Name (Z → A)</option>
-            <option value="createdDesc">Newest first</option>
-            <option value="createdAsc">Oldest first</option>
-          </select>
-          <input
-            className="..."
-            placeholder="Filter by tags (comma-separated)…"
-            value={tagSearch}
-            onChange={e => {
-              const raw = e.target.value;
-              setTagSearch(raw);
+        <select
+          className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value as any)}
+        >
+          <option value="custom">Template</option>
+          <option value="nameAsc">Name (A → Z)</option>
+          <option value="nameDesc">Name (Z → A)</option>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+        </select>
+        <input
+          className="h-9 min-w-[180px] max-w-[300px] flex-[1_1_240px] rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted"
+          placeholder="Filter by tags (comma-separated)…"
+          value={tagSearch}
+          onChange={e => {
+            const raw = e.target.value;
+            setTagSearch(raw);
 
-              const tokens = raw
+            const tokens = raw
               .split(",")
               .map(t => t.trim())
               .filter(Boolean);
 
-              setTags(tokens);
-            }}
-          />
-          <select
-            className="rounded-md border px-2 py-1 text-xs"
-            value={tagMode}
-            onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
-          >
-            <option value="any">Match any</option>
-            <option value="all">Match all</option>
-          </select>
-        </div>
+            setTags(tokens);
+          }}
+        />
+        <select
+          className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+          value={tagMode}
+          onChange={e => setTagSearchMode(e.target.value as "any" | "all")}
+        >
+          <option value="any">Match any</option>
+          <option value="all">Match all</option>
+        </select>
       </div>
 
       {sortMode !== "custom" && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted">
           Switch to <span className="font-semibold">Custom</span> to drag and
           reorder addresses manually.
         </p>
