@@ -21,8 +21,8 @@ export type Domain = {
 const BUILTIN_DOMAINS = [{
   name: "LOCAL",
   chainId: 31337,
-  entryPoint: "0x00",  // need to add proper address
-  rpcUrl: "https://localhost/", // need to correct
+  entryPoint: "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",  // need to add proper address
+  rpcUrl: "https://127.0.0.1:8545/", //
   transactionUrl: "https://www.google.com", //  there isn't one for google
   createdAt: 0,
   updatedAt: 0
@@ -37,7 +37,7 @@ const listeners = new Set<domainListener>();
 function notifyDomainsUpdated(domain: Domain[]) {
   const allDomains = [...domain, ...BUILTIN_DOMAINS];
   for (const listener of listeners) {
-    listener(domain);
+    listener(allDomains);
   }
 }
 
@@ -110,7 +110,8 @@ async function saveDomainsRaw(domains: Domain[]): Promise<void> {
 // --- Public API --------------------------------------------------------------
 
 export async function getAllDomains(): Promise<Domain[]> {
-  return loadDomainsRaw();
+  const domains = await loadDomainsRaw();
+  return [...domains, ...BUILTIN_DOMAINS];
 }
 
 export async function addDomain(input: {
