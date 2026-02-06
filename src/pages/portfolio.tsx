@@ -403,7 +403,7 @@ export function Folios() {
     if (editingFolio) {
       await updateFolio(editingFolio.id, payload);
     } else {
-      const sender = await getAddress(`default`);  //TODO: replace with uuid from auth
+      const sender = await getAddress(`default`, 512);  //TODO: replace with uuid from auth
       if (!sender) {
         console.error("No sender address available for new folio");
         return;

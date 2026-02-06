@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { Address, encodeAbiParameters, parseAbiParameters, keccak256 } from "viem";
-import { sign } from "@/crypto/falcon";
+import { Address, encodeAbiParameters, parseAbiParameters, keccak256, bytesToHex, hexToBytes } from "viem";
+import { createFalconWorkerClient } from "@/crypto/falconInterface";
+import { getFalconSecretKey, FalconLevel } from "@/storage/keyStore";
 import { Folio } from "@/storage/folioStore";
 import { Domain } from "@/storage/domainStore";
 
@@ -224,9 +225,18 @@ export const useTx = create<TxStore>((set, get) => ({
 
     // 3) Sign userOp (placeholder; integrate Falcon-1024 or EOA for demo)
     const userOpHash: `0x${string}` = calculateUserOpHash(userOpBase, domain.entryPoint as `0x${string}`, folio.chainId);
-    const signature = await sign(userOpHash, domain.name);
+    const falcon = createFalconWorkerClient();
+    const falconLevel: FalconLevel = 512; // example for now, will replace with user choice later
 
-    const userOp: PackedUserOperation = { ...userOpBase, signature } as PackedUserOperation;
+    const sk = await getFalconSecretKey(falconLevel);
+    if (!sk) throw new Error("Falcon secret key not available");
+    if (userOpHash.length !== 32) throw new Error(`Invalid userOpHash length`);
+
+    const signature = await falcon.sign(falconLevel, hexToBytes(userOpHash), sk); // example for now, will replace with user choice later
+
+    const userOp: PackedUserOperation = { ...userOpBase, signature: bytesToHex(signature) } as PackedUserOperation;
+
+    sk.fill(0); // zero out secret key from memory as soon as possible
 
     // 4) Send
     set({ status: { phase: "preparing", message: "Submitting to bundler" } });

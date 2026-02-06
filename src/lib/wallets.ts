@@ -1,18 +1,27 @@
-import { keccak256 } from "viem";
 import { PaymasterAPI, GenericResponse } from "./submitTransaction";
-import { getAddress, getFalconPublicKey } from "../storage/keyStore";
-import { sign } from "../crypto/falcon";
+import { getAddress, getFalconPublicKey, getSecretKey } from "../storage/keyStore";
+import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { createAccountToBytes } from "./bytesEncoder";
 import { stringToHex, bytesToHex, Address } from "viem";
-import { ensureFalconPrivateKey } from "../storage/keyStore";
+import { FalconLevel, ensureFalconKeypair } from "../storage/keyStore";
 
 export async function initWallet(): Promise<string> {
 
-  await ensureFalconPrivateKey();
-  const addr = await getAddress(`default`); // example for now, will replace with uuid from auth
+  const falconLevel: FalconLevel = 512; // example for now, will replace with user choice later
+
+  try {
+    const ok = await ensureFalconKeypair(falconLevel);
+    if (!ok) {
+      throw new Error("Failed to ensure Falcon keypair");
+    }
+  } catch (e: any) {
+    console.error("[Wallet] ensureFalconKeypair failed", e?.name, e?.message, e);
+    throw e;
+  }
+  const addr = await getAddress(`default`, falconLevel); 
 
   if (!addr) {
-    throw new Error("Public key not available after ensureFalconPrivateKey");
+    throw new Error("Public key not available after ensureFalconKeypair");
   }
 
   return addr;
@@ -29,7 +38,8 @@ export async function createQuantumAccount({
   domain,
   salt,
 }: WalletsProps): Promise<boolean> {
-  const publicKey = await getFalconPublicKey();
+  const falconLevel: FalconLevel = 512; // example for now, will replace with user choice later
+  const publicKey = await getFalconPublicKey(falconLevel); // example for now, will replace with user choice later
   if (!publicKey) throw new Error("No Falcon public key available");
 
   const rawMessage = createAccountToBytes({
@@ -39,14 +49,15 @@ export async function createQuantumAccount({
     salt: stringToHex(salt),
   });
 
-  const signature = await sign(keccak256(rawMessage), domain);
+  const falcon = createFalconWorkerClient();
+  const signature = await falcon.sign(falconLevel, rawMessage, await getSecretKey(falconLevel)); // example for now, will replace with user choice later
 
   const res = await PaymasterAPI.createNewAccount(
     sender,
     domain,
     bytesToHex(publicKey),
     stringToHex(salt),
-    signature
+    bytesToHex(signature),
   );
 
   return !!res.success;
