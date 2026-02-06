@@ -16,6 +16,7 @@ import { Privacy, Terms } from "./pages/legal";
 import { Transactions } from "./pages/transaction";
 import { initWallet } from "./lib/wallets";
 import logo from "./assets/logo.png";
+import { FalconProvider } from "./crypto/falconProvider";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -150,10 +151,9 @@ function NavDropItem({
       to={to}
       onClick={onSelect}
       className={({ isActive }) =>
-        `block rounded-lg px-3 py-2 text-sm ${
-          isActive
-            ? "bg-neutral-900 text-white"
-            : "hover:bg-neutral-100"
+        `block rounded-lg px-3 py-2 text-sm ${isActive
+          ? "bg-neutral-900 text-white"
+          : "hover:bg-neutral-100"
         }`
       }
     >
@@ -325,7 +325,9 @@ export function Login() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContainer />
+      <FalconProvider>
+        <AppContainer />
+      </FalconProvider>
     </BrowserRouter>
   );
 }

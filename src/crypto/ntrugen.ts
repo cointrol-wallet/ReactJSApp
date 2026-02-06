@@ -130,6 +130,7 @@ export function lift(a: Poly): Poly {
  * Bitsize of a signed integer |a|, rounded to next multiple of 8.
  */
 export function bitsize(a: bigint): number {
+  if (a === 0n) return 0;
   let val = a < 0n ? -a : a;
   let res = 0;
   while (val !== 0n) {
@@ -139,13 +140,14 @@ export function bitsize(a: bigint): number {
   return res;
 }
 
-function maxAbsCoeffBits(p: Poly): number {
-  let max = 0n;
+function polyBitsize(p: Poly): number {
+  let minVal = p[0];
+  let maxVal = p[0];
   for (const c of p) {
-    const abs = c < 0n ? -c : c;
-    if (abs > max) max = abs;
+    if (c < minVal) minVal = c;
+    if (c > maxVal) maxVal = c;
   }
-  return bitsize(max);
+  return Math.max(bitsize(minVal), bitsize(maxVal));
 }
 
 /**
@@ -160,41 +162,42 @@ export function reduceFG(
 ): [Poly, Poly] {
   const n = f.length;
 
-  const size = Math.max(
-    53,
-    maxAbsCoeffBits(f),
-    maxAbsCoeffBits(f),
-    maxAbsCoeffBits(g),
-    maxAbsCoeffBits(g),
-  );
+  // Note: Large coefficients (thousands of digits) are expected per Falcon spec
+  // The Python implementation also encounters this and just retries
+
+  // Size is based on f and g only, NOT on F and G (per Python reference)
+  const size = Math.max(53, polyBitsize(f), polyBitsize(g));
 
   const shiftF = size - 53;
-  const scaleF = shiftF > 0 ? (1 << Math.min(shiftF, 30)) : 1;
-
-  const fAdjust = f.map(c => Number(c / BigInt(scaleF)));
-  const gAdjust = g.map(c => Number(c / BigInt(scaleF)));
+  const fAdjust = f.map(c => Number(c >> BigInt(shiftF)));
+  const gAdjust = g.map(c => Number(c >> BigInt(shiftF)));
   const faFft = fft(fAdjust);
   const gaFft = fft(gAdjust);
 
   // Repeatedly reduce until the size drops below initial size
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  let reduceIter = 0;
+  const MAX_REDUCE_ITERS = 100;
+
+  while (reduceIter < MAX_REDUCE_ITERS) {
+    reduceIter++;
+
     const Size = Math.max(
       53,
-      maxAbsCoeffBits(F),
-      maxAbsCoeffBits(F),
-      maxAbsCoeffBits(G),
-      maxAbsCoeffBits(G),
+      polyBitsize(F),
+      polyBitsize(G),
     );
+
+    if (reduceIter === 1 || reduceIter % 50 === 0) {
+      console.log(`[reduceFG] iter=${reduceIter} n=${n} size=${size} Size=${Size}`);
+    }
+
     if (Size < size) {
       break;
     }
 
     const shiftFG = Size - 53;
-    const scaleFG = shiftFG > 0 ? (1 << Math.min(shiftFG, 30)) : 1;
-
-    const FAdjust = F.map(c => Number(c / BigInt(scaleFG)));
-    const GAdjust = G.map(c => Number(c / BigInt(scaleFG)));
+    const FAdjust = F.map(c => Number(c >> BigInt(shiftFG)));
+    const GAdjust = G.map(c => Number(c >> BigInt(shiftFG)));
     const FaFft = fft(FAdjust);
     const GaFft = fft(GAdjust);
 
@@ -229,13 +232,16 @@ export function reduceFG(
     const fk = karamul(f, k_big);
     const gk = karamul(g, k_big);
 
-    const upShift = Size - size;
-    const upScale = BigInt(upShift > 0 ? Math.pow(2, upShift) : 1);
+    const upShift = BigInt(Size - size);
 
     for (let i = 0; i < n; i++) {
-      F[i] -= fk[i] * upScale;
-      G[i] -= gk[i] * upScale;
+      F[i] -= fk[i] << upShift;
+      G[i] -= gk[i] << upShift;
     }
+  }
+
+  if (reduceIter >= MAX_REDUCE_ITERS) {
+    throw new Error(`[reduceFG] exceeded max iterations (${MAX_REDUCE_ITERS}) at n=${n}`);
   }
 
   return [F, G];
@@ -284,7 +290,10 @@ const MAX_DEPTH = 40;
 function ntruSolveInner(f: Poly, g: Poly): [Poly, Poly] {
   const n = f.length;
   solveDepth++;
-  console.log(`[ntruSolve] enter depth=${solveDepth} n=${n}`);
+  // Only log at depth 1 to reduce console spam
+  if (solveDepth === 1) {
+    console.log(`[ntruSolve] starting recursion for n=${n}`);
+  }
 
   try {
     if (solveDepth > MAX_DEPTH) {
@@ -294,17 +303,22 @@ function ntruSolveInner(f: Poly, g: Poly): [Poly, Poly] {
     if (n === 1) {
       const f0 = f[0];
       const g0 = g[0];
+
       const [d, u, v] = xgcd(f0, g0);
       if (d !== 1n) {
         throw new Error("ntruSolve: gcd(f0, g0) != 1");
       }
+
       return [[-Q_BIG * v], [Q_BIG * u]];
     } else {
       const fp = fieldNorm(f);
       const gp = fieldNorm(g);
+
       const [Fp, Gp] = ntruSolveInner(fp, gp);
+
       let F = karamul(lift(Fp), galoisConjugate(g));
       let G = karamul(lift(Gp), galoisConjugate(f));
+
       [F, G] = reduceFG(f, g, F, G);
       return [F, G];
     }
@@ -383,10 +397,14 @@ function clipBig(coef: bigint, bits: number): bigint {
  */
 export function ntruGen(n: number): [Poly, Poly, Poly, Poly] {
   let iter = 0;
-  const MAX_ITERS = 1000;
+  const MAX_ITERS = 10000; // Python uses infinite loop; we use large limit for safety
 
   while (true) {
     iter++;
+
+    if (iter % 100 === 0) {
+      console.log(`[ntruGen] attempt ${iter}...`);
+    }
 
     if (iter > MAX_ITERS) {
       throw new Error(`ntruGen: exceeded max iterations (${MAX_ITERS})`);
@@ -413,10 +431,40 @@ export function ntruGen(n: number): [Poly, Poly, Poly, Poly] {
     try {
       let [F, G] = ntruSolve(f, g);
 
-      F = F.map(c => clipBig(c, 53));
-      G = G.map(c => clipBig(c, 53));
+      // Log coefficient magnitudes for debugging
+      const maxF = F.reduce((max, c) => {
+        const abs = c < 0n ? -c : c;
+        return abs > max ? abs : max;
+      }, 0n);
+      const maxG = G.reduce((max, c) => {
+        const abs = c < 0n ? -c : c;
+        return abs > max ? abs : max;
+      }, 0n);
+      console.log(`ntruGen iter=${iter}: max|F|=${maxF}, max|G|=${maxG}`);
 
-      console.log(`ntruGen: success at iter=${iter}`);
+      // Validate NTRU equation: f*G - g*F = q (mod x^n + 1)
+      const fG = karamul(f, G);
+      const gF = karamul(g, F);
+      const diff = new Array<bigint>(n);
+      for (let i = 0; i < n; i++) {
+        diff[i] = fG[i] - gF[i];
+      }
+
+      // Check if diff = q (constant polynomial)
+      let ntruValid = (diff[0] === Q_BIG);
+      for (let i = 1; i < n; i++) {
+        if (diff[i] !== 0n) {
+          ntruValid = false;
+          break;
+        }
+      }
+
+      if (!ntruValid) {
+        console.warn(`ntruGen: NTRU equation failed at iter=${iter}: diff[0]=${diff[0]}, expected ${Q_BIG}`);
+        continue;
+      }
+
+      console.log(`ntruGen: success at iter=${iter}, NTRU equation verified`);
       return [f, g, F, G];
     } catch (err) {
       console.warn(`ntruGen: ntruSolve failed at iter=${iter}:`, err);

@@ -7,17 +7,9 @@ export type GramFFT = [[FFTVec, FFTVec], [FFTVec, FFTVec]]; // 2x2 matrix of FFT
 export type Basis2 = [[number[], number[]], [number[], number[]]];
 export type Gram2  = [[number[], number[]], [number[], number[]]];
 
-// LDL “tree” – here it’s a flat per-frequency structure, not a recursive tree
-export interface LDLTree {
-  // For each frequency i, we have:
-  //   G_i = L_i * D_i * L_i^T
-  // where
-  //   L_i = [1, 0; l10[i], 1]
-  //   D_i = diag(d00[i], d11[i])
-  d00: number[];  // length n
-  d11: number[];  // length n
-  l10: number[];  // length n
-}
+export type LDLTree =
+  | { kind: "leaf"; d00: number; d11: number } // leaf variances (real, >0)
+  | { kind: "node"; l10: FFTVec; left: LDLTree; right: LDLTree };
 
 // Convert number[] -> BigPoly
 export function toBigPoly(a: number[]): Poly {

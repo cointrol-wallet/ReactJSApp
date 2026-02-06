@@ -1,4 +1,37 @@
-//import { randomBytes } from "crypto";
+import { RandomBytesFn } from "./chacha20";
+// === Gaussian helpers ===
+
+/**
+ * Sample N(0,1) using Box–Muller.
+ * Not constant-time; only for testing / dev.
+ */
+function gaussian01(randomBytes: RandomBytesFn): number {
+  const buf = randomBytes(8);
+  if (buf.length < 8) throw new Error("randomBytes did not return enough bytes");
+
+  const u1 = uint32ToUnitInterval(buf[0], buf[1], buf[2], buf[3]);
+  const u2 = uint32ToUnitInterval(buf[4], buf[5], buf[6], buf[7]);
+
+  const r = Math.sqrt(-2.0 * Math.log(u1));
+  const theta = 2.0 * Math.PI * u2;
+
+  const x = r * Math.cos(theta);
+  if (!Number.isFinite(x)) throw new Error(`gaussian01 produced non-finite: u1=${u1}, u2=${u2}, x=${x}`);
+  return x;
+}
+
+function uint32ToUnitInterval(b0: number, b1: number, b2: number, b3: number): number {
+  // force unsigned uint32
+  const val = ((b0) | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+
+  // map to (0,1), not including endpoints
+  let u = (val + 0.5) / 4294967296; // 2^32
+
+  // extra safety against any edge-case
+  if (u <= 0) u = Number.MIN_VALUE;
+  if (u >= 1) u = 1 - Number.EPSILON;
+  return u;
+}
 
 // Simple RNG type we control
 export type RNG = (len: number) => Uint8Array;

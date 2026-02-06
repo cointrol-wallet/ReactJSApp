@@ -18,6 +18,33 @@ const q = 12289;
 const sigmin = 1.298280334344292;
 const sigma = 168.38857144654395;
 
+// --- debug helpers ---
+
+export function firstNonFiniteReal(a: ArrayLike<number>, name: string) {
+  for (let i = 0; i < a.length; i++) {
+    const v = a[i] as number;
+    if (!Number.isFinite(v)) {
+      console.error(`[falcon] ${name}[${i}] not finite:`, v);
+      return i;
+    }
+  }
+  return -1;
+}
+
+export function firstNonFiniteComplex(a: { re: number; im: number }[], name: string) {
+  for (let i = 0; i < a.length; i++) {
+    const z = a[i];
+    // also catches "holes" / undefined entries
+    if (!z || !Number.isFinite(z.re) || !Number.isFinite(z.im)) {
+      console.error(`[falcon] ${name}[${i}] invalid:`, z);
+      return i;
+    }
+  }
+  return -1;
+}
+
+
+
 export function verify_signature(m: Uint16Array, s: Uint16Array, h: Uint16Array): boolean {
     var s0 = sub_zq(m, mul_zq(s, h));
     var is_valid = 0;
@@ -79,6 +106,7 @@ export function samplePreimage(
   const pointArr = Array.from(point, x => Number(x));
   const point_fft = fft(pointArr); // Complex[]
 
+
   // Build t_fft = [t0_fft, t1_fft] in FFT domain:
   //
   //  t0_fft = (point_fft * d_fft) / q
@@ -109,7 +137,12 @@ export function samplePreimage(
 
   // z_fft = ffsampling_fft(t_fft, T_fft, sigmin, rng)
   // z_fft is [Complex[], Complex[]] (FFT domain)
+
   const z_fft = ffsampling_fft(t_fft, T_fft, sigmin, rng);
+
+
+  firstNonFiniteComplex(z_fft[0], "z0_fft");
+  firstNonFiniteComplex(z_fft[1], "z1_fft");
 
   // v0_fft = z0*a + z1*c
   // v1_fft = z0*b + z1*d
@@ -128,6 +161,11 @@ export function samplePreimage(
 
   const v0 = v0_ifft.map(x => Math.round(x));
   const v1 = v1_ifft.map(x => Math.round(x));
+
+  firstNonFiniteComplex(v0_fft, "v0_fft_before_ifft");
+  firstNonFiniteComplex(v1_fft, "v1_fft_before_ifft");
+   firstNonFiniteReal(v0_ifft, "v0_ifft");
+  firstNonFiniteReal(v1_ifft, "v1_ifft");
 
   // s = (point, 0) - v
   // s0 = point - v0
@@ -154,7 +192,15 @@ export async function sign(
   const salt = randomBytes(SALT_LEN);
   const hashed = hashToPointCT(domain, salt, message);
 
+  const t0 = performance.now();
+let attempts = 0;
+
   while (true) {
+
+    attempts++;
+
+    const tA = performance.now();
+
     let sParts: [number[], number[]];
     if (randomBytes === defaultRandomBytes) {
       sParts = samplePreimage(ctx, hashed);
@@ -163,13 +209,19 @@ export async function sign(
       sParts = samplePreimage(ctx, hashed, seed);
     }
 
+    const tB = performance.now();
+
     const [s0, s1] = sParts;
 
     let norm = 0;
-    for (let i = 0; i < s0.length; i++) norm += s0[i] * s0[i];
-    for (let i = 0; i < s1.length; i++) norm += s1[i] * s1[i];
+    for (let i = 0; i < s0.length; i++) {
+      norm += s0[i] * s0[i];
+      norm += s1[i] * s1[i];
+    }
+
 
     if (norm <= signatureBound) {
+      console.log(`[falcon] accepted after ${attempts} attempts, total ${(performance.now() - t0).toFixed(1)}ms`);
       const sig = new Uint16Array(2 * n);
       for (let i = 0; i < n; i++) {
         const c0 = ((s0[i] % q) + q) % q;
@@ -179,5 +231,15 @@ export async function sign(
       }
       return encodeSignatureHex(sig, salt, SALT_LEN);
     }
+
+
+  if (attempts % 10 === 0) {
+    console.log(`[falcon] attempts=${attempts}, lastSample=${(tB - tA).toFixed(1)}ms, elapsed=${(tB - t0).toFixed(1)}ms`);
+    console.log(`[falcon] attempt ${attempts}: norm=${norm.toFixed(1)}, bound=${signatureBound}`);
+  }
+
+
+  // optional: hard stop while debugging
+  if (attempts > 500) throw new Error(`Falcon signing: too many attempts (${attempts})`);
   }
 }

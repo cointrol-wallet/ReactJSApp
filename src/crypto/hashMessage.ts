@@ -14,7 +14,7 @@ export const CT_BYTES = (N + OVER_CT) * 2; // 2622 bytes
 // ==== Helpers ====
 const textEncoder = new TextEncoder();
 
-export type BytesLike = Uint8Array | Buffer | string;
+export type BytesLike = Uint8Array | ArrayBuffer | ArrayBufferView | string;
 
 /**
  * Convert input to Uint8Array
@@ -22,7 +22,9 @@ export type BytesLike = Uint8Array | Buffer | string;
  */
 export function toBytes(x: BytesLike): Uint8Array {
   if (x == null) throw new TypeError("Expected a value");
-  if (x instanceof Uint8Array || Buffer.isBuffer(x)) return new Uint8Array(x);
+  if (x instanceof Uint8Array) return new Uint8Array(x);
+  if (x instanceof ArrayBuffer) return new Uint8Array(x);
+  if (ArrayBuffer.isView(x)) return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
   if (typeof x === "string") {
     if (/^0x[0-9a-fA-F]*$/.test(x) || /^[0-9a-fA-F]+$/.test(x)) {
       const hex = x.startsWith("0x") ? x.slice(2) : x;
