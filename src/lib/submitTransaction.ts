@@ -115,7 +115,7 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 // --- API clients (adjust paths to your servers) ---
 export const BundlerAPI = {
   async submit(userOp: PackedUserOperation, domain: string): Promise<SubmitResponse> {
-    return j<SubmitResponse>(`${BUNDLER}/submit`, { method: "POST", body: JSON.stringify({ userOp, domain }) });
+    return j<SubmitResponse>(`${BUNDLER}/submit`, { method: "POST", body: JSON.stringify({ ...userOp, domain }) });
   },
   async updatePublicKey(sender: Address, domain: string, oldKey: string, newKey: string, signature: string): Promise<GenericResponse> {
     return j<GenericResponse>(`${BUNDLER}/updatePublicKey`, { method: "POST", body: JSON.stringify({ sender, domain, oldKey, newKey, signature }) });
@@ -127,7 +127,7 @@ export const BundlerAPI = {
     return j<DomainDetailsResponse>(`${BUNDLER}/domain/${domain}`);
   },
   async getTxReceipt(sender: Address, userOpHash: `0x${string}`): Promise<TxReceipt> {
-    return j<TxReceipt>(`${BUNDLER}/transaction`, { method: "POST", body: JSON.stringify({ sender, userOpHash }) });
+    return j<TxReceipt>(`${BUNDLER}/transaction`, { method: "POST", body: JSON.stringify({ sender, userOphash: userOpHash }) });
   },
   async addPaymaster(paymaster: Address, domain: string, sender: Address, flag: number, signature: `0x${string}`): Promise<GenericResponse> {
     return j<GenericResponse>(`${BUNDLER}/paymaster/add`, { method: "POST", body: JSON.stringify({ paymaster, domain, sender, flag, signature }) });
@@ -154,7 +154,7 @@ function packGasFees(priorityMwei = 2n, maxFeeMwei = 30n): `0x${string}` {
   const pr = priorityMwei * MWEI;
   const mx = maxFeeMwei * MWEI;
   const packed = (pr << 128n) | mx;
-  return `0x${packed.toString(16)}`;
+  return `0x${packed.toString(16).padStart(64, "0")}`;
 }
 
 function hexToBigInt(hex: `0x${string}`): bigint {
@@ -196,10 +196,10 @@ export const calculateUserOpHash = (
 
 function defaultAccountGasLimits(accountGasLimit = 300_000n, callGasLimit = 1_000_000n): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
-  const v = accountGasLimit; 
-  const c = callGasLimit; 
+  const v = accountGasLimit;
+  const c = callGasLimit;
   const packed = (v << 128n) | c;
-  return `0x${packed.toString(16)}`;
+  return `0x${packed.toString(16).padStart(64, "0")}`;
 }
 
 // --- Zustand: transaction sheet + flow orchestrator ---
@@ -217,14 +217,14 @@ export const useTx = create<TxStore>((set, get) => ({
   startFlow: async ({ folio, encoded, domain }) => {
     set({ open: true, status: { phase: "preparing", message: "Building UserOp" } });  
     const userOpBase: Omit<PackedUserOperation,  "signature"> = {
-      folio: folio.address,
+      sender: folio.address,
       nonce: hexlify(0), // need to replace with a get nonce function from entry point and need to store nonce
       initCode: emptyHex(),
       callData: encoded,  // construction and validation done by modal using a separate tool from here
       accountGasLimits: defaultAccountGasLimits(), // will come from bundler api?  or can be internally stored
       preVerificationGas: hexlify(50_000), // will come from bundler api?
       gasFees: packGasFees(), // will come from rpc url
-      paymasterAndData: folio.paymaster as `0x${string}`,
+      paymasterAndData: (folio.paymaster?.startsWith("0x") ? folio.paymaster : "0x") as `0x${string}`,
     } as any;
 
     // 3) Sign userOp (placeholder; integrate Falcon-1024 or EOA for demo)
@@ -234,7 +234,7 @@ export const useTx = create<TxStore>((set, get) => ({
 
     const sk = await getFalconSecretKey(falconLevel);
     if (!sk) throw new Error("Falcon secret key not available");
-    if (userOpHash.length !== 32) throw new Error(`Invalid userOpHash length`);
+    if (userOpHash.length !== 66) throw new Error(`Invalid userOpHash length`);
 
     const signature = await falcon.sign(falconLevel, hexToBytes(userOpHash), sk); // example for now, will replace with user choice later
 
@@ -249,6 +249,10 @@ export const useTx = create<TxStore>((set, get) => ({
     // 5) Send
     try {
       const sim = await BundlerAPI.submit(userOp, domain.name) as any;
+      if (!sim.success) {
+        set({ status: { phase: "failed", message: sim.result ?? "Bundler rejected the operation" } });
+        return;
+      }
       set({ status: { phase: "submitted", userOpHash: userOpHash, message: "Submitted to bundler" } });
 
       // 6) Poll for inclusion/finalization
@@ -256,9 +260,14 @@ export const useTx = create<TxStore>((set, get) => ({
       const maxTries = 30;
       while (tries++ < maxTries) {
         await new Promise(r => setTimeout(r, 1500));
-        const rec = await BundlerAPI.getTxReceipt(folio.address as `0x${string}`, userOpHash);
-        if (rec.success) {
-          set({ status: { phase: "finalized", userOpHash, hash: rec.txHash, message: "Included in block" } });
+        try {
+          const rec = await BundlerAPI.getTxReceipt(folio.address as `0x${string}`, userOpHash);
+          if (rec.success) {
+            set({ status: { phase: "finalized", userOpHash, hash: rec.txHash, message: "Included in block" } });
+            return;
+          }
+        } catch {
+          // receipt not available yet, keep polling
         }
       }
     } catch (e: any) {

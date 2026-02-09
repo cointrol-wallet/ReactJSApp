@@ -394,7 +394,7 @@ export function Transactions() {
     });
   }
 
-  const { startFlow, status } = useTx();
+  const { startFlow } = useTx();
 
   async function handleBuildCalldata() {
     //e.preventDefault();
@@ -443,7 +443,12 @@ export function Transactions() {
           encoded: _calldata,
           domain: selectDomain
         });
-        setStatus(status);
+        const currentStatus = useTx.getState().status;
+        setStatus(currentStatus);
+        if (currentStatus.phase === "failed") {
+          setError(currentStatus.message ?? "Transaction failed");
+          return;
+        }
         handleSubmit();
       }
     } catch (err: any) {
@@ -614,7 +619,7 @@ export function Transactions() {
 
             return (
               <li
-                key={`${item.folioId}-${item.coinId}-${item.walletId}`}
+                key={item.id}
                 className="
     grid gap-x-6 gap-y-2 rounded-lg border px-4 py-3 text-sm
     grid-cols-1
@@ -705,7 +710,7 @@ export function Transactions() {
               <select
                 className="w-full rounded-md border px-2 py-1 text-sm"
                 value={selectFolio?.name}
-                onChange={(e) => setSelectFolio(e.target.value as any)}
+                onChange={(e) => setSelectFolio(folios.find((f) => String(f.id) === e.target.value) ?? null)}
               >
                 <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
                 {folios.map((c) => (
@@ -726,7 +731,7 @@ export function Transactions() {
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
                 value={selectContract?.name}
-                onChange={(e) => setSelectContract(e.target.value as any)}
+                onChange={(e) => setSelectContract(contracts.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
                 {contracts.map((c) => (
@@ -746,7 +751,7 @@ export function Transactions() {
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
                 value={selectCoin?.name}
-                onChange={(e) => setSelectCoin(e.target.value as any)}
+                onChange={(e) => setSelectCoin(coins.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
                 {coins.map((c) => (
