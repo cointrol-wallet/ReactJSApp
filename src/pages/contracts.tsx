@@ -581,7 +581,7 @@ export function Contracts() {
                 <select
                   className="w-full rounded-md border px-2 py-1 text-sm"
                   value={formChainId}
-                  onChange={e => setFormChainId(e.target.value as any)}
+                  onChange={e => setFormChainId(Number(e.target.value))}
                 >
                   {Object.entries(CHAIN_NAMES).map(([id, label]) => (
                     <option key={id} value={id}>

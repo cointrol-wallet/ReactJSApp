@@ -577,7 +577,7 @@ export function Transactions() {
           <select
             className="h-9 w-[100px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
             value={chainId}
-            onChange={e => setChainId(e.target.value as any)}
+            onChange={e => setChainId(Number(e.target.value))}
           >
             {Object.entries(CHAIN_NAMES).map(([id, label]) => (
               <option key={id} value={id}>

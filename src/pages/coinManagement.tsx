@@ -2,7 +2,9 @@ import * as React from "react";
 import { useCoinList } from "../hooks/useCoinList";
 import { Coin } from "@/storage/coinStore";
 import { useFolios } from "@/hooks/useFolios";
+import { useDomains } from "@/hooks/useDomains";
 import { createPortal } from "react-dom";
+import { createPublicClient, http, erc20Abi, Address } from "viem";
 
 export function Coins() {
   const [query, setQuery] = React.useState("");
@@ -50,6 +52,11 @@ export function Coins() {
   } = useCoinList({ query, sortMode, tags, tagMode, standard, chainId });
 
   const { folios: allFolios, updateFolio } = useFolios();
+  const { domains } = useDomains();
+
+  const [lookupLoading, setLookupLoading] = React.useState(false);
+  const [lookupError, setLookupError] = React.useState<string | null>(null);
+  const [lookupDone, setLookupDone] = React.useState(false);
 
   // --- Filtering and sorting ----------------------------------------------------
 
@@ -288,6 +295,53 @@ export function Coins() {
     setFormSymbol("");
     setFormDecimals(18);
     setFormStandard("ERC20");
+    setLookupLoading(false);
+    setLookupError(null);
+    setLookupDone(false);
+  }
+
+  async function handleLookup() {
+    const address = formAddress.trim();
+    if (!address) return;
+
+    const domain = domains.find(d => d.chainId === formChainId);
+    if (!domain) {
+      setLookupError("No domain found for this chain");
+      return;
+    }
+
+    setLookupLoading(true);
+    setLookupError(null);
+    setLookupDone(false);
+
+    try {
+      const client = createPublicClient({
+        transport: http(domain.rpcUrl),
+      });
+
+      const contractAddr = address as Address;
+
+      const [name, symbol, decimals] = await Promise.all([
+        client.readContract({ address: contractAddr, abi: erc20Abi, functionName: "name" }).catch(() => null),
+        client.readContract({ address: contractAddr, abi: erc20Abi, functionName: "symbol" }).catch(() => null),
+        client.readContract({ address: contractAddr, abi: erc20Abi, functionName: "decimals" }).catch(() => null),
+      ]);
+
+      if (name == null && symbol == null && decimals == null) {
+        setLookupError("Could not read contract — check address and chain");
+        return;
+      }
+
+      if (typeof name === "string") setFormName(name);
+      if (typeof symbol === "string") setFormSymbol(symbol);
+      if (typeof decimals === "number") setFormDecimals(decimals);
+
+      setLookupDone(true);
+    } catch {
+      setLookupError("Lookup failed — check RPC connection");
+    } finally {
+      setLookupLoading(false);
+    }
   }
 
   function openAddModal() {
@@ -394,7 +448,7 @@ export function Coins() {
         <select
           className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
           value={chainId}
-          onChange={e => setChainId(e.target.value as any)}
+          onChange={e => setChainId(Number(e.target.value))}
         >
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
             <option key={id} value={id}>
@@ -545,59 +599,18 @@ export function Coins() {
 
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="space-y-1">
-                <label className="text-xs font-medium">Name</label>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Address or ENS</label>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={formAddress}
-                  onChange={e => {
-                    const trimmed = e.target.value.trim();
-
-                    const isEthAddress = EVM_ADDRESS_REGEX.test(trimmed);
-                    const isENS = ENS_REGEX.test(trimmed);
-
-                    if (trimmed === "" || isEthAddress || isENS) {
-                      setFormAddress(e.target.value);
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Symbol</label>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={formSymbol}
-                  onChange={e => setFormSymbol(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium">decimals</label>
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
-                  value={formDecimals}
-                  onChange={e => setFormDecimals(e.target.value as any)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
                 <label className="text-xs font-medium">Chain</label>
                 <select
                   className="w-full rounded-md border px-2 py-1 text-sm"
                   value={formChainId}
-                  onChange={e => setFormChainId(e.target.value as any)}
+                  onChange={e => {
+                    setFormChainId(Number(e.target.value));
+                    if (!editingCoin) {
+                      setLookupDone(false);
+                      setLookupError(null);
+                    }
+                  }}
+                  disabled={!!editingCoin}
                 >
                   {Object.entries(CHAIN_NAMES).map(([id, label]) => (
                     <option key={id} value={id}>
@@ -609,11 +622,11 @@ export function Coins() {
 
               <div className="space-y-1">
                 <label className="text-xs font-medium">Standard</label>
-
                 <select
                   className="w-full rounded-md border px-2 py-1 text-sm"
                   value={formStandard}
                   onChange={(e) => setFormStandard(e.target.value)}
+                  disabled={!!editingCoin}
                 >
                   {EVM_STANDARDS.map((std) => (
                     <option key={std} value={std}>
@@ -621,6 +634,76 @@ export function Coins() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Address</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 rounded-md border px-2 py-1 text-sm"
+                    value={formAddress}
+                    onChange={e => {
+                      const trimmed = e.target.value.trim();
+                      const isEthAddress = EVM_ADDRESS_REGEX.test(trimmed);
+                      const isENS = ENS_REGEX.test(trimmed);
+                      if (trimmed === "" || isEthAddress || isENS) {
+                        setFormAddress(e.target.value);
+                        if (!editingCoin) {
+                          setLookupDone(false);
+                          setLookupError(null);
+                        }
+                      }
+                    }}
+                    disabled={!!editingCoin}
+                    required
+                  />
+                  {!editingCoin && formStandard !== "NATIVE" && (
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-1 text-xs disabled:opacity-50"
+                      onClick={handleLookup}
+                      disabled={lookupLoading || !formAddress.trim()}
+                    >
+                      {lookupLoading ? "Looking up…" : "Lookup"}
+                    </button>
+                  )}
+                </div>
+                {lookupError && (
+                  <div className="text-xs text-red-600 mt-1">{lookupError}</div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Name</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  readOnly={!editingCoin}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Symbol</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  value={formSymbol}
+                  onChange={e => setFormSymbol(e.target.value)}
+                  readOnly={!editingCoin}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Decimals</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  value={formDecimals}
+                  onChange={e => setFormDecimals(Number(e.target.value))}
+                  readOnly={!editingCoin}
+                  required
+                />
               </div>
 
               {/* Tags input */}
@@ -666,8 +749,6 @@ export function Coins() {
                 )}
               </div>
 
-
-
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -679,6 +760,7 @@ export function Coins() {
                 <button
                   type="submit"
                   className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
+                  disabled={!editingCoin && !lookupDone && formStandard !== "NATIVE"}
                 >
                   &nbsp;{editingCoin ? "Save changes" : "Create coin"}&nbsp;
                 </button>

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useFolioList } from "../hooks/useFolioList";
-import { PortfolioStore, Folio } from "@/storage/folioStore";
+import { PortfolioStore, Folio, getAllFolios } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
@@ -8,6 +8,12 @@ import { getAddress } from "@/storage/keyStore";
 import { Address } from "viem";
 import { useDomains } from "@/hooks/useDomains";
 import { createPortal } from "react-dom";
+import { refreshBalancesForFolios } from "@/lib/refreshBalances";
+import { useDisplayName } from "../hooks/useDisplayName";
+import { DisplayNameModal } from "../components/ui/DisplayNameModal";
+import { buildProfileShareFromFolios } from "../lib/shareBuilders";
+import { encodeSharePayload } from "../lib/sharePayload";
+import { ShareQrModal } from "../components/ui/ShareQrModal";
 
 export function Folios() {
   const [query, setQuery] = React.useState("");
@@ -20,7 +26,7 @@ export function Folios() {
   const [tags, setTags] = React.useState<string[]>([]);
   const [tagMode, setTagSearchMode] = React.useState("any");
   const [tagSearch, setTagSearch] = React.useState<string>("");
-  const [chainId, setChainId] = React.useState<number>(0);
+  const [chainId, setChainId] = React.useState<number>(31337);
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
@@ -63,6 +69,25 @@ export function Folios() {
     deleteDomain,
     clearDomain,
   } = useDomains();
+
+  // Display name logic for sharing profile
+
+  const { displayName, save } = useDisplayName();
+
+  const [nameOpen, setNameOpen] = React.useState(false);
+  const [qrPayload, setQrPayload] = React.useState<any>(null);
+
+  async function handleShareProfile() {
+    const name = displayName.trim();
+    if (!name) {
+      setNameOpen(true); // prompt to set it
+      return;
+    }
+
+    const payload = buildProfileShareFromFolios(name, folios);
+
+    setQrPayload(payload);
+  }
 
   // Combine folios and coins into portfolio view
   const mapPortfolio = React.useMemo(() => {
@@ -143,6 +168,48 @@ export function Folios() {
 
     return negative ? "-" + result : result;
   }
+
+  // --- Logic for refreshing balances ------------------------------------------------
+
+  const refreshingRef = React.useRef(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const hasMountRefreshed = React.useRef(false);
+
+  const doRefresh = React.useCallback(async () => {
+    if (refreshingRef.current) return;
+    if (loading || cLoading || dLoading) return;
+    if (error || cError || dError) return;
+    if (!folios.length) return;
+
+    refreshingRef.current = true;
+    setRefreshing(true);
+
+    try {
+      const updatedMap = await refreshBalancesForFolios({
+        folios,
+        coins,
+        domains,
+      });
+
+      for (const [folioId, newWallets] of updatedMap.entries()) {
+        await updateFolio(folioId, { wallet: newWallets });
+      }
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  }, [loading, cLoading, dLoading, error, cError, dError, folios, coins, domains, updateFolio]);
+
+  // Refresh once on mount when data is ready
+  React.useEffect(() => {
+    if (hasMountRefreshed.current) return;
+    if (loading || cLoading || dLoading) return;
+    if (error || cError || dError) return;
+    if (!folios.length) return;
+
+    hasMountRefreshed.current = true;
+    doRefresh();
+  }, [loading, cLoading, dLoading, error, cError, dError, folios, doRefresh]);
 
   // --- Filtering and sorting ----------------------------------------------------
 
@@ -443,7 +510,7 @@ export function Folios() {
         <select
           className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
           value={chainId}
-          onChange={e => setChainId(e.target.value as any)}
+          onChange={e => setChainId(Number(e.target.value))}
         >
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
             <option key={id} value={id}>
@@ -477,8 +544,32 @@ export function Folios() {
           >
             &nbsp;Create account&nbsp;
           </button>
+
+          <button
+            className="h-9 rounded-md border border-border bg-card px-3 text-sm disabled:opacity-50"
+            onClick={doRefresh}
+            disabled={refreshing}
+          >
+            &nbsp;{refreshing ? "Refreshing…" : "Refresh balances"}&nbsp;
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button className="rounded border px-3 py-2" onClick={() => setNameOpen(true)}>
+          {displayName ? "Edit display name" : "Set display name"}
+        </button>
+
+        <button className="rounded bg-black px-3 py-2 text-white" onClick={handleShareProfile}>
+          Share profile
+        </button>
         </div>
       </div>
+
+      <DisplayNameModal
+        open={nameOpen}
+        initialValue={displayName}
+        onClose={() => setNameOpen(false)}
+        onSave={save}
+      />
 
       {sortedPortfolio.length === 0 ? (
         <div className="text-sm text-muted">
@@ -681,6 +772,7 @@ export function Folios() {
             <p className="mt-2 text-sm text-muted">
               This will remove the entire portfolio account and its balances from your list.
               This action cannot be undone and you could lose access to your assets.
+              If you just want to remove the coin balance then go to the coin page and delete the coin.
             </p>
 
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -706,7 +798,15 @@ export function Folios() {
         </div>
       )}
 
-
+      {/* When qrPayload set, show QR modal */}
+      {qrPayload && (
+        <div className="mt-4">
+          <ShareQrModal payload={qrPayload} />
+          <button className="mt-2 underline" onClick={() => setQrPayload(null)}>
+            Close
+          </button>
+        </div>
+      )}    
     </div>
   );
 }

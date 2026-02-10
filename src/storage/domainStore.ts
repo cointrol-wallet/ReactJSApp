@@ -26,7 +26,7 @@ const BUILTIN_DOMAINS: Domain[] = [{
   entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",  // need to add proper address
   paymaster: "0xC7D02Ae80f0ECb64543176EDBDD1153d34dFA622",
   bundler: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  rpcUrl: "https://127.0.0.1:8545/", //
+  rpcUrl: "http://127.0.0.1:8545/", //
   transactionUrl: "https://www.google.com", //  there isn't one for anvil/local
   createdAt: 0,
   updatedAt: 0
