@@ -12,18 +12,22 @@ export type Domain = {
   name: string;  // label for the folio
   chainId: number;  // blockchain network ID
   entryPoint: string; //  entrypoint address
+  paymaster: string; //  paymaster address
+  bundler: string; //  bundler address
   rpcUrl: string; //  rpc url used locally by app (is not a copy of bundler/paymaster rpc urls)
   transactionUrl: string; //  etherscan url for tx (or equivalent)
   createdAt: number;       // ms since epoch
   updatedAt: number;       // ms since epoch
 }
 
-const BUILTIN_DOMAINS = [{
+const BUILTIN_DOMAINS: Domain[] = [{
   name: "LOCAL",
   chainId: 31337,
-  entryPoint: "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",  // need to add proper address
+  entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",  // need to add proper address
+  paymaster: "0xC7D02Ae80f0ECb64543176EDBDD1153d34dFA622",
+  bundler: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   rpcUrl: "https://127.0.0.1:8545/", //
-  transactionUrl: "https://www.google.com", //  there isn't one for google
+  transactionUrl: "https://www.google.com", //  there isn't one for anvil/local
   createdAt: 0,
   updatedAt: 0
 }];
@@ -118,6 +122,8 @@ export async function addDomain(input: {
   name: string;  // label for the folio
   chainId: number;  // blockchain network ID
   entryPoint: string; //  entrypoint address
+  paymaster: string; //  paymaster address
+  bundler: string; //  bundler address
   rpcUrl: string; //  rpc url used locally by app (is not a copy of bundler/paymaster rpc urls)
   transactionUrl: string; //  etherscan url for tx (or equivalent)
   createdAt: number;       // ms since epoch
@@ -130,6 +136,8 @@ export async function addDomain(input: {
     chainId: input.chainId,
     name: input.name,
     entryPoint: input.entryPoint,
+    paymaster: input.paymaster,
+    bundler: input.bundler,
     rpcUrl: input.rpcUrl,
     transactionUrl: input.transactionUrl,
     createdAt: now,

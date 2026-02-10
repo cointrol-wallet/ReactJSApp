@@ -189,6 +189,16 @@ export function Transactions() {
     setSelectContact(null);
     setSelectContract(null);
     setSelectFolio(null);
+
+    // clear dynamic input state
+    setSelectedFnName("");
+    setArgValues({});
+    setAddressFieldState({});
+
+    // clear results and errors
+    setReadResult(null);
+    setError(null);
+    setStatus(null);
   }
 
   function openContractTransaction() {
@@ -331,17 +341,21 @@ export function Transactions() {
 
   const writeFunctions = React.useMemo(
     () =>
-      functions.filter(
-        (f) => f.stateMutability === "nonpayable" || f.stateMutability === "payable"
-      ),
+      functions.filter((f) => {
+        if (f.stateMutability) return f.stateMutability === "nonpayable" || f.stateMutability === "payable";
+        // Legacy ABI format: constant=false means write
+        return !(f as any).constant;
+      }),
     [functions]
   );
 
   const readFunctions = React.useMemo(
     () =>
-      functions.filter(
-        (f) => f.stateMutability === "view" || f.stateMutability === "pure"
-      ),
+      functions.filter((f) => {
+        if (f.stateMutability) return f.stateMutability === "view" || f.stateMutability === "pure";
+        // Legacy ABI format: constant=true means read
+        return (f as any).constant === true;
+      }),
     [functions]
   );
 
@@ -367,8 +381,21 @@ export function Transactions() {
       } else {
         setSelectedFnName(functions[0].name);
       }
+      if (transferOrTransaction) {
+        setSelectedFnName("transfer");
+      }
     }
   }, [selectedFnName, functions, writeFunctions]);
+
+  React.useEffect(() => {
+    if (!selectedFnName) return;
+
+    // clear BOTH types of inputs whenever function changes
+    setArgValues({});
+    setAddressFieldState({});
+    setReadResult(null);
+    setError(null);
+  }, [selectedFnName]);
 
   const selectedFn: AbiFunctionFragment | undefined = React.useMemo(
     () => functions.find((f) => f.name === selectedFnName),
@@ -709,7 +736,7 @@ export function Transactions() {
               </div>
               <select
                 className="w-full rounded-md border px-2 py-1 text-sm"
-                value={selectFolio?.name}
+                value={selectFolio?.id ?? ""}
                 onChange={(e) => setSelectFolio(folios.find((f) => String(f.id) === e.target.value) ?? null)}
               >
                 <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
@@ -730,7 +757,7 @@ export function Transactions() {
               </div>
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
-                value={selectContract?.name}
+                value={selectContract?.id ?? ""}
                 onChange={(e) => setSelectContract(contracts.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
@@ -750,7 +777,7 @@ export function Transactions() {
               </div>
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
-                value={selectCoin?.name}
+                value={selectCoin?.id ?? ""}
                 onChange={(e) => setSelectCoin(coins.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{cLoading ? "Loading..." : "Select coin"}</option>

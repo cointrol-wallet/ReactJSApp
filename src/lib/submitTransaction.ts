@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Address, encodeAbiParameters, parseAbiParameters, keccak256, bytesToHex, hexToBytes } from "viem";
+import { Address, encodeAbiParameters, parseAbiParameters, keccak256, bytesToHex, hexToBytes, concatHex, padHex, toHex } from "viem";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { getFalconSecretKey, FalconLevel } from "@/storage/keyStore";
 import { Folio } from "@/storage/folioStore";
@@ -149,11 +149,10 @@ function emptyHex(): `0x${string}` { return "0x" as const }
 
 // Compose gas fees: (priority << 128) | maxFee   
 // fees are managed as MWei since fees are usually less than one GWei
-function packGasFees(priorityMwei = 2n, maxFeeMwei = 30n): `0x${string}` {
+function packGasFees(priorityMwei = 2n, maxFeePerGas = 100_000_000n): `0x${string}` {
   const MWEI = 1_000_000n;
   const pr = priorityMwei * MWEI;
-  const mx = maxFeeMwei * MWEI;
-  const packed = (pr << 128n) | mx;
+  const packed = (pr << 128n) | maxFeePerGas;
   return `0x${packed.toString(16).padStart(64, "0")}`;
 }
 
@@ -194,12 +193,25 @@ export const calculateUserOpHash = (
   return keccak256(enc);
 };
 
-function defaultAccountGasLimits(accountGasLimit = 300_000n, callGasLimit = 1_000_000n): `0x${string}` {
+function defaultAccountGasLimits(accountGasLimit = 7_500_000n, callGasLimit = 400_000n): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
   const v = accountGasLimit;
   const c = callGasLimit;
   const packed = (v << 128n) | c;
   return `0x${packed.toString(16).padStart(64, "0")}`;
+}
+
+// paymasterAndData: (paymaster ? paymaster : "0x") as `0x${string}`
+function packPaymasterAndDataV08(params: {
+  paymaster: `0x${string}`;
+  validationGasLimit: bigint; // uint128
+  postOpGasLimit: bigint;     // uint128
+  extraData?: `0x${string}`;  // optional (e.g. signature)
+}): `0x${string}` {
+  const v = padHex(toHex(params.validationGasLimit), { size: 16 });
+  const p = padHex(toHex(params.postOpGasLimit), { size: 16 });
+  const extra = params.extraData ?? "0x";
+  return concatHex([params.paymaster, v, p, extra]) as `0x${string}`;
 }
 
 // --- Zustand: transaction sheet + flow orchestrator ---
@@ -215,20 +227,43 @@ export const useTx = create<TxStore>((set, get) => ({
   status: { phase: "idle" },
   close: () => set({ open: false, status: { phase: "idle" } }),
   startFlow: async ({ folio, encoded, domain }) => {
-    set({ open: true, status: { phase: "preparing", message: "Building UserOp" } });  
-    const userOpBase: Omit<PackedUserOperation,  "signature"> = {
+    set({ open: true, status: { phase: "preparing", message: "Building UserOp" } });
+    const paymaster =
+      (folio.paymaster?.startsWith("0x") ? folio.paymaster : undefined) as `0x${string}` | undefined;
+    const userOpBase: Omit<PackedUserOperation, "signature"> = {
       sender: folio.address,
       nonce: hexlify(0), // need to replace with a get nonce function from entry point and need to store nonce
       initCode: emptyHex(),
       callData: encoded,  // construction and validation done by modal using a separate tool from here
       accountGasLimits: defaultAccountGasLimits(), // will come from bundler api?  or can be internally stored
-      preVerificationGas: hexlify(50_000), // will come from bundler api?
+      preVerificationGas: hexlify(5_000), // will come from bundler api?
       gasFees: packGasFees(), // will come from rpc url
-      paymasterAndData: (folio.paymaster?.startsWith("0x") ? folio.paymaster : "0x") as `0x${string}`,
+      paymasterAndData: paymaster
+        ? packPaymasterAndDataV08({
+          paymaster,
+          // choose sane limits (tune later). must fit uint128
+          validationGasLimit: 100_000n,
+          postOpGasLimit: 100_000n,
+          extraData: "0x", // no signature
+        })
+        : "0x",
     } as any;
 
     // 3) Sign userOp (placeholder; integrate Falcon-1024 or EOA for demo)
+    console.log("[frontend] hash inputs:", {
+      sender: userOpBase.sender,
+      nonce: userOpBase.nonce,
+      initCode: userOpBase.initCode,
+      callData: (userOpBase.callData as string).slice(0, 20) + "...",
+      accountGasLimits: userOpBase.accountGasLimits,
+      preVerificationGas: userOpBase.preVerificationGas,
+      gasFees: userOpBase.gasFees,
+      paymasterAndData: userOpBase.paymasterAndData,
+      entryPoint: domain.entryPoint,
+      chainId: folio.chainId,
+    });
     const userOpHash: `0x${string}` = calculateUserOpHash(userOpBase, domain.entryPoint as `0x${string}`, folio.chainId);
+    console.log("[frontend] userOpHash:", userOpHash);
     const falcon = createFalconWorkerClient();
     const falconLevel: FalconLevel = 512; // example for now, will replace with user choice later
 

@@ -926,17 +926,40 @@ export const gameSquaresAbi: Abi = [
 export type AbiFunctionFragment = Extract<Abi[number], { type: "function" }>;
 
 export function extractAbi(abiJson: unknown): Abi | null {
-  // Supports either:
-  // - [ ... ]                (plain ABI array)
-  // - { abi: [ ... ] }       (Etherscan-like)
   if (!abiJson) return null;
 
-  if (Array.isArray(abiJson)) {
-    return abiJson as Abi;
+  // 1) Plain ABI array
+  if (Array.isArray(abiJson)) return abiJson as Abi;
+
+  // 2) If it’s a JSON string containing an ABI array
+  if (typeof abiJson === "string") {
+    try {
+      const inner = JSON.parse(abiJson);
+      return Array.isArray(inner) ? (inner as Abi) : null;
+    } catch {
+      return null;
+    }
   }
 
-  if (typeof abiJson === "object" && abiJson !== null && Array.isArray((abiJson as any).abi)) {
-    return (abiJson as any).abi as Abi;
+  // 3) Wrapper objects
+  if (typeof abiJson === "object" && abiJson !== null) {
+    const o: any = abiJson;
+
+    // common keys
+    const direct = o.abi ?? o.ABI;
+    if (Array.isArray(direct)) return direct as Abi;
+
+    // Etherscan-ish "result" can be a JSON string or array
+    const res = o.result ?? o.Result;
+    if (Array.isArray(res)) return res as Abi;
+    if (typeof res === "string") {
+      try {
+        const inner = JSON.parse(res);
+        return Array.isArray(inner) ? (inner as Abi) : null;
+      } catch {
+        return null;
+      }
+    }
   }
 
   return null;
