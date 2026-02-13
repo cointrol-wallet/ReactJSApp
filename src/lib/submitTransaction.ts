@@ -1,5 +1,19 @@
 import { create } from "zustand";
-import { Address, encodeAbiParameters, parseAbiParameters, keccak256, bytesToHex, hexToBytes, concatHex, padHex, toHex, http, createPublicClient } from "viem";
+import { 
+  Address, 
+  encodeAbiParameters, 
+  parseAbiParameters, 
+  keccak256, 
+  bytesToHex, 
+  hexToBytes, 
+  concatHex, 
+  padHex, 
+  toHex, 
+  http, 
+  createPublicClient, 
+  Hex, 
+  hashTypedData 
+} from "viem";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { getFalconSecretKey, FalconLevel } from "@/storage/keyStore";
 import { Folio } from "@/storage/folioStore";
@@ -164,37 +178,84 @@ function hexToBigInt(hex: `0x${string}`): bigint {
   return BigInt(hex);
 }
 
-// generate userOphash
+const DOMAIN_NAME = "ERC4337";
+const DOMAIN_VERSION = "1";
+
+const PACKED_USEROP_TYPE = "PackedUserOperation(address sender,uint256 nonce,bytes initCode,bytes callData,bytes32 accountGasLimits,uint256 preVerificationGas,bytes32 gasFees,bytes paymasterAndData)";
+const PACKED_USEROP_TYPEHASH = keccak256(
+  toHex(PACKED_USEROP_TYPE)
+);
+
 export const calculateUserOpHash = (
   userop: Omit<PackedUserOperation, "signature">,
   entryPoint: Address,
   chainId: number,
 ) => {
-  const packed = encodeAbiParameters(
+  // structHash = keccak256(abi.encode(TYPEHASH, sender, nonce, keccak(bytes), ...))
+  const structEncoded = encodeAbiParameters(
     parseAbiParameters(
-      "address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32",
+      "bytes32, address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32",
     ),
     [
+      PACKED_USEROP_TYPEHASH,
       userop.sender,
-      hexToBigInt(userop.nonce as `0x${string}`),
+      // nonce/preVerificationGas must be uint256
+      typeof userop.nonce === "bigint" ? userop.nonce : hexToBigInt(userop.nonce as Hex),
       keccak256(userop.initCode),
       keccak256(userop.callData),
-      userop.accountGasLimits,
-      hexToBigInt(userop.preVerificationGas as `0x${string}`),
-      userop.gasFees,
+      userop.accountGasLimits, // bytes32
+      typeof userop.preVerificationGas === "bigint"
+        ? userop.preVerificationGas
+        : hexToBigInt(userop.preVerificationGas as Hex),
+      userop.gasFees, // bytes32
       keccak256(userop.paymasterAndData),
     ],
   );
 
-  const enc = encodeAbiParameters(
-    parseAbiParameters("bytes32, address, uint256"),
-    [keccak256(packed), entryPoint, BigInt(chainId)],
-  );
+  const structHash = keccak256(structEncoded);
 
-  return keccak256(enc);
+  // userOpHash = EIP712.toTypedDataHash(domainSeparator, structHash)
+  // Equivalent: hashTypedData with primaryType that matches PACKED_USEROP_TYPEHASH
+  return hashTypedData({
+    domain: {
+      name: DOMAIN_NAME,
+      version: DOMAIN_VERSION,
+      chainId,
+      verifyingContract: entryPoint,
+    },
+    types: {
+      PackedUserOperation: [
+        { name: "sender", type: "address" },
+        { name: "nonce", type: "uint256" },
+        { name: "initCode", type: "bytes" },
+        { name: "callData", type: "bytes" },
+        { name: "accountGasLimits", type: "bytes32" },
+        { name: "preVerificationGas", type: "uint256" },
+        { name: "gasFees", type: "bytes32" },
+        { name: "paymasterAndData", type: "bytes" },
+      ],
+    },
+    primaryType: "PackedUserOperation",
+    // IMPORTANT: message must be the *raw* fields (EIP-712 will hash bytes fields internally),
+    // but since we already computed structHash above, we can also just return toTypedDataHash(domainSep, structHash).
+    // Using hashTypedData here is simplest/least error-prone:
+    message: {
+      sender: userop.sender,
+      nonce: typeof userop.nonce === "bigint" ? userop.nonce : hexToBigInt(userop.nonce as Hex),
+      initCode: userop.initCode,
+      callData: userop.callData,
+      accountGasLimits: userop.accountGasLimits,
+      preVerificationGas:
+        typeof userop.preVerificationGas === "bigint"
+          ? userop.preVerificationGas
+          : hexToBigInt(userop.preVerificationGas as Hex),
+      gasFees: userop.gasFees,
+      paymasterAndData: userop.paymasterAndData,
+    },
+  });
 };
 
-function defaultAccountGasLimits(accountGasLimit = 7_500_000n, callGasLimit = 400_000n): `0x${string}` {
+function defaultAccountGasLimits(accountGasLimit = 7_500_000n, callGasLimit = 200_000n): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
   const v = accountGasLimit;
   const c = callGasLimit;
@@ -236,7 +297,7 @@ export const useTx = create<TxStore>((set, get) => ({
       address: domain.entryPoint as `0x${string}`,
       abi: entryPointAbi,
       functionName: "getNonce",
-      args: [folio.address as `0x${string}`, 0n], // key = 0 for normal ops
+      args: [folio.address as `0x${string}`, 0n], // key = 0 for normal ops TODO: update for admin/large keys
     }) as bigint;
     const paymaster =
       (folio.paymaster?.startsWith("0x") ? folio.paymaster : undefined) as `0x${string}` | undefined;
@@ -253,7 +314,7 @@ export const useTx = create<TxStore>((set, get) => ({
           paymaster,
           // choose sane limits (tune later). must fit uint128
           validationGasLimit: 100_000n,
-          postOpGasLimit: 100_000n,
+          postOpGasLimit: 0n,
           extraData: "0x", // no signature
         })
         : "0x",
