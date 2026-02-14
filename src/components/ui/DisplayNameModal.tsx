@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 export function DisplayNameModal({
   open,
@@ -11,23 +12,58 @@ export function DisplayNameModal({
   onClose: () => void;
   onSave: (name: string) => Promise<void> | void;
 }) {
-  const [name, setName] = React.useState(initialValue);
+  const [name, setName] = React.useState(initialValue ?? "");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    if (open) setName(initialValue);
+    if (open) setName(initialValue ?? "");
   }, [open, initialValue]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  const canSave = name.trim().length >= 2;
+  const trimmed = (name ?? "").trim();
+  const canSave = trimmed.length >= 2;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-4 shadow">
+  return createPortal(
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483646,
+          background: "rgba(0,0,0,0.35)",
+          backdropFilter: "blur(6px)",
+        }}
+      />
+
+      {/* Panel */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="
+    rounded-2xl
+    border border-neutral-200
+    bg-[#fffdf7]        /* soft ivory */
+    text-neutral-900
+    shadow-2xl
+    backdrop-blur-none
+  "
+        style={{
+          position: "fixed",
+          zIndex: 2147483647,
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(420px, calc(100vw - 32px))",
+          padding: 20,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="text-lg font-semibold">Set display name</div>
-        <div className="text-sm text-neutral-600 mt-1">
-          This name is shared when you export your profile QR.
+        <div className="mt-1 text-sm text-neutral-600">
+          Set the name used for profile sharing
         </div>
 
         <input
@@ -37,28 +73,30 @@ export function DisplayNameModal({
           placeholder="e.g. Paul Bark"
           autoFocus
         />
-
+        <div className="mt-4 flex justify-end gap-2"></div><br/>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="rounded px-3 py-2" onClick={onClose} disabled={saving}>
-            Cancel
-          </button>
+          <button type="button" className="h-9 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" onClick={onClose} disabled={saving}>
+            &nbsp;Cancel&nbsp;
+          </button>&nbsp;
           <button
-            className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+            type="button"
+            className="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground"
             disabled={!canSave || saving}
             onClick={async () => {
               setSaving(true);
               try {
-                await onSave(name.trim());
+                await onSave(trimmed);
                 onClose();
               } finally {
                 setSaving(false);
               }
             }}
           >
-            Save
+            &nbsp;{saving ? "Saving…" : "Save"}&nbsp;
           </button>
         </div>
       </div>
-    </div>
+    </>,
+    document.body
   );
 }

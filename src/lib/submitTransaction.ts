@@ -164,7 +164,7 @@ function emptyHex(): `0x${string}` { return "0x" as const }
 
 // Compose gas fees: (priority << 128) | maxFee   
 // fees are managed as MWei since fees are usually less than one GWei
-function packGasFees(priorityMwei = 2n, maxFeePerGas = 100_000_000n): `0x${string}` {
+function packGasFees(priorityMwei = 2n, maxFeePerGas = 4_000_000_000n): `0x${string}` {
   const MWEI = 1_000_000n;
   const pr = priorityMwei * MWEI;
   const packed = (pr << 128n) | maxFeePerGas;

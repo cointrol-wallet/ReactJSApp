@@ -153,7 +153,11 @@ export function Transactions() {
     return negative ? "-" + result : result;
   }
 
-
+  function getBalance(value = 0, decimals: number): bigint {
+    if (decimals <= 0) return BigInt(value);
+    if (value < 0) return BigInt(0);
+    return BigInt(value * (10 ** decimals));
+  }
 
   // --- Modal helpers ---------------------------------------------------------
 
@@ -416,6 +420,10 @@ export function Transactions() {
         return getResolvedAddress(key);
       }
 
+      if (key === "value" && transferOrTransaction) {
+        return getBalance(Number(argValues[key]), selectCoin?.decimals ?? 18);
+      }
+
       const raw = argValues[key] ?? "";
       return parseAbiArg(input.type, raw);
     });
@@ -458,7 +466,7 @@ export function Transactions() {
       let dest: `0x${string}` | null = null;
 
       // Build execute(value,data)
-      let value: bigint = 0n;
+      let value: bigint = 0n; 
       let innerData: Hex = "0x";
 
       if (isNative) {
@@ -937,8 +945,6 @@ export function Transactions() {
                     st.mode === "coin" ? coins :
                       st.mode === "folio" ? folios :
                         [];
-
-                const resolved = getResolvedAddress(key);
 
                 return (
                   <div key={key} className="space-y-1">

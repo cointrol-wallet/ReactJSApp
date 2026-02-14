@@ -1,23 +1,82 @@
+import * as React from "react";
+import { createPortal } from "react-dom";
 import QRCode from "react-qr-code";
 import { encodeSharePayload } from "@/lib/sharePayload";
 import type { SharePayload } from "@/lib/sharePayload";
 
-export function ShareQrModal({ payload }: { payload: SharePayload }) {
+export function ShareQrModal({
+  payload,
+  onClose,
+}: {
+  payload: SharePayload;
+  onClose: () => void;
+}) {
   const value = encodeSharePayload(payload);
 
-  return (
-    <div className="p-4">
-      <div className="bg-white p-3 inline-block rounded">
-        <QRCode value={value} size={240} />
-      </div>
+  if (typeof document === "undefined") return null;
 
-      <div className="mt-3 flex gap-3">
-        <button onClick={() => navigator.clipboard.writeText(value)} className="underline">
-          Copy
-        </button>
-      </div>
+  return createPortal(
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483646,
+          background: "rgba(0,0,0,0.35)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+        }}
+      />
 
-      <div className="text-xs text-neutral-500 mt-2 break-all">{value}</div>
-    </div>
+      {/* Modal panel */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="
+          rounded-2xl
+          border border-neutral-200
+          bg-[#fffdf7]
+          text-neutral-900
+          shadow-2xl
+        "
+        style={{
+          position: "fixed",
+          zIndex: 2147483647,
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(420px, calc(100vw - 32px))",
+          padding: 20,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-lg font-semibold mb-3 text-center">Share profile</div>
+        <div className="mt-4 flex justify-end gap-2"></div><br/>
+
+        {/* QR box */}
+        <div className="mt-2 flex justify-center">
+          <div className="bg-white p-3 rounded-lg border shadow-sm">
+            <QRCode value={value} size={240} />
+          </div>
+        </div>
+
+
+        {/* Actions */}
+        <div className="mt-4 flex justify-end">
+
+          <button
+            type="button"
+            className="rounded bg-black px-3 py-2 text-white"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+      </div>
+    </>,
+    document.body
   );
 }

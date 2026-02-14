@@ -15,6 +15,11 @@ import { buildProfileShareFromFolios } from "../lib/shareBuilders";
 import { encodeSharePayload } from "../lib/sharePayload";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
 
+type SubmitState =
+  | { status: "idle" }
+  | { status: "pending"; message: string }
+  | { status: "error"; message: string };
+
 export function Folios() {
   const [query, setQuery] = React.useState("");
   const [primarySortMode, setPrimarySortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc">(
@@ -78,7 +83,7 @@ export function Folios() {
   const [qrPayload, setQrPayload] = React.useState<any>(null);
 
   async function handleShareProfile() {
-    const name = displayName.trim();
+    const name = (displayName ?? "").trim();
     if (!name) {
       setNameOpen(true); // prompt to set it
       return;
@@ -450,8 +455,13 @@ export function Folios() {
 
   function closeModal() {
     setIsModalOpen(false);
+    setEditingFolio(null);
+    setSubmitState({ status: "idle" });
     resetForm();
   }
+
+  const [submitState, setSubmitState] = React.useState<SubmitState>({ status: "idle" });
+  const isPending = submitState.status === "pending";
 
   React.useEffect(() => {
     if (!selectDomain && domains.length) setSelectDomain(domains[0]);
@@ -467,34 +477,54 @@ export function Folios() {
       name: trimmedName,
     };
 
-    if (editingFolio) {
-      await updateFolio(editingFolio.id, payload);
-    } else {
-      const sender = await getAddress(`default`, 512);  //TODO: replace with uuid from auth
-      if (!sender) {
-        console.error("No sender address available for new folio");
-        return;
-      }
-      const newWallet = await createQuantumAccount({
-        sender: sender as Address,
-        domain: selectDomain.name,
-        salt: "default", // replace with actual salt
+    try {
+      setSubmitState({
+        status: "pending",
+        message: editingFolio ? "Saving changes…" : "Submitting account creation…",
       });
-      const domainDetails = {
-        // fetch domain details and complete this
-        address: sender,
-        chainId: selectDomain.chainId,
-        paymaster: selectDomain.paymaster,
-        type: 0, // not currently used
-        bundler: selectDomain.bundler,
-        // add logic for wallet discovery using coins filtered by chainId
-      }
-      if (newWallet) {
-        await addFolio({ ...payload, ...domainDetails });
-      }
-    }
 
-    closeModal();
+      if (editingFolio) {
+        await updateFolio(editingFolio.id, payload);
+      } else {
+        const sender = await getAddress(`default`, 512);  //TODO: replace with uuid from auth
+        if (!sender) {
+          setSubmitState({ status: "error", message: "No sender address available for new account." });
+          return;
+        }
+
+        setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
+
+        const newWallet = await createQuantumAccount({
+          sender: sender as Address,
+          domain: selectDomain.name,
+          salt: "default", // replace with actual salt
+        });
+        const domainDetails = {
+          // fetch domain details and complete this
+          address: sender,
+          chainId: selectDomain.chainId,
+          paymaster: selectDomain.paymaster,
+          type: 0, // not currently used
+          bundler: selectDomain.bundler,
+          // add logic for wallet discovery using coins filtered by chainId
+        }
+        if (newWallet) {
+          setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
+          await addFolio({ ...payload, ...domainDetails });
+        } else {
+          setSubmitState({ status: "error", message: "Account creation failed (no wallet returned)." });
+          return;
+        }
+      }
+    } catch (err: any) {
+      const msg =
+        typeof err?.message === "string"
+          ? err.message
+          : "Something went wrong while creating the account.";
+      setSubmitState({ status: "error", message: msg });
+    } finally {
+      closeModal();
+    }
   }
 
   if (loading) return <div className="p-4">Loading coins…</div>;
@@ -554,19 +584,37 @@ export function Folios() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <button className="rounded border px-3 py-2" onClick={() => setNameOpen(true)}>
-          {displayName ? "Edit display name" : "Set display name"}
-        </button>
+          <button
+            type="button"
+            className="rounded border px-3 py-2"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsModalOpen(false);
+              setFolioToDelete(null);
+              setNameOpen(true);
+            }}
+          >
+            &nbsp;{displayName ? "Edit display name" : "Set display name"}&nbsp;
+          </button>
 
-        <button className="rounded bg-black px-3 py-2 text-white" onClick={handleShareProfile}>
-          Share profile
-        </button>
+          <button
+            type="button"
+            className="rounded bg-black px-3 py-2 text-white"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleShareProfile();
+            }}
+          >
+            &nbsp;Share profile&nbsp;
+          </button>
         </div>
       </div>
 
       <DisplayNameModal
         open={nameOpen}
-        initialValue={displayName}
+        initialValue={displayName ?? ""}
         onClose={() => setNameOpen(false)}
         onSave={save}
       />
@@ -694,6 +742,44 @@ export function Folios() {
             </h2>
 
             <form className="space-y-4" onSubmit={handleSubmit}>
+              {submitState.status !== "idle" && (
+                <div
+                  className={`rounded-md border px-3 py-2 text-xs ${submitState.status === "error" ? "border-red-300" : "border-border"
+                    }`}
+                >
+                  {submitState.status === "pending" && (
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          opacity="0.25"
+                        />
+                        <path
+                          d="M22 12a10 10 0 0 1-10 10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          opacity="0.9"
+                        />
+                      </svg>
+                      <span>{submitState.message}</span>
+                    </div>
+                  )}
+
+                  {submitState.status === "error" && (
+                    <div className="text-red-600">{submitState.message}</div>
+                  )}
+                </div>
+              )}
               <div className="space-y-1">
                 <label className="text-xs font-medium">Name</label>
                 <input
@@ -701,6 +787,7 @@ export function Folios() {
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   required
+                  disabled={isPending}
                 />
               </div>
 
@@ -709,14 +796,18 @@ export function Folios() {
                   type="button"
                   className="rounded-md border px-3 py-1 text-xs"
                   onClick={closeModal}
+                  disabled={isPending}
                 >
                   &nbsp;Cancel&nbsp;
                 </button>&nbsp;
                 <button
                   type="submit"
                   className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
+                  disabled={isPending}
                 >
-                  &nbsp;{editingFolio ? "Save changes" : "Create account"}&nbsp;
+                  &nbsp;{isPending
+                    ? (editingFolio ? "Saving…" : "Creating…")
+                    : (editingFolio ? "Save changes" : "Create account")}&nbsp;
                 </button>
               </div>
             </form>
@@ -800,13 +891,11 @@ export function Folios() {
 
       {/* When qrPayload set, show QR modal */}
       {qrPayload && (
-        <div className="mt-4">
-          <ShareQrModal payload={qrPayload} />
-          <button className="mt-2 underline" onClick={() => setQrPayload(null)}>
-            Close
-          </button>
-        </div>
-      )}    
+        <ShareQrModal
+          payload={qrPayload}
+          onClose={() => setQrPayload(null)}
+        />
+      )}
     </div>
   );
 }
