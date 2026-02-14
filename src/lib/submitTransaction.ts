@@ -255,7 +255,7 @@ export const calculateUserOpHash = (
   });
 };
 
-function defaultAccountGasLimits(accountGasLimit = 7_500_000n, callGasLimit = 200_000n): `0x${string}` {
+function defaultAccountGasLimits(accountGasLimit = 8_500_000n, callGasLimit = 200_000n): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
   const v = accountGasLimit;
   const c = callGasLimit;

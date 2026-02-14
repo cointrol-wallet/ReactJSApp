@@ -24,7 +24,7 @@ const BUILTIN_DOMAINS: Domain[] = [{
   name: "ETHEREUM SEPOLIA",
   chainId: 11155111,
   entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",  // need to add proper address
-  paymaster: "0x1CB61909E699bfB42dF4BF742585B4bd8AB1EEA5",
+  paymaster: "0x694e052473dEad46aa76e25dEc6bA114738B61bD",
   bundler: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", //
   transactionUrl: "https://sepolia.etherscan.io/tx/", 
