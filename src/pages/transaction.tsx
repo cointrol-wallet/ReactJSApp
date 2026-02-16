@@ -188,6 +188,13 @@ export function Transactions() {
     };
   }, [isModalOpen]);
 
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    if (folios.length === 1 && !selectFolio) {
+      setSelectFolio(folios[0]);
+    }
+  }, [isModalOpen, folios, selectFolio]);
+
   function resetForm() {
     setSelectCoin(null);
     setSelectContact(null);
@@ -227,6 +234,15 @@ export function Transactions() {
     setIsModalOpen(false);
     resetForm();
   }
+
+  function stringifyBigInt(value: unknown) {
+    return JSON.stringify(
+      value,
+      (_k, v) => (typeof v === "bigint" ? v.toString() : v),
+      2
+    );
+  }
+
 
   function getResolvedAddress(key: string): string {
     const st = addressFieldState[key];
@@ -466,7 +482,7 @@ export function Transactions() {
       let dest: `0x${string}` | null = null;
 
       // Build execute(value,data)
-      let value: bigint = 0n; 
+      let value: bigint = 0n;
       let innerData: Hex = "0x";
 
       if (isNative) {
@@ -627,7 +643,8 @@ export function Transactions() {
         args,
       });
 
-      setReadResult(JSON.stringify(result, null, 2));
+      setReadResult(stringifyBigInt(result));
+
     } catch (err: any) {
       console.error(err);
       setError(err?.message ?? "Failed to read from RPC");

@@ -450,8 +450,9 @@ export function Coins() {
           value={chainId}
           onChange={e => setChainId(Number(e.target.value))}
         >
+          <option value={0}>All chains</option>
           {Object.entries(CHAIN_NAMES).map(([id, label]) => (
-            <option key={id} value={id}>
+            <option key={id} value={Number(id)}>
               {label}
             </option>
           ))}
@@ -461,6 +462,7 @@ export function Coins() {
           value={standard}
           onChange={(e) => setStandard(e.target.value)}
         >
+          <option value="">All standards</option>
           {EVM_STANDARDS.map((std) => (
             <option key={std} value={std}>
               {std}

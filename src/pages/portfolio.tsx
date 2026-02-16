@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useFolioList } from "../hooks/useFolioList";
-import { PortfolioStore, Folio, getAllFolios } from "@/storage/folioStore";
+import { PortfolioStore, Folio, getAllFolios, Wallet } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
@@ -36,6 +36,7 @@ export function Folios() {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
+  const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<any>(null);
 
   // Form state for modal
@@ -138,6 +139,12 @@ export function Folios() {
 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  React.useEffect(() => {
+    if (folioToDelete !=null) {
+      setFolioNameToDelete(folios.find(f => f.id === folioToDelete)?.name || null);
+    }
+  }, [folioToDelete, folios]);
 
   React.useEffect(() => {
     if (!isModalOpen) return;
@@ -444,7 +451,10 @@ export function Folios() {
 
   function openAddModal() {
     resetForm();
-    setIsModalOpen(true);
+    const chainFolios = folios.filter((f) => f.chainId === selectDomain.chainId);
+    if (chainFolios.length === 0) {
+      setIsModalOpen(true);
+    }  // this will need to be moved elsewhere once more than one domain is supported and is just to limit each user to one account for now
   }
 
   function openEditModal(folio: Folio) {
@@ -497,24 +507,38 @@ export function Folios() {
         const newWallet = await createQuantumAccount({
           sender: sender as Address,
           domain: selectDomain.name,
-          salt: "default", // replace with actual salt
+          salt: "default", // replace with actual salt (uuid from auth)
         });
+
+        if (!newWallet) {
+          setSubmitState({
+            status: "error",
+            message: "Account creation failed (no wallet returned).",
+          });
+          return;
+        }
+
+        setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
+
+        const chainCoins = coins.filter((c) => c.chainId === selectDomain.chainId);
+
+        const wallet: Wallet[] = chainCoins.map((c) => ({
+          coin: c.id,     
+          balance: 0n,
+        }));
+
         const domainDetails = {
-          // fetch domain details and complete this
           address: sender,
           chainId: selectDomain.chainId,
           paymaster: selectDomain.paymaster,
           type: 0, // not currently used
           bundler: selectDomain.bundler,
-          // add logic for wallet discovery using coins filtered by chainId
+          wallet: wallet,
         }
-        if (newWallet) {
-          setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
-          await addFolio({ ...payload, ...domainDetails });
-        } else {
-          setSubmitState({ status: "error", message: "Account creation failed (no wallet returned)." });
-          return;
-        }
+
+
+        await addFolio({ ...payload, ...domainDetails });
+
       }
     } catch (err: any) {
       const msg =
@@ -592,6 +616,7 @@ export function Folios() {
               e.stopPropagation();
               setIsModalOpen(false);
               setFolioToDelete(null);
+              setFolioNameToDelete(null);
               setNameOpen(true);
             }}
           >
@@ -749,28 +774,6 @@ export function Folios() {
                 >
                   {submitState.status === "pending" && (
                     <div className="flex items-center gap-2">
-                      <svg
-                        className="h-4 w-4 animate-spin"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          opacity="0.25"
-                        />
-                        <path
-                          d="M22 12a10 10 0 0 1-10 10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          strokeLinecap="round"
-                          opacity="0.9"
-                        />
-                      </svg>
                       <span>{submitState.message}</span>
                     </div>
                   )}
@@ -861,7 +864,7 @@ export function Folios() {
           >
             <h2 className="text-base font-semibold">Delete account?</h2>
             <p className="mt-2 text-sm text-muted">
-              This will remove the entire portfolio account and its balances from your list.
+              This will remove the entire portfolio account <strong>{folioNameToDelete || "unnamed"}</strong> and its balances from your list.
               This action cannot be undone and you could lose access to your assets.
               If you just want to remove the coin balance then go to the coin page and delete the coin.
             </p>
@@ -869,7 +872,10 @@ export function Folios() {
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 className="rounded-md border px-3 py-1 text-sm"
-                onClick={() => setFolioToDelete(null)}
+                onClick={() => {
+                  setFolioToDelete(null);
+                  setFolioNameToDelete(null);
+                }}
               >
                 &nbsp;Cancel&nbsp;
               </button>&nbsp;
@@ -880,6 +886,7 @@ export function Folios() {
                     deleteFolio(folioToDelete);
                   }
                   setFolioToDelete(null);
+                  setFolioNameToDelete(null);
                 }}
               >
                 &nbsp;Yes, delete account&nbsp;

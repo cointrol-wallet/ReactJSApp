@@ -52,7 +52,7 @@ export function useCoinList(options: UseCoinListOptions = {}) {
     }
 
     return sortCoins(list, sortMode);
-  }, [coins, query, sortMode, tags, tagMode]);
+  }, [coins, query, sortMode, tags, tagMode, standard, chainId]);
 
   return {
     coins: filteredAndSorted,
