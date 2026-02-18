@@ -5,6 +5,8 @@ import { useAddress } from "../hooks/useAddresses";
 import { Address, deleteAddress } from "@/storage/addressStore";
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
+import { ShareQrModal } from "../components/ui/ShareQrModal";
+import { buildContactShare } from "@/lib/shareBuilders";
 
 export function Contacts() {
   const [query, setQuery] = React.useState("");
@@ -17,6 +19,7 @@ export function Contacts() {
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingContact, setEditingContact] = React.useState<Contact | null>(null);
+  const [qrPayload, setQrPayload] = React.useState<any>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -542,6 +545,18 @@ export function Contacts() {
                     >
                       Remove
                     </button>
+                    <div className="my-1 border-t" />
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setQrPayload(buildContactShare(c));
+                      }}
+                    >
+                      Share
+                    </button>
                   </div>
                 </details>
               </div>
@@ -799,6 +814,14 @@ export function Contacts() {
         document.body
       ) : null
       }
+
+      {/* When qrPayload set, show QR modal */}
+      {qrPayload && (
+        <ShareQrModal
+          payload={qrPayload}
+          onClose={() => setQrPayload(null)}
+        />
+      )}
 
     </div>
   );

@@ -52,7 +52,7 @@ export function ShareQrModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-lg font-semibold mb-3 text-center">Share profile</div>
+        <div className="text-lg font-semibold mb-3 text-center">Share {payload.t}: {payload.data.name}</div>
         <div className="mt-4 flex justify-end gap-2"></div><br/>
 
         {/* QR box */}

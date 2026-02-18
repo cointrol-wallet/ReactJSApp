@@ -1,7 +1,4 @@
 import { z } from "zod";
-import type { Contact } from "@/storage/contactStore";
-import type { Contract } from "@/storage/contractStore";
-import type { Folio } from "@/storage/folioStore";
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
 
 export const SHARE_PREFIX = "cointrol://share/v1/";
@@ -31,7 +28,6 @@ export const zContactShare = z.object({
   data: z.object({
     name: z.string().min(1),
     surname: z.string().optional(),
-    tags: z.array(z.string()).optional(),
     wallets: z.array(zWallet).optional(), // include all chains
   }),
   meta: zShareMeta,
@@ -44,7 +40,6 @@ export const zContractShare = z.object({
     name: z.string().min(1),
     address: zHexAddress,
     chainId: z.number().int().positive(),
-    tags: z.array(z.string()).optional(),
     metadata: z.record(z.string(), z.any()).optional(), // may include ABI
     // optional flags to help importer UX
     abiOmitted: z.boolean().optional(),
@@ -57,13 +52,26 @@ export const zProfileShare = z.object({
   t: z.literal("profile"),
   data: z.object({
     name: z.string().min(1), // one name only
-    tags: z.array(z.string()).optional(),
     wallets: z.array(zWallet).min(1), // folios mapped to wallets (all chains)
   }),
   meta: zShareMeta,
 });
 
-export const zSharePayload = z.union([zContactShare, zContractShare, zProfileShare]);
+export const zCoinShare = z.object({
+  v: z.literal(1),
+  t: z.literal("coin"),
+  data: z.object({
+    name: z.string().min(1),
+    symbol: z.string().min(1),
+    decimals: z.number().int().nonnegative(),
+    chainId: z.number().int().positive(),
+    address: zHexAddress,
+    type: z.string().min(1), // token type (e.g., NATIVE, ERC20, ERC1155)
+  }),
+  meta: zShareMeta,
+});
+
+export const zSharePayload = z.union([zContactShare, zContractShare, zProfileShare, zCoinShare]);
 export type SharePayload = z.infer<typeof zSharePayload>;
 
 // ---- Encoding/decoding ------------------------------------------------------

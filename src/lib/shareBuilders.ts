@@ -1,6 +1,7 @@
 import type { Contact } from "@/storage/contactStore";
 import type { Contract } from "@/storage/contractStore";
 import type { Folio } from "@/storage/folioStore";
+import type { Coin } from "@/storage/coinStore";
 import type { SharePayload } from "./sharePayload";
 
 function uniqWallets(wallets: { chainId: number; address: string }[]) {
@@ -22,7 +23,6 @@ export function buildContactShare(contact: Contact): SharePayload {
     data: {
       name: contact.name,
       surname: contact.surname,
-      tags: contact.tags,
       wallets: contact.wallets ? uniqWallets(contact.wallets) : undefined,
     },
     meta: { createdAt: Date.now(), source: "Cointrol" },
@@ -63,7 +63,6 @@ export function buildContractShare(
       name: contract.name,
       address: contract.address,
       chainId: contract.chainId,
-      tags: contract.tags,
       metadata: metadata ?? undefined,
       abiOmitted: abiOmitted || undefined,
     },
@@ -89,8 +88,27 @@ export function buildProfileShareFromFolios(
     t: "profile",
     data: {
       name: displayName,
-      tags,
       wallets,
+    },
+    meta: { createdAt: Date.now(), source: "Cointrol" },
+  };
+}
+
+/**
+ * Coin: share full details
+ */
+
+export function buildCoinShare(coin: Coin): SharePayload {
+  return {
+    v: 1,
+    t: "coin",
+    data: {
+      name: coin.name,
+      symbol: coin.symbol,
+      decimals: coin.decimals,
+      chainId: coin.chainId,
+      address: coin.address,
+      type: coin.type,
     },
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };

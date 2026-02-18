@@ -12,7 +12,6 @@ import { refreshBalancesForFolios } from "@/lib/refreshBalances";
 import { useDisplayName } from "../hooks/useDisplayName";
 import { DisplayNameModal } from "../components/ui/DisplayNameModal";
 import { buildProfileShareFromFolios } from "../lib/shareBuilders";
-import { encodeSharePayload } from "../lib/sharePayload";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
 
 type SubmitState =

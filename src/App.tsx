@@ -17,6 +17,10 @@ import { Transactions } from "./pages/transaction";
 import { initWallet } from "./lib/wallets";
 import logo from "./assets/logo.png";
 import { FalconProvider } from "./crypto/falconProvider";
+import { QrScanner } from "./components/ui/QrScanner";
+import { decodeSharePayload } from "./lib/sharePayload";
+import { importSharePayload } from "./lib/shareImporters";
+import { useFolios } from "./hooks/useFolios";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -28,6 +32,83 @@ import { FalconProvider } from "./crypto/falconProvider";
  *
  * NOTE: Endpoints are placeholders; adjust paths to match your servers.
  */
+
+function QrScanModal({
+  open,
+  onClose,
+  onDecoded,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onDecoded: (payload: string) => void;
+}) {
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483646,
+          background: "rgba(0,0,0,0.5)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+        }}
+      />
+
+      {/* Modal */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483647,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+        }}
+        onClick={onClose}
+      >
+        <div
+          className="w-full max-w-md rounded-2xl border border-border bg-card shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="text-sm font-semibold">Scan QR code</div>
+            <Button size="sm" variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+
+          <div className="p-2">
+            {/* IMPORTANT: unmounting this stops the camera (your QrScanner cleanup) */}
+            <QrScanner
+              onDecoded={(payload) => {
+                onDecoded(payload);
+                onClose();
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
 
 function NavDropdown() {
   const [open, setOpen] = React.useState(false);
@@ -164,10 +245,11 @@ function NavDropItem({
 
 
 // --- UI Shell & Navigation ---
-function AppShell({ children, address, domain }: {
+function AppShell({ children, address, domain, onOpenScan }: {
   children: React.ReactNode,
   address?: string | null,
-  domain: string
+  domain: string,
+  onOpenScan: () => void,
 }) {
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -183,6 +265,9 @@ function AppShell({ children, address, domain }: {
             {/* <span className="font-semibold">QuantumAccount</span> */}
           </Link>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={onOpenScan}>
+              Scan
+            </Button>&nbsp;
             <NavDropdown />&nbsp;
             <WalletSwitcher domain={domain} />
           </div>
@@ -203,6 +288,20 @@ function AppContainer() {
   const [address, setAddress] = React.useState<string | null>(null);
   const [domain, setDomain] = React.useState<string>("LOCAL"); // needs to be changed to a selector
   const [error, setError] = React.useState<string | null>(null);
+  const [scanOpen, setScanOpen] = React.useState(false);
+
+  const { folios, updateFolio } = useFolios();
+
+  const handleDecoded = React.useCallback(async (qrText: string) => {
+    try {
+      const payload = decodeSharePayload(qrText); // -> SharePayload
+      const result = await importSharePayload(payload, { folios, updateFolio });
+      console.log("[QR] import result:", result);
+    } catch (e) {
+      console.error("[QR] import failed:", e);
+      // optionally show a toast
+    }
+  }, [folios, updateFolio]);
 
 
   React.useEffect(() => {
@@ -230,30 +329,37 @@ function AppContainer() {
   }, []);
 
   return (
-    <AppShell address={address} domain={domain}>
-      {error ? (
-        <div className="p-6 text-red-700">
-          <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
-          <p className="mb-2">{error}</p>
-          <p className="text-sm text-neutral-600">Check the console for details.</p>
-        </div>
-      ) : !address ? (
-        <div className="p-6">Initialising QuantumAccount wallet…</div>
-      ) : (
-        <Routes>
-          <Route path="/" element={<Folios />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Folios />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/contracts" element={<Contracts />} />
-          <Route path="/coins" element={<Coins />} />
-          <Route path="/addressbook" element={<AddressBook />} />
-          <Route path="/legal/terms" element={<Terms />} />
-          <Route path="/legal/privacy" element={<Privacy />} />
-        </Routes>
-      )}
-    </AppShell>
+    <>
+      <QrScanModal
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onDecoded={handleDecoded}
+      />
+      <AppShell address={address} domain={domain} onOpenScan={() => setScanOpen(true)}>
+        {error ? (
+          <div className="p-6 text-red-700">
+            <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
+            <p className="mb-2">{error}</p>
+            <p className="text-sm text-neutral-600">Check the console for details.</p>
+          </div>
+        ) : !address ? (
+          <div className="p-6">Initialising QuantumAccount wallet…</div>
+        ) : (
+          <Routes>
+            <Route path="/" element={<Folios />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Folios />} />
+            <Route path="/transactions" element={<Transactions />} />
+            <Route path="/contacts" element={<Contacts />} />
+            <Route path="/contracts" element={<Contracts />} />
+            <Route path="/coins" element={<Coins />} />
+            <Route path="/addressbook" element={<AddressBook />} />
+            <Route path="/legal/terms" element={<Terms />} />
+            <Route path="/legal/privacy" element={<Privacy />} />
+          </Routes>
+        )}
+      </AppShell>
+    </>
   );
 }
 

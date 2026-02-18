@@ -5,6 +5,8 @@ import { useFolios } from "@/hooks/useFolios";
 import { useDomains } from "@/hooks/useDomains";
 import { createPortal } from "react-dom";
 import { createPublicClient, http, erc20Abi, Address } from "viem";
+import { ShareQrModal } from "../components/ui/ShareQrModal";
+import { buildCoinShare } from "@/lib/shareBuilders";
 
 export function Coins() {
   const [query, setQuery] = React.useState("");
@@ -19,6 +21,7 @@ export function Coins() {
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingCoin, setEditingCoin] = React.useState<Coin | null>(null);
+  const [qrPayload, setQrPayload] = React.useState<any>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -560,6 +563,18 @@ export function Coins() {
                     >
                       Remove
                     </button>
+                    <div className="my-1 border-t" />
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setQrPayload(buildCoinShare(c));
+                      }}
+                    >
+                      Share
+                    </button>
                   </div>
                 </details>
               </div>
@@ -858,6 +873,14 @@ export function Coins() {
         document.body
       ) : null
       }
+
+      {/* When qrPayload set, show QR modal */}
+      {qrPayload && (
+        <ShareQrModal
+          payload={qrPayload}
+          onClose={() => setQrPayload(null)}
+        />
+      )}
     </div>
   );
 }
