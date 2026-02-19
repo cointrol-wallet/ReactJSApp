@@ -30,7 +30,6 @@ export default function AuthButtons() {
 
   const popupOrRedirect = async (provider: any) => {
     try {
-      // Popups are simpler; fall back to redirect if blocked
       await signInWithPopup(auth, provider);
     } catch (e: any) {
       if (e?.code?.includes('popup-blocked')) {

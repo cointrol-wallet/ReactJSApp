@@ -51,9 +51,9 @@ export async function createQuantumAccount({
 
   const falcon = createFalconWorkerClient();
   const signature = await falcon.sign(falconLevel, rawMessage, await getSecretKey(falconLevel)); // example for now, will replace with user choice later
-  console.log("[createQuantumAccount] rawMessage length:", rawMessage.length);
-  console.log("[createQuantumAccount] signature length (bytes):", signature.length);
-  console.log("[createQuantumAccount] publicKey length (bytes):", publicKey.length);
+  // console.log("[createQuantumAccount] rawMessage length:", rawMessage.length);
+  // console.log("[createQuantumAccount] signature length (bytes):", signature.length);
+  // console.log("[createQuantumAccount] publicKey length (bytes):", publicKey.length);
 
   const res = await PaymasterAPI.createNewAccount(
     sender,

@@ -1,13 +1,33 @@
 // src/firebase.ts
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  FacebookAuthProvider,
+  TwitterAuthProvider,
+  GithubAuthProvider,
+  OAuthProvider,
+} from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY!,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID!,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID!,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
 };
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Auth providers
+export const googleProvider = new GoogleAuthProvider();
+export const facebookProvider = new FacebookAuthProvider();
+export const twitterProvider = new TwitterAuthProvider();
+export const githubProvider = new GithubAuthProvider();
+
+// Apple — uncomment to add Apple Sign-In (requires Apple Developer account configured in Firebase console)
+// export const appleProvider = new OAuthProvider('apple.com');
+// appleProvider.addScope('email');
+// appleProvider.addScope('name');

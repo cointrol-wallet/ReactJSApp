@@ -13,6 +13,7 @@ import { useDisplayName } from "../hooks/useDisplayName";
 import { DisplayNameModal } from "../components/ui/DisplayNameModal";
 import { buildProfileShareFromFolios } from "../lib/shareBuilders";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
+import { getUUID } from "@/storage/authStore";
 
 type SubmitState =
   | { status: "idle" }
@@ -495,7 +496,9 @@ export function Folios() {
       if (editingFolio) {
         await updateFolio(editingFolio.id, payload);
       } else {
-        const sender = await getAddress(`default`, 512);  //TODO: replace with uuid from auth
+        const salt = await getUUID();
+        if (!salt) { return setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." }); }
+        const sender = await getAddress(salt, 512);  //TODO: replace with uuid from auth
         if (!sender) {
           setSubmitState({ status: "error", message: "No sender address available for new account." });
           return;
@@ -506,7 +509,7 @@ export function Folios() {
         const newWallet = await createQuantumAccount({
           sender: sender as Address,
           domain: selectDomain.name,
-          salt: "default", // replace with actual salt (uuid from auth)
+          salt: salt,
         });
 
         if (!newWallet) {

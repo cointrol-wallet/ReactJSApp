@@ -58,10 +58,6 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     open: true,
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp'
-    }
   },
   worker: {
     format: 'es'

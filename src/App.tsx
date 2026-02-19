@@ -1,11 +1,8 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, Navigate } from "react-router-dom";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
-import { Label } from "./components/ui/label";
-import { Switch } from "./components/ui/switch";
 import './index.css'
 import { AddressBook } from "./pages/addressBook";
 import { Contracts } from "./pages/contracts";
@@ -14,6 +11,7 @@ import { Coins } from "./pages/coinManagement";
 import { Folios } from "./pages/portfolio";
 import { Privacy, Terms } from "./pages/legal";
 import { Transactions } from "./pages/transaction";
+import { LoginPage } from "./pages/LoginPage";
 import { initWallet } from "./lib/wallets";
 import logo from "./assets/logo.png";
 import { FalconProvider } from "./crypto/falconProvider";
@@ -21,6 +19,7 @@ import { QrScanner } from "./components/ui/QrScanner";
 import { decodeSharePayload } from "./lib/sharePayload";
 import { importSharePayload } from "./lib/shareImporters";
 import { useFolios } from "./hooks/useFolios";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
 /**
  * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
@@ -347,7 +346,6 @@ function AppContainer() {
         ) : (
           <Routes>
             <Route path="/" element={<Folios />} />
-            <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Folios />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/contacts" element={<Contacts />} />
@@ -404,36 +402,36 @@ function WalletSwitcher({ domain }: { domain: string }) { // need to add functio
 
 
 
-// --- Screens ---
-export function Login() {
-  return (
-    <div className="mx-auto max-w-md">
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Welcome to QuantumAccount</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button className="w-full">Sign in with Google</Button>
-          <Button className="w-full" variant="secondary">Sign in with Apple</Button>
-          <Button className="w-full" variant="outline">Use existing wallet</Button>
-          <Button className="w-full">Create new wallet</Button>
-          <div className="flex items-center justify-between pt-2">
-            <Label htmlFor="terms">Accept Terms & Privacy</Label>
-            <Switch id="terms" />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+// --- Auth guard: redirects to /login if not signed in ---
+function ProtectedApp() {
+  const { firebaseUser, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+  if (!firebaseUser) return <Navigate to="/login" replace />;
+  return <AppContainer />;
 }
 
 // --- Root App + Routes ---
 export default function App() {
   return (
     <BrowserRouter>
-      <FalconProvider>
-        <AppContainer />
-      </FalconProvider>
+      <AuthProvider>
+        <FalconProvider>
+          <Routes>
+            {/* Public routes — accessible before authentication */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/legal/terms" element={<Terms />} />
+            <Route path="/legal/privacy" element={<Privacy />} />
+            {/* All other routes require authentication */}
+            <Route path="/*" element={<ProtectedApp />} />
+          </Routes>
+        </FalconProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
