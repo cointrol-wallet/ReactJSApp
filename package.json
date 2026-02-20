@@ -33,7 +33,7 @@
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
-    "postbuild": "cp dist/index.html dist/404.html"
+    "postbuild": "cp dist/index.html dist/404.html && node scripts/patch-liboqs.js"
   },
   "eslintConfig": {
     "extends": [

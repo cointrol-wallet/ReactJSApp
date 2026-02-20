@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Link, NavLink, Navigate } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
@@ -427,7 +427,7 @@ function ProtectedApp() {
 
 export default function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <HashRouter>
       <AuthProvider>
         <FalconProvider>
           <Routes>
@@ -441,6 +441,6 @@ export default function App() {
           </Routes>
         </FalconProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

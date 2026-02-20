@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import logo from "../assets/logo.png";
 
 export function LoginPage() {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
 
   const [firstTime, setFirstTime] = useState<boolean | null>(null);
@@ -39,7 +39,7 @@ export function LoginPage() {
     if (firebaseUser) navigate("/dashboard", { replace: true });
   }, [firebaseUser, navigate]);
 
-  // Handle redirect result — fires after Google redirects back to the app
+  // Handle redirect result — fires after OAuth redirects back to the app
   useEffect(() => {
     getRedirectResult(auth)
       .then(async (result) => {
@@ -48,8 +48,18 @@ export function LoginPage() {
           navigate("/dashboard", { replace: true });
         }
       })
-      .catch(console.error);
+      .catch(() => {
+        // Errors from the redirect are surfaced via AuthContext.authError
+      });
   }, []);
+
+  // Show any redirect auth error (e.g. account-exists-with-different-credential)
+  useEffect(() => {
+    if (authError) {
+      toast.error(authError);
+      clearAuthError();
+    }
+  }, [authError, clearAuthError]);
 
   const signIn = async (provider: AuthProvider) => {
     if (signingIn) return;

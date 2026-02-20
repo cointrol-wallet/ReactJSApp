@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { type User, onAuthStateChanged,
   getRedirectResult,
+  fetchSignInMethodsForEmail,
   browserLocalPersistence,
   setPersistence, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "../firebase";
-import { getUUID, setUUID, setTermsAccepted, hasAcceptedTerms } from "../storage/authStore";
+import { getUUID, setUUID, setTermsAccepted } from "../storage/authStore";
 import { bytesToHex } from "viem";
 
 async function ensureDeviceUuid(): Promise<string> {
@@ -46,10 +47,37 @@ async function deriveUserSalt(uid: string): Promise<Uint8Array> {
   return new Uint8Array(bits);
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  "google.com": "Google",
+  "facebook.com": "Facebook",
+  "twitter.com": "X (Twitter)",
+  "github.com": "GitHub",
+  "apple.com": "Apple",
+  "password": "email/password",
+};
+
+async function buildConflictMessage(e: any): Promise<string> {
+  const email: string | undefined = e?.customData?.email ?? e?.email;
+  if (email) {
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      if (methods.length > 0) {
+        const labels = methods.map((m) => PROVIDER_LABELS[m] ?? m).join(" or ");
+        return `An account with this email already exists. Please sign in with ${labels} instead.`;
+      }
+    } catch {
+      // fall through to generic message
+    }
+  }
+  return "An account with this email already exists using a different sign-in method. Please try another provider.";
+}
+
 type AuthContextValue = {
   firebaseUser: User | null;
   uuid: string | null;
   loading: boolean;
+  authError: string | null;
+  clearAuthError: () => void;
   signOut: () => Promise<void>;
   completeFirstLogin: () => Promise<string>;
 };
@@ -60,21 +88,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [uuid, setUuidState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-    try {
-      // Make sure auth can persist the session across the redirect
-      await setPersistence(auth, browserLocalPersistence);
+      try {
+        // Make sure auth can persist the session across the redirect
+        await setPersistence(auth, browserLocalPersistence);
 
-      // This "finalizes" a redirect sign-in and surfaces any errors
-      const res = await getRedirectResult(auth);
-      console.log("[Auth] redirect result:", res?.user?.uid ?? null);
-    } catch (e: any) {
-      console.error("[Auth] redirect error:", e?.code ?? e, e);
-    }
-  })();
+        // This "finalizes" a redirect sign-in and surfaces any errors
+        const res = await getRedirectResult(auth);
+        console.log("[Auth] redirect result:", res?.user?.uid ?? null);
+      } catch (e: any) {
+        console.error("[Auth] redirect error:", e?.code ?? e, e);
+        if (e?.code === "auth/account-exists-with-different-credential") {
+          const msg = await buildConflictMessage(e);
+          if (!cancelled) setAuthError(msg);
+        }
+      }
+    })();
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (cancelled) return;
       console.log("[Auth] state changed:", user?.uid ?? null);
@@ -87,7 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setLoading(false);
     });
-    return unsub;
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   const signOut = async () => {
@@ -105,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, uuid, loading, signOut, completeFirstLogin }}>
+    <AuthContext.Provider value={{ firebaseUser, uuid, loading, authError, clearAuthError: () => setAuthError(null), signOut, completeFirstLogin }}>
       {children}
     </AuthContext.Provider>
   );
