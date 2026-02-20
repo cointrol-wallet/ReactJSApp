@@ -202,14 +202,14 @@ function NavDropdown() {
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <NavDropItem to="/dashboard" label="Home" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/transactions" label="Transactions" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/addressbook" label="Address Book" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/contacts" label="Contacts" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/contracts" label="Smart Contracts" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/coins" label="Coins" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/legal/terms" label="Terms" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
+              <NavDropItem to="dashboard" label="Home" onSelect={() => setOpen(false)} />
+              <NavDropItem to="transactions" label="Transactions" onSelect={() => setOpen(false)} />
+              <NavDropItem to="addressbook" label="Address Book" onSelect={() => setOpen(false)} />
+              <NavDropItem to="contacts" label="Contacts" onSelect={() => setOpen(false)} />
+              <NavDropItem to="contracts" label="Smart Contracts" onSelect={() => setOpen(false)} />
+              <NavDropItem to="coins" label="Coins" onSelect={() => setOpen(false)} />
+              <NavDropItem to="legal/terms" label="Terms" onSelect={() => setOpen(false)} />
+              <NavDropItem to="legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
               <div className="my-1 border-t border-border" />
               <button
                 className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-neutral-100"
@@ -262,7 +262,7 @@ function AppShell({ children, address, domain, onOpenScan }: {
     <div className="min-h-[100dvh] bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/dashboard" className="flex items-center gap-2">
+          <Link to="dashboard" className="flex items-center gap-2">
             <img
               src={logo}
               alt="QuantumAccount"
@@ -353,15 +353,15 @@ function AppContainer() {
           <div className="p-6">Initialising QuantumAccount wallet…</div>
         ) : (
           <Routes>
-            <Route path="/" element={<Folios />} />
-            <Route path="/dashboard" element={<Folios />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="/contacts" element={<Contacts />} />
-            <Route path="/contracts" element={<Contracts />} />
-            <Route path="/coins" element={<Coins />} />
-            <Route path="/addressbook" element={<AddressBook />} />
-            <Route path="/legal/terms" element={<Terms />} />
-            <Route path="/legal/privacy" element={<Privacy />} />
+            <Route index element={<Folios />} /> 
+            <Route path="dashboard" element={<Folios />} />
+            <Route path="transactions" element={<Transactions />} />
+            <Route path="contacts" element={<Contacts />} />
+            <Route path="contracts" element={<Contracts />} />
+            <Route path="coins" element={<Coins />} />
+            <Route path="addressbook" element={<AddressBook />} />
+            <Route path="legal/terms" element={<Terms />} />
+            <Route path="legal/privacy" element={<Privacy />} />
           </Routes>
         )}
       </AppShell>
@@ -385,10 +385,10 @@ function BottomNav() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid h-14 max-w-md grid-cols-4 gap-2 px-2 text-center text-xs text-muted items-center">
-        <NavLink to="/dashboard">Home</NavLink>
-        <NavLink to="/transactions">Transactions</NavLink>
-        <NavLink to="/legal/terms">T&C</NavLink>
-        <NavLink to="/legal/privacy">Privacy</NavLink>
+        <NavLink to="dashboard">Home</NavLink>
+        <NavLink to="transactions">Transactions</NavLink>
+        <NavLink to="legal/terms">T&C</NavLink>
+        <NavLink to="legal/privacy">Privacy</NavLink>
       </div>
     </div>
   );
@@ -410,9 +410,9 @@ function WalletSwitcher({ domain }: { domain: string }) { // need to add functio
 
 
 
-// --- Auth guard: redirects to /login if not signed in ---
 function ProtectedApp() {
   const { firebaseUser, loading } = useAuth();
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center text-sm text-muted-foreground">
@@ -420,21 +420,22 @@ function ProtectedApp() {
       </div>
     );
   }
-  if (!firebaseUser) return <Navigate to="/login" replace />;
+
+  if (!firebaseUser) return <Navigate to="login" replace />; 
   return <AppContainer />;
 }
 
-// --- Root App + Routes ---
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AuthProvider>
         <FalconProvider>
           <Routes>
-            {/* Public routes — accessible before authentication */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/legal/terms" element={<Terms />} />
-            <Route path="/legal/privacy" element={<Privacy />} />
+            {/* Public routes */}
+            <Route path="login" element={<LoginPage />} />             
+            <Route path="legal/terms" element={<Terms />} />             
+            <Route path="legal/privacy" element={<Privacy />} />         
+
             {/* All other routes require authentication */}
             <Route path="/*" element={<ProtectedApp />} />
           </Routes>
