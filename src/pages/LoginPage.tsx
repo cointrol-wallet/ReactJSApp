@@ -4,7 +4,6 @@ import { Github, Facebook, Twitter } from "lucide-react";
 import { toast } from "sonner";
 import {
   signInWithRedirect,
-  getRedirectResult,
   type AuthProvider,
 } from "firebase/auth";
 import {
@@ -16,7 +15,7 @@ import {
   // appleProvider, // Uncomment to add Apple Sign-In (also uncomment the button below)
 } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { isFirstTimeUser, setTermsAccepted } from "../storage/authStore";
+import { isFirstTimeUser } from "../storage/authStore";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import logo from "../assets/logo.png";
@@ -38,20 +37,6 @@ export function LoginPage() {
   useEffect(() => {
     if (firebaseUser) navigate("/dashboard", { replace: true });
   }, [firebaseUser, navigate]);
-
-  // Handle redirect result — fires after OAuth redirects back to the app
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          await setTermsAccepted();
-          navigate("/dashboard", { replace: true });
-        }
-      })
-      .catch(() => {
-        // Errors from the redirect are surfaced via AuthContext.authError
-      });
-  }, []);
 
   // Show any redirect auth error (e.g. account-exists-with-different-credential)
   useEffect(() => {

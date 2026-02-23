@@ -100,6 +100,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // This "finalizes" a redirect sign-in and surfaces any errors
         const res = await getRedirectResult(auth);
         console.log("[Auth] redirect result:", res?.user?.uid ?? null);
+        // If a redirect sign-in just completed, persist terms acceptance.
+        // The sign-in button is disabled until the T&C box is checked, so
+        // any successful redirect result implies the user accepted.
+        if (res?.user) {
+          await setTermsAccepted();
+        }
       } catch (e: any) {
         console.error("[Auth] redirect error:", e?.code ?? e, e);
         if (e?.code === "auth/account-exists-with-different-credential") {
