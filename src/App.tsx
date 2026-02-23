@@ -293,7 +293,7 @@ function AppShell({ children, address, domain, onOpenScan }: {
 
 function AppContainer() {
   const [address, setAddress] = React.useState<string | null>(null);
-  const [domain, setDomain] = React.useState<string>("LOCAL"); // needs to be changed to a selector
+  const [domain, setDomain] = React.useState<string>("ETHEREUM SEPOLIA"); // needs to be changed to a selector
   const [error, setError] = React.useState<string | null>(null);
   const [scanOpen, setScanOpen] = React.useState(false);
 

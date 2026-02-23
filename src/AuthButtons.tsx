@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 
 const google = new GoogleAuthProvider();
 const facebook = new FacebookAuthProvider();
+//facebook.addScope('email');
 const apple = new OAuthProvider('apple.com');
 // (optional) Apple scopes
 apple.addScope('email');
