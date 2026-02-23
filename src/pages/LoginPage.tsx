@@ -25,7 +25,9 @@ export function LoginPage() {
   const navigate = useNavigate();
 
   const [firstTime, setFirstTime] = useState<boolean | null>(null);
-  const [termsChecked, setTermsChecked] = useState(false);
+  const [termsChecked, setTermsChecked] = useState(
+    () => sessionStorage.getItem("cointrol:terms-pending") === "true"
+  );
   const [signingIn, setSigningIn] = useState(false);
 
   // Determine first-time vs returning on mount
@@ -100,7 +102,11 @@ export function LoginPage() {
                       <input
                         type="checkbox"
                         checked={termsChecked}
-                        onChange={(e) => setTermsChecked(e.target.checked)}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          sessionStorage.setItem("cointrol:terms-pending", val ? "true" : "false");
+                          setTermsChecked(val);
+                        }}
                         className="mt-0.5 h-4 w-4 rounded border-border accent-foreground cursor-pointer"
                       />
                       <span className="text-sm leading-snug">

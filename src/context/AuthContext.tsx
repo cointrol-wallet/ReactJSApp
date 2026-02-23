@@ -105,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // any successful redirect result implies the user accepted.
         if (res?.user) {
           await setTermsAccepted();
+          sessionStorage.removeItem("cointrol:terms-pending");
         }
       } catch (e: any) {
         console.error("[Auth] redirect error:", e?.code ?? e, e);
