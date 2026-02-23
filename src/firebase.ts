@@ -26,7 +26,7 @@ export const facebookProvider = new FacebookAuthProvider();
 // Request email explicitly. For this to work your Meta app must:
 //   1. Have "Facebook Login" product added
 //   2. Include https://cointrol-wallet.firebaseapp.com/__/auth/handler in Valid OAuth Redirect URIs
-//   3. Include cointrol-wallet.firebaseapp.com (and paulangusbark.github.io) in App Domains
+//   3. Include cointrol-wallet.firebaseapp.com (and cointrol-wallet.github.io) in App Domains
 //   4. Have a Privacy Policy URL set in Basic Settings
 //facebookProvider.addScope('email');
 export const twitterProvider = new TwitterAuthProvider();

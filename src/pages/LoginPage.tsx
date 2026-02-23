@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Github, Facebook, Twitter } from "lucide-react";
 import { toast } from "sonner";
 import {
-  signInWithRedirect,
+  signInWithPopup,
   type AuthProvider,
 } from "firebase/auth";
 import {
@@ -15,13 +15,13 @@ import {
   // appleProvider, // Uncomment to add Apple Sign-In (also uncomment the button below)
 } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { isFirstTimeUser } from "../storage/authStore";
+import { isFirstTimeUser, setTermsAccepted } from "../storage/authStore";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import logo from "../assets/logo.png";
 
 export function LoginPage() {
-  const { firebaseUser, authError, clearAuthError } = useAuth();
+  const { firebaseUser } = useAuth();
   const navigate = useNavigate();
 
   const [firstTime, setFirstTime] = useState<boolean | null>(null);
@@ -40,27 +40,26 @@ export function LoginPage() {
     if (firebaseUser) navigate("/dashboard", { replace: true });
   }, [firebaseUser, navigate]);
 
-  // Show any redirect auth error (e.g. account-exists-with-different-credential)
-  useEffect(() => {
-    if (authError) {
-      toast.error(authError);
-      clearAuthError();
-    }
-  }, [authError, clearAuthError]);
-
   const signIn = async (provider: AuthProvider) => {
     if (signingIn) return;
     setSigningIn(true);
     try {
-      // Use redirect flow — more reliable than popup across all browsers (especially Firefox)
-      await signInWithRedirect(auth, provider);
-      // Page will navigate away; execution does not continue here
+      await signInWithPopup(auth, provider);
+      await setTermsAccepted();
+      sessionStorage.removeItem("cointrol:terms-pending");
+      // onAuthStateChanged fires → firebaseUser updates → navigate("/dashboard")
     } catch (e: any) {
-      console.error("[Login] signInWithRedirect error:", e);
-      toast.error((e as any)?.message ?? "Sign-in failed. Please try again.");
+      const code: string = e?.code ?? "";
+      console.error("[Login] signInWithPopup error:", code, e);
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        if (code === "auth/account-exists-with-different-credential") {
+          toast.error("An account with this email already exists using a different sign-in method. Please try another provider.");
+        } else {
+          toast.error(e?.message ?? "Sign-in failed. Please try again.");
+        }
+      }
       setSigningIn(false);
     }
-
   };
 
   const buttonsDisabled = signingIn || (firstTime === true && !termsChecked);
