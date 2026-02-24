@@ -162,11 +162,11 @@ export async function generateAndStoreFalconKeypair(level: FalconLevel): Promise
   // Generate using liboqs inside the worker
   const { pk, sk } = await falcon.generateKeypair(level);
 
-  // Encrypt with distinct IVs (IMPORTANT)
-  const [pkRec, skRec] = await Promise.all([
-    encryptBytes(level, pk),
-    encryptBytes(level, sk),
-  ]);
+  // Encrypt sequentially so the first call creates the salt before the second
+  // reads it. Parallel calls race on first-ever keygen: both see no salt, both
+  // generate a different salt, and only one survives — causing a decrypt failure.
+  const pkRec = await encryptBytes(level, pk);
+  const skRec = await encryptBytes(level, sk);
 
   await Promise.all([
     set(keyId(level, "pk"), pkRec),
