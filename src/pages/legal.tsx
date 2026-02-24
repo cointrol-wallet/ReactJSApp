@@ -5,7 +5,7 @@ import { useNavigate, Link } from "react-router-dom";
 export function Terms() {
   const navigate = useNavigate();
   return (
-    <Card className="mx-auto w-full max-w-4xl">
+    <Card className="flex flex-row items-center justify-between">
       <CardHeader>
         <CardTitle>Terms & Conditions</CardTitle>
       
@@ -286,9 +286,9 @@ export function Terms() {
 
 export function Privacy() {
   const navigate = useNavigate();
-  
+
   return (
-    <Card className="mx-auto w-full max-w-4xl">
+    <Card className="flex flex-row items-center justify-between">
       <CardHeader>
         <CardTitle>Privacy Policy</CardTitle>
                 <div className="flex gap-2">
