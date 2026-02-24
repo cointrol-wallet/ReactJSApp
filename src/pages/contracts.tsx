@@ -2,7 +2,7 @@ import * as React from "react";
 import { useContractsList } from "../hooks/useContractList";
 import { Contract } from "@/storage/contractStore";
 import { useAddress } from "../hooks/useAddresses";
-import { Address, deleteAddress } from "@/storage/addressStore";
+import { type Address } from "@/storage/addressStore";
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ShareQrModal } from "@/components/ui/ShareQrModal";
@@ -257,17 +257,6 @@ export function Contracts() {
 
   // --- Modal helpers ---------------------------------------------------------
 
-  function createAddressFromContract(contract: Contract) {
-    storeAddAddress({
-      id: contract.id,
-      name: contract.name,
-      isContact: false,
-      isVisible: true,
-      group: contract.tags ?? [],
-      indexOrder: address.length,
-    });
-  }
-
   function updateAddressFromContract(contract: Contract, isVisible: boolean) {
     storeUpdateAddress(contract.id, {
       name: contract.name,
@@ -386,11 +375,9 @@ export function Contracts() {
     };
 
     if (editingContract) {
-      const forAddress = await updateContract(editingContract.id, payload);
-      updateAddressFromContract(forAddress.find(c => c.name === trimmedName)!, addressMap[editingContract.id]?.isVisible ?? true);
+      await updateContract(editingContract.id, payload);
     } else {
-      const forAddress = await addContract(payload);
-      createAddressFromContract(forAddress.find(c => c.name === trimmedName)!);
+      await addContract(payload);
     }
 
     closeModal();
@@ -762,7 +749,6 @@ export function Contracts() {
                 onClick={() => {
                   if (itemToDelete) {
                     deleteContract(itemToDelete);
-                    storeDeleteAddress(itemToDelete);
                   }
                   setItemToDelete(null);
                 }}

@@ -1,4 +1,5 @@
 import { get, set } from "idb-keyval";
+import { addAddress, deleteAddress, updateAddress } from "./addressStore";
 
 // --- Schema versioning -------------------------------------------------------
 
@@ -127,6 +128,13 @@ export async function addContact(input: {
 
   const updated = [...contacts, newContact];
   await saveContactsRaw(updated);
+  await addAddress({
+    id: `address:${newContact.id}`,
+    name: newContact.name + (newContact.surname ? ` ${newContact.surname}` : ""),
+    isContact: true,
+    isVisible: true,
+    indexOrder: contacts.length, // add to end of list
+  });
   return updated;
 }
 
@@ -147,6 +155,9 @@ export async function updateContact(
   );
 
   await saveContactsRaw(updated);
+  await updateAddress(`address:${id}`, {
+    name: patch.name || contacts.find(c => c.id === id)?.name || "",
+  });
   return updated;
 }
 
@@ -154,6 +165,7 @@ export async function deleteContact(id: string): Promise<Contact[]> {
   const contacts = await loadContactsRaw();
   const updated = contacts.filter(c => c.id !== id);
   await saveContactsRaw(updated);
+  await deleteAddress(`address:${id}`);
   return updated;
 }
 

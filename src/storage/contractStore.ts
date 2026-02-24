@@ -1,4 +1,5 @@
 import { get, set } from "idb-keyval";
+import { addAddress, deleteAddress, updateAddress } from "./addressStore";
 
 // --- Schema versioning -------------------------------------------------------
 
@@ -126,6 +127,13 @@ export async function addContract(input: {
 
   const updated = [...contracts, newContract];
   await saveContractsRaw(updated);
+  await addAddress({
+    id: `address:${newContract.id}`,
+    name: newContract.name,
+    isContact: false,
+    isVisible: true,
+    indexOrder: contracts.length, // add to end of list
+  });
   return updated;
 }
 
@@ -146,13 +154,18 @@ export async function updateContract(
   );
 
   await saveContractsRaw(updated);
+  await updateAddress(`address:${id}`, {
+    name: patch.name || contracts.find(c => c.id === id)?.name || "",
+  });
   return updated;
 }
+
 
 export async function deleteContract(id: string): Promise<Contract[]> {
   const contracts = await loadContractsRaw();
   const updated = contracts.filter(c => c.id !== id);
   await saveContractsRaw(updated);
+  deleteAddress(`address:${id}`);
   return updated;
 }
 

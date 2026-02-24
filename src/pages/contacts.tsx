@@ -2,7 +2,7 @@ import * as React from "react";
 import { useContactsList } from "../hooks/useContactList";
 import { Contact, Wallet } from "@/storage/contactStore";
 import { useAddress } from "../hooks/useAddresses";
-import { Address, deleteAddress } from "@/storage/addressStore";
+import { type Address } from "@/storage/addressStore";
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
@@ -257,17 +257,6 @@ export function Contacts() {
 
   // --- Modal helpers ---------------------------------------------------------
 
-  function createAddressFromContact(contact: Contact) {
-    storeAddAddress({
-      id: contact.id,
-      name: contact.name,
-      isContact: true,
-      isVisible: true,
-      group: contact.tags ?? [],
-      indexOrder: address.length,
-    });
-  }
-
   function updateAddressFromContact(contact: Contact, isVisible: boolean) {
     storeUpdateAddress(contact.id, {
       name: contact.name,
@@ -414,11 +403,9 @@ export function Contacts() {
     };
 
     if (editingContact) {
-      const forAddress = await updateContact(editingContact.id, payload);
-      updateAddressFromContact(forAddress.find(c => c.name === trimmedName)!, addressMap[editingContact.id]?.isVisible ?? true);
+      await updateContact(editingContact.id, payload);
     } else {
-      const forAddress = await addContact(payload);
-      createAddressFromContact(forAddress.find(c => c.name === trimmedName)!);
+      await addContact(payload);
     }
 
     closeModal();
@@ -801,7 +788,6 @@ export function Contacts() {
                 onClick={() => {
                   if (contactToDelete) {
                     deleteContact(contactToDelete);
-                    storeDeleteAddress(contactToDelete);
                   }
                   setContactToDelete(null);
                 }}
