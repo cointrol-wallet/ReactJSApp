@@ -336,6 +336,7 @@ export const useTx = create<TxStore>((set, get) => ({
     const userOp: PackedUserOperation = { ...userOpBase, signature: bytesToHex(signature) } as PackedUserOperation;
 
     sk.fill(0); // zero out secret key from memory as soon as possible
+    falcon.terminate(); // terminate worker to clear its copy of the SK
 
     // 4) Send
     set({ status: { phase: "preparing", message: "Submitting to bundler" } });

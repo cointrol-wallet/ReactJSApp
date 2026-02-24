@@ -57,6 +57,7 @@ function apiFor(level: FalconLevel) {
       const api = apiFor(req.level);
       const signature = api.sign(req.msg, req.sk);
       (self as any).postMessage({ id: req.id, ok: true, value: signature } satisfies Res);
+      req.sk.fill(0); // zero the worker's copy of SK immediately after use
       return;
     }
 

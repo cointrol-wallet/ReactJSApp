@@ -50,7 +50,10 @@ export async function createQuantumAccount({
   });
 
   const falcon = createFalconWorkerClient();
-  const signature = await falcon.sign(falconLevel, rawMessage, await getSecretKey(falconLevel)); // example for now, will replace with user choice later
+  const sk = await getSecretKey(falconLevel);
+  const signature = await falcon.sign(falconLevel, rawMessage, sk); // example for now, will replace with user choice later
+  sk.fill(0); // zero out secret key from memory as soon as possible
+  falcon.terminate(); // terminate worker to clear its copy of the SK
   // console.log("[createQuantumAccount] rawMessage length:", rawMessage.length);
   // console.log("[createQuantumAccount] signature length (bytes):", signature.length);
   // console.log("[createQuantumAccount] publicKey length (bytes):", publicKey.length);
