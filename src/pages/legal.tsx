@@ -15,7 +15,7 @@ export function Terms() {
           </Button>
         </div>
         </CardHeader>
-      <CardContent className="prose w-full max-w-none px-4 sm:px-6 lg:px-8">
+      <CardContent className="overflow-y-auto prose px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
         <p>[Version 1.0 • Last updated: 2026-02-24]</p>
         <ol className="list-decimal pl-4 space-y-8">
@@ -298,7 +298,7 @@ export function Privacy() {
         </div>
       </CardHeader>
 
-      <CardContent className="prose w-full max-w-none px-4 sm:px-6 lg:px-8">
+      <CardContent className="overflow-y-auto prose px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
         <p>[Version 1.1 • Last updated: 2026-02-19]</p>
 
