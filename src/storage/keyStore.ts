@@ -1,4 +1,4 @@
-import { get, set } from "idb-keyval";
+import { get, set, del } from "idb-keyval";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { predictQuantumAccountAddress } from "@/lib/predictQuantumAccountAddress";
 import { stringToHex, bytesToHex } from "viem";
@@ -13,11 +13,45 @@ export type FalconKeypair = {
 
 // --- Key Storage ---
 
-const WRAPPING_KEY_ID = "cointrol:wrappingKey:v1";
+// Legacy key — stored raw AES bytes (insecure). Kept as a string literal for
+// migration detection only; no longer read or written for crypto purposes.
+const LEGACY_WRAPPING_KEY_ID = "cointrol:wrappingKey:v1";
+
+// v2: PBKDF2-derived wrapping key (never stored). Only the salt is persisted.
+const WRAPPING_SALT_ID = "cointrol:wrappingSalt:v2";
+
 const FALCON_512_SK_KEY_ID = "cointrol:falcon:512:sk:v1";
 const FALCON_512_PK_KEY_ID = "cointrol:falcon:512:pk:v1";
 const FALCON_1024_SK_KEY_ID = "cointrol:falcon:1024:sk:v1";
 const FALCON_1024_PK_KEY_ID = "cointrol:falcon:1024:pk:v1";
+
+// Firebase UID set by initKeyStore — required before any crypto operation.
+let _uid: string | null = null;
+
+/**
+ * Must be called once when the user logs in (from AuthContext.onAuthStateChanged).
+ * Wipes legacy stored wrapping key and re-derived all Falcon keys on first call.
+ */
+export async function initKeyStore(uid: string): Promise<void> {
+  // One-time migration: if the insecure stored wrapping key exists, wipe everything
+  // and let the normal keypair-generation flow start fresh.
+  const legacy = await get(LEGACY_WRAPPING_KEY_ID);
+  if (legacy !== undefined) {
+    await Promise.all([
+      del(LEGACY_WRAPPING_KEY_ID),
+      del(keyId(512, "pk")),
+      del(keyId(512, "sk")),
+      del(keyId(1024, "pk")),
+      del(keyId(1024, "sk")),
+    ]);
+  }
+  _uid = uid;
+}
+
+/** Call on sign-out to prevent key access after the session ends. */
+export function clearKeyStore(): void {
+  _uid = null;
+}
 
 type CipherRecord = {
   alg: "falcon";
@@ -31,34 +65,31 @@ function keyId(level: FalconLevel, kind: "pk" | "sk") {
   return `cointrol:falcon:${level}:${kind}:v1`;
 }
 
-let wrappingKeyPromise: Promise<CryptoKey> | null = null;
-
 async function loadOrCreateWrappingKey(): Promise<CryptoKey> {
-  if (!wrappingKeyPromise) {
-    wrappingKeyPromise = (async () => {
-      const raw = await get<ArrayBuffer>(WRAPPING_KEY_ID);
-      if (raw) {
-        return crypto.subtle.importKey("raw", raw, "AES-GCM", true, [
-          "encrypt",
-          "decrypt",
-        ]);
-      }
+  if (!_uid) throw new Error("keyStore not initialised — call initKeyStore(uid) first");
 
-      const fresh = await crypto.subtle.generateKey(
-        { name: "AES-GCM", length: 256 },
-        true, // extractable: true → export to raw bytes for IndexedDB storage
-        ["encrypt", "decrypt"]
-      );
-
-      const exported = await crypto.subtle.exportKey("raw", fresh);
-      await set(WRAPPING_KEY_ID, exported);
-      return fresh;
-    })().catch((e) => {
-      wrappingKeyPromise = null; // allow retry on failure
-      throw e;
-    });
+  // Load or create a persistent random salt (not secret; protects against cross-user reuse)
+  let salt = await get<ArrayBuffer>(WRAPPING_SALT_ID);
+  if (!salt) {
+    salt = crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer;
+    await set(WRAPPING_SALT_ID, salt);
   }
-  return wrappingKeyPromise;
+
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(_uid),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 300_000 },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false, // non-extractable — key bytes can never leave the browser crypto engine
+    ["encrypt", "decrypt"]
+  );
 }
 
 function toArrayBuffer(u8: Uint8Array): ArrayBuffer {

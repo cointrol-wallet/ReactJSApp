@@ -4,6 +4,7 @@ import { type User, onAuthStateChanged,
   setPersistence, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { getUUID, setUUID, setTermsAccepted } from "../storage/authStore";
+import { initKeyStore, clearKeyStore } from "../storage/keyStore";
 import { bytesToHex } from "viem";
 
 async function ensureDeviceUuid(): Promise<string> {
@@ -46,6 +47,8 @@ async function deriveUserSalt(uid: string): Promise<Uint8Array> {
 }
 
 
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
 type AuthContextValue = {
   firebaseUser: User | null;
   uuid: string | null;
@@ -69,9 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("[Auth] state changed:", user?.uid ?? null);
       setFirebaseUser(user);
       if (user) {
+        await initKeyStore(user.uid);
         const id = await ensureDeviceUuid();
         setUuidState(id);
       } else {
+        clearKeyStore();
         setUuidState(null);
       }
       setLoading(false);
@@ -82,7 +87,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!firebaseUser) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        console.log("[Auth] idle timeout — signing out");
+        firebaseSignOut(auth).catch(console.error);
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"] as const;
+    EVENTS.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+
+    return () => {
+      clearTimeout(timer);
+      EVENTS.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [firebaseUser]);
+
   const signOut = async () => {
+    clearKeyStore();
     await firebaseSignOut(auth);
     setFirebaseUser(null);
     setUuidState(null);
