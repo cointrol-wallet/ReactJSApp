@@ -427,8 +427,6 @@ export function Privacy() {
                 Legitimate Interests - Security, fraud prevention, service improvement.  </li>
             </ul>
           </li>
-          <li>
-            <h2>Data Retention</h2>
 
           <li>
             <h2>Data Security</h2>
