@@ -1,10 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { useNavigate, Link } from "react-router-dom";
+
 export function Terms() {
+  const navigate = useNavigate();
   return (
-    <Card>
-      <CardHeader><CardTitle>Terms & Conditions</CardTitle></CardHeader>
-      <CardContent className="prose max-w-none">
+    <Card className="mx-auto w-full max-w-4xl">
+      <CardHeader>
+        <CardTitle>Terms & Conditions</CardTitle>
+      
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            Back
+          </Button>
+        </div>
+        </CardHeader>
+      <CardContent className="prose w-full max-w-none px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl">
         <p>[Version 1.0 • Last updated: 2026-02-24]</p>
         <ol className="list-decimal pl-4 space-y-8">
           <li>
@@ -266,19 +278,28 @@ export function Terms() {
             </p>
           </li>
         </ol>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
 export function Privacy() {
+  const navigate = useNavigate();
+  
   return (
-    <Card>
+    <Card className="mx-auto w-full max-w-4xl">
       <CardHeader>
         <CardTitle>Privacy Policy</CardTitle>
+                <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            Back
+          </Button>
+        </div>
       </CardHeader>
 
-      <CardContent className="prose max-w-none">
+      <CardContent className="prose w-full max-w-none px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl">
         <p>[Version 1.1 • Last updated: 2026-02-19]</p>
 
         <ol className="list-decimal pl-4 space-y-8">
@@ -541,6 +562,7 @@ export function Privacy() {
             </p>
           </li>
         </ol>
+        </div>
       </CardContent>
     </Card>
   );
