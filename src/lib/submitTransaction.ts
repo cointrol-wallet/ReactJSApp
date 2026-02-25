@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { 
   Address, 
-  encodeAbiParameters, 
-  parseAbiParameters, 
   keccak256, 
   bytesToHex, 
   hexToBytes, 
@@ -181,40 +179,11 @@ function hexToBigInt(hex: `0x${string}`): bigint {
 const DOMAIN_NAME = "ERC4337";
 const DOMAIN_VERSION = "1";
 
-const PACKED_USEROP_TYPE = "PackedUserOperation(address sender,uint256 nonce,bytes initCode,bytes callData,bytes32 accountGasLimits,uint256 preVerificationGas,bytes32 gasFees,bytes paymasterAndData)";
-const PACKED_USEROP_TYPEHASH = keccak256(
-  toHex(PACKED_USEROP_TYPE)
-);
-
 export const calculateUserOpHash = (
   userop: Omit<PackedUserOperation, "signature">,
   entryPoint: Address,
   chainId: number,
 ) => {
-  // structHash = keccak256(abi.encode(TYPEHASH, sender, nonce, keccak(bytes), ...))
-  const structEncoded = encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32, address, uint256, bytes32, bytes32, bytes32, uint256, bytes32, bytes32",
-    ),
-    [
-      PACKED_USEROP_TYPEHASH,
-      userop.sender,
-      // nonce/preVerificationGas must be uint256
-      typeof userop.nonce === "bigint" ? userop.nonce : hexToBigInt(userop.nonce as Hex),
-      keccak256(userop.initCode),
-      keccak256(userop.callData),
-      userop.accountGasLimits, // bytes32
-      typeof userop.preVerificationGas === "bigint"
-        ? userop.preVerificationGas
-        : hexToBigInt(userop.preVerificationGas as Hex),
-      userop.gasFees, // bytes32
-      keccak256(userop.paymasterAndData),
-    ],
-  );
-
-  const structHash = keccak256(structEncoded);
-
-  // userOpHash = EIP712.toTypedDataHash(domainSeparator, structHash)
   // Equivalent: hashTypedData with primaryType that matches PACKED_USEROP_TYPEHASH
   return hashTypedData({
     domain: {
@@ -291,7 +260,7 @@ export const useTx = create<TxStore>((set, get) => ({
   startFlow: async ({ folio, encoded, domain }) => {
     set({ open: true, status: { phase: "preparing", message: "Building UserOp" } });
     const publicClient = createPublicClient({
-          transport: http(domain.rpcUrl), // if rpcUrl undefined and chain known, viem will still need transport; supply your default
+          transport: http(domain.rpcUrl), 
         });
     const nonce = await publicClient.readContract({
       address: domain.entryPoint as `0x${string}`,
@@ -305,8 +274,8 @@ export const useTx = create<TxStore>((set, get) => ({
       sender: folio.address,
       nonce: toHex(nonce), 
       initCode: emptyHex(),
-      callData: encoded,  // construction and validation done by modal using a separate tool from here
-      accountGasLimits: defaultAccountGasLimits(), // will come from bundler api?  or can be internally stored
+      callData: encoded,  
+      accountGasLimits: defaultAccountGasLimits(), // only changes if ecdsa supported
       preVerificationGas: hexlify(200_000), // will come from bundler api?
       gasFees: packGasFees(), // will come from rpc url
       paymasterAndData: paymaster

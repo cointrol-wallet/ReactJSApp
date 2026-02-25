@@ -32,6 +32,8 @@ const BUILTIN_DOMAINS: Domain[] = [{
   updatedAt: 0
 }];
 
+// schema v2 will include:
+// factory, falcon since both are used in address prediction
 
 // --- In-memory subscribers for live updates ---------------------------------
 
