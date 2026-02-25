@@ -40,7 +40,6 @@ export function Coins() {
   const CHAIN_NAMES: Record<number, string> = {
     1: "Ethereum",
     11155111: "Sepolia",
-    31337: "Local",
   };
 
   const EVM_STANDARDS = ["NATIVE", "ERC20", "ERC721", "ERC1155", "ERC3643", "ERC7943"];
@@ -401,7 +400,7 @@ export function Coins() {
     e.preventDefault();
 
     const trimmedName = formName.trim();
-    if (!trimmedName) return; // you can show a validation message if you like
+    if (!trimmedName) return; 
 
     const payload: any = {
       name: trimmedName,

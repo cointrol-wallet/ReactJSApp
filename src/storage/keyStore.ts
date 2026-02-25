@@ -20,11 +20,6 @@ const LEGACY_WRAPPING_KEY_ID = "cointrol:wrappingKey:v1";
 // v2: PBKDF2-derived wrapping key (never stored). Only the salt is persisted.
 const WRAPPING_SALT_ID = "cointrol:wrappingSalt:v2";
 
-const FALCON_512_SK_KEY_ID = "cointrol:falcon:512:sk:v1";
-const FALCON_512_PK_KEY_ID = "cointrol:falcon:512:pk:v1";
-const FALCON_1024_SK_KEY_ID = "cointrol:falcon:1024:sk:v1";
-const FALCON_1024_PK_KEY_ID = "cointrol:falcon:1024:pk:v1";
-
 // Firebase UID set by initKeyStore — required before any crypto operation.
 let _uid: string | null = null;
 
@@ -172,6 +167,7 @@ export async function generateAndStoreFalconKeypair(level: FalconLevel): Promise
     set(keyId(level, "pk"), pkRec),
     set(keyId(level, "sk"), skRec),
   ]);
+  falcon.terminate();
 
   return { pk, sk };
 }

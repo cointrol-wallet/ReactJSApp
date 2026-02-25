@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { type User, onAuthStateChanged,
-  browserLocalPersistence,
-  setPersistence, signOut as firebaseSignOut } from "firebase/auth";
+import {
+  type User, onAuthStateChanged,
+  browserSessionPersistence,
+  setPersistence, signOut as firebaseSignOut
+} from "firebase/auth";
 import { auth } from "../firebase";
 import { getUUID, setUUID, setTermsAccepted } from "../storage/authStore";
 import { initKeyStore, clearKeyStore } from "../storage/keyStore";
@@ -66,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    setPersistence(auth, browserLocalPersistence).catch(console.error);
+    setPersistence(auth, browserSessionPersistence).catch(console.error);
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (cancelled) return;
       console.log("[Auth] state changed:", user?.uid ?? null);
@@ -87,26 +89,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const LAST_ACTIVE_KEY = "lastActiveAt";
+
   useEffect(() => {
     if (!firebaseUser) return;
 
-    let timer: ReturnType<typeof setTimeout>;
+    let stopped = false;
 
-    const reset = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        console.log("[Auth] idle timeout — signing out");
-        firebaseSignOut(auth).catch(console.error);
-      }, IDLE_TIMEOUT_MS);
+    const touch = () => {
+      try {
+        localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+      } catch { }
     };
 
-    const EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"] as const;
-    EVENTS.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    reset();
+    const shouldSignOut = () => {
+      const raw = localStorage.getItem(LAST_ACTIVE_KEY);
+      const last = raw ? Number(raw) : Date.now();
+      return Date.now() - last >= IDLE_TIMEOUT_MS;
+    };
+
+    const signOutNow = async () => {
+      if (stopped) return;
+      stopped = true;
+      console.log("[Auth] idle timeout — signing out");
+      clearKeyStore();
+      try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { }
+      await firebaseSignOut(auth);
+    };
+
+    // Events that count as activity
+    const EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"] as const;
+    const onActivity = () => touch();
+
+    // Also update on focus/visibility changes (common “I came back” signal)
+    const onFocus = () => touch();
+    const onVis = () => {
+      if (document.visibilityState === "visible") touch();
+    };
+
+    // Start
+    touch();
+    EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    // Periodic check (don’t rely on one giant timeout)
+    const interval = window.setInterval(() => {
+      if (shouldSignOut()) {
+        void signOutNow();
+      }
+    }, 60_000); // check every 60s
+
+    // If we *already* exceeded idle (e.g., reload), sign out immediately
+    if (shouldSignOut()) {
+      void signOutNow();
+    }
 
     return () => {
-      clearTimeout(timer);
-      EVENTS.forEach((e) => window.removeEventListener(e, reset));
+      stopped = true;
+      window.clearInterval(interval);
+      EVENTS.forEach((e) => window.removeEventListener(e, onActivity));
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [firebaseUser]);
 

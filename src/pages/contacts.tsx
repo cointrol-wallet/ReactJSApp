@@ -35,7 +35,6 @@ export function Contacts() {
   const CHAIN_NAMES: Record<number, string> = {
     1: "Ethereum",
     11155111: "Sepolia",
-    31337: "Local",
   };
 
   const {
@@ -393,7 +392,7 @@ export function Contacts() {
     }
 
     const trimmedName = formName.trim();
-    if (!trimmedName) return; // you can show a validation message if you like
+    if (!trimmedName) return; 
 
     const payload: any = {
       name: trimmedName,

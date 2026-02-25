@@ -14,7 +14,17 @@ import { useAddressList } from "@/hooks/useAddressList";
 import { useTx } from "@/lib/submitTransaction";
 import { Abi, encodeFunctionData, createPublicClient, http, type Hex } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
-import { AbiFunctionFragment, getFunctions, getInputName, extractAbi, erc20Abi, erc721Abi, erc1155Abi, nativeAbi, quantumAccountAbi } from "@/lib/abiTypes";
+import { 
+  AbiFunctionFragment, 
+  getFunctions, 
+  getInputName, 
+  extractAbi, 
+  erc20Abi, 
+  erc721Abi, 
+  erc1155Abi, 
+  nativeAbi, 
+  quantumAccountAbi 
+} from "@/lib/abiTypes";
 import { TxStatus } from "@/lib/submitTransaction";
 import { createPortal } from "react-dom";
 
@@ -65,7 +75,6 @@ export function Transactions() {
   const CHAIN_NAMES: Record<number, string> = {
     1: "Ethereum",
     11155111: "Sepolia",
-    31337: "Local",
   };
 
   const {
@@ -448,7 +457,6 @@ export function Transactions() {
   const { startFlow } = useTx();
 
   async function handleBuildCalldata() {
-    //e.preventDefault();
     setError(null);
     setReadResult(null);
 
@@ -786,7 +794,7 @@ export function Transactions() {
                     className="underline" // need to replace url with domain value (transactionUrl)
                     onClick={() => {
                       if (item.transactionHash) {
-                        window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");
+                        window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");// need to swap to domain.transactionUrl
                       }
                     }}
                   >

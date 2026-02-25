@@ -23,7 +23,8 @@ export type Wallet = {
   address: string;
 }
 
-
+// v2 will include
+// name or label in Wallet
 // --- In-memory subscribers for live updates ---------------------------------
 
 type ContactsListener = (contacts: Contact[]) => void;
@@ -133,7 +134,7 @@ export async function addContact(input: {
     name: newContact.name + (newContact.surname ? ` ${newContact.surname}` : ""),
     isContact: true,
     isVisible: true,
-    indexOrder: contacts.length, // add to end of list
+    indexOrder: contacts.length, 
   });
   return updated;
 }

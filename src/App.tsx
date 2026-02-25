@@ -21,17 +21,6 @@ import { importSharePayload } from "./lib/shareImporters";
 import { useFolios } from "./hooks/useFolios";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-/**
- * QuantumAccount React Skeleton v2 — wired to Bundler/Paymaster APIs
- *
- * ENV (vite):
- *  - VITE_BUNDLER_URL=https://localhost:3001
- *  - VITE_PAYMASTER_URL=https://localhost:3002
- *  - VITE_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/XXXXX (optional if bundler needs it)
- *
- * NOTE: Endpoints are placeholders; adjust paths to match your servers.
- */
-
 function QrScanModal({
   open,
   onClose,
@@ -391,14 +380,6 @@ function BottomNav() {
         <NavLink to="/legal/privacy">Privacy</NavLink>
       </div>
     </div>
-  );
-}
-
-function NetworkPill({ address }: { address?: string | null }) {
-  return (
-    <Badge variant="secondary" className="rounded-full">
-      {address ? address : "Loading…"}
-    </Badge>
   );
 }
 

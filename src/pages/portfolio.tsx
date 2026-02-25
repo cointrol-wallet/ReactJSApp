@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useFolioList } from "../hooks/useFolioList";
-import { PortfolioStore, Folio, getAllFolios, Wallet } from "@/storage/folioStore";
+import { PortfolioStore, Folio, Wallet } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
@@ -45,7 +45,6 @@ export function Folios() {
   const CHAIN_NAMES: Record<number, string> = {
     1: "Ethereum",
     11155111: "Sepolia",
-    31337: "Local",
   };
 
   const {
@@ -454,7 +453,7 @@ export function Folios() {
     const chainFolios = folios.filter((f) => f.chainId === selectDomain.chainId);
     if (chainFolios.length === 0) {
       setIsModalOpen(true);
-    }  // this will need to be moved elsewhere once more than one domain is supported and is just to limit each user to one account for now
+    }  // this if statement will need to be replaced once more than one domain is supported and is just to limit each user to one account for now
   }
 
   function openEditModal(folio: Folio) {
@@ -481,7 +480,7 @@ export function Folios() {
     e.preventDefault();
 
     const trimmedName = formName.trim();
-    if (!trimmedName) return; // you can show a validation message if you like
+    if (!trimmedName) return; 
 
     const payload: any = {
       name: trimmedName,
@@ -498,7 +497,7 @@ export function Folios() {
       } else {
         const salt = await getUUID();
         if (!salt) { return setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." }); }
-        const sender = await getAddress(salt, 512);  //TODO: replace with uuid from auth
+        const sender = await getAddress(salt, 512);  
         if (!sender) {
           setSubmitState({ status: "error", message: "No sender address available for new account." });
           return;
