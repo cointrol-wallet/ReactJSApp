@@ -12,7 +12,7 @@ type SocialButtonsProps = {
 };
 
 const base =
-  "w-full h-12 rounded-xl px-4 inline-flex items-center justify-center gap-3 text-[15px] font-medium " +
+  "w-80 h-12 rounded-xl px-4 inline-flex items-center justify-center gap-3 text-[15px] font-medium " +
   "transition active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -20,7 +20,7 @@ const iconCls = "h-5 w-5";
 
 export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 flex flex-col items-center">
       {/* Google: white background, subtle border */}
       <button
         type="button"
