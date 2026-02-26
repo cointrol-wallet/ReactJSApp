@@ -36,8 +36,8 @@ function patchLiboqsFalconPaths(base: string) {
   };
 }
 
-export default defineConfig(({ mode }) => {
-  const base = mode === "production" ? "/ReactJSApp/" : "/";
+export default defineConfig(() => {
+  const base = "/";
 
   return {
     base,
