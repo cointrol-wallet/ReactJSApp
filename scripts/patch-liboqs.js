@@ -2,15 +2,18 @@
 //
 // The liboqs source resolves WASM wrapper modules with relative paths like
 // "../../../../dist/falcon-512.min.js". When bundled into a Vite worker at
-// /ReactJSApp/assets/falcon.worker-xxx.js, those four "../" hops traverse past
+// /assets/falcon.worker-xxx.js, those four "../" hops traverse past
 // the site root and land on /dist/falcon-512.min.js — a 404 on GitHub Pages.
 //
-// viteStaticCopy puts the liboqs dist files at /ReactJSApp/liboqs/*.
+// viteStaticCopy puts the liboqs dist files at /liboqs/*.
 // This script rewrites the paths in the built worker file to match.
+// Note: the Vite plugin in vite.config.ts (patchLiboqsFalconPaths) handles
+// backtick-quoted template literals during the build transform phase; this
+// script handles any remaining single/double-quoted string variants.
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 
-const BASE = "/ReactJSApp/";
+const BASE = "/";
 const ASSETS_DIR = "dist/assets";
 
 const workerFiles = readdirSync(ASSETS_DIR).filter((f) =>
