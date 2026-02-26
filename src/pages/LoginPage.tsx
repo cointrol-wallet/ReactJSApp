@@ -99,8 +99,6 @@ export function LoginPage() {
                       <Link
                         to="/legal/terms"
                         className="underline underline-offset-2 text-foreground"
-                        target="_blank"
-                        rel="noopener noreferrer"
                       >
                         Terms &amp; Conditions
                       </Link>
