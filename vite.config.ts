@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import fs from "node:fs";
+import tailwindcss from "@tailwindcss/vite";
 
 // Plugin that rewrites liboqs falcon WASM dynamic import paths.
 // The liboqs source uses relative paths like `../../../../dist/falcon-512.min.js`
@@ -44,6 +45,7 @@ export default defineConfig(() => {
 
     plugins: [
       react(),
+      tailwindcss(),
 
       viteStaticCopy({
         targets: [

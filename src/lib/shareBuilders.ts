@@ -3,6 +3,7 @@ import type { Contract } from "@/storage/contractStore";
 import type { Folio } from "@/storage/folioStore";
 import type { Coin } from "@/storage/coinStore";
 import type { SharePayload } from "./sharePayload";
+import { encodeSharePayload } from "./sharePayload";
 
 function uniqWallets(wallets: { chainId: number; address: string }[]) {
   const m = new Map<string, { chainId: number; address: string }>();
@@ -29,44 +30,61 @@ export function buildContactShare(contact: Contact): SharePayload {
   };
 }
 
+// Safe character limit for QR codes (version 40, ECC level L ≈ 2953 bytes binary)
+const QR_CHAR_LIMIT = 2800;
+
 /**
- * Contract: include ABI/metadata but omit if above max bytes
- *
- * maxMetadataBytes is for the JSON stringified metadata field.
- * You can tune this depending on QR reliability.
+ * Contract: include ABI/metadata but omit if the encoded payload would exceed
+ * QR code capacity. Uses actual encoded length for an accurate check.
  */
-export function buildContractShare(
-  contract: Contract,
-  opts: { maxMetadataBytes?: number } = {}
-): SharePayload {
-  const maxMetadataBytes = opts.maxMetadataBytes ?? 20_000;
+export function buildContractShare(contract: Contract): SharePayload {
+  const baseData = {
+    name: contract.name,
+    address: contract.address,
+    chainId: contract.chainId,
+  };
 
-  let metadata = contract.metadata;
-  let abiOmitted = false;
+  const makeMeta = () => ({ createdAt: Date.now(), source: "Cointrol" });
 
-  if (metadata) {
-    const metaJson = JSON.stringify(metadata);
-    // byte-ish estimate (UTF-16 is not 1:1, but close enough for a guard)
-    if (metaJson.length > maxMetadataBytes) {
-      // If ABI is the main bloat, drop it but keep other metadata.
-      // Convention: ABI stored under metadata.abi
-      const { abi, ...rest } = metadata as any;
-      metadata = rest;
-      abiOmitted = true;
+  // Try with full metadata (including ABI)
+  if (contract.metadata) {
+    const withMeta: SharePayload = {
+      v: 1,
+      t: "contract",
+      data: { ...baseData, metadata: contract.metadata },
+      meta: makeMeta(),
+    };
+    if (encodeSharePayload(withMeta).length <= QR_CHAR_LIMIT) {
+      return withMeta;
+    }
+
+    // ABI is too large — strip it (handle both "ABI" and "abi" key conventions)
+    const { ABI, abi, ...restMeta } = contract.metadata as any;
+    const hasAbi = ABI !== undefined || abi !== undefined;
+    const hasOtherMeta = Object.keys(restMeta).length > 0;
+
+    if (hasOtherMeta) {
+      const withoutAbi: SharePayload = {
+        v: 1,
+        t: "contract",
+        data: { ...baseData, metadata: restMeta, abiOmitted: hasAbi || undefined },
+        meta: makeMeta(),
+      };
+      if (encodeSharePayload(withoutAbi).length <= QR_CHAR_LIMIT) {
+        return withoutAbi;
+      }
     }
   }
 
+  // Fallback: no metadata at all
+  const hasAbi = !!(
+    (contract.metadata as any)?.ABI || (contract.metadata as any)?.abi
+  );
   return {
     v: 1,
     t: "contract",
-    data: {
-      name: contract.name,
-      address: contract.address,
-      chainId: contract.chainId,
-      metadata: metadata ?? undefined,
-      abiOmitted: abiOmitted || undefined,
-    },
-    meta: { createdAt: Date.now(), source: "Cointrol" },
+    data: { ...baseData, abiOmitted: hasAbi || undefined },
+    meta: makeMeta(),
   };
 }
 

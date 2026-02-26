@@ -102,20 +102,38 @@ function NavDropdown() {
   const { signOut } = useAuth();
   const [open, setOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = React.useState<{ top: number; right: number }>({ top: 0, right: 0 });
+
+  const MENU_W = 208;
+  const GAP = 8;
+
+  const [pos, setPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const computePos = React.useCallback(() => {
+    if (!btnRef.current) return;
+
+    const r = btnRef.current.getBoundingClientRect();
+
+    // Use visualViewport if present (mobile browsers / emulation)
+    const vv = window.visualViewport;
+    const vw = vv?.width ?? window.innerWidth;
+    const offsetLeft = vv?.offsetLeft ?? 0;
+    const offsetTop = vv?.offsetTop ?? 0;
+
+    const top = r.bottom + GAP + offsetTop;
+
+    // Right-align to the button, but clamp within viewport
+    const idealLeft = r.right - MENU_W + offsetLeft;
+    const minLeft = GAP + offsetLeft;
+    const maxLeft = vw - MENU_W - GAP + offsetLeft;
+
+    const left = Math.max(minLeft, Math.min(idealLeft, maxLeft));
+
+    setPos({ top, left });
+  }, []);
 
   function toggle() {
     const next = !open;
-
-    if (next && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      // position menu under the button, right-aligned
-      const top = r.bottom + 8;
-      const right = Math.max(8, window.innerWidth - r.right);
-
-      setPos({ top, right });
-    }
-
+    if (next) computePos();
     setOpen(next);
   }
 
@@ -129,35 +147,30 @@ function NavDropdown() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  // keep position updated on resize/scroll while open
+  // keep position updated on resize/scroll/visualViewport changes while open
   React.useEffect(() => {
     if (!open) return;
 
-    const update = () => {
-      if (!btnRef.current) return;
-      const r = btnRef.current.getBoundingClientRect();
-      const menuWidth = 208;
-      const right = Math.max(8, window.innerWidth - r.right);
-      const top = r.bottom + 8;
-      setPos({ top, right });
-    };
+    const update = () => computePos();
 
     window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true); // true catches scroll in nested containers
+    window.addEventListener("scroll", update, true);
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
     };
-  }, [open]);
+  }, [open, computePos]);
 
   return (
     <>
-      <Button
-        ref={btnRef}
-        size="sm"
-        variant="outline"
-        onClick={toggle}
-      >
+      <Button ref={btnRef} size="sm" variant="outline" onClick={toggle}>
         Menu
       </Button>
 
@@ -165,7 +178,6 @@ function NavDropdown() {
         typeof document !== "undefined" &&
         createPortal(
           <>
-            {/* Backdrop (dims + closes on click) */}
             <div
               onClick={() => setOpen(false)}
               style={{
@@ -176,18 +188,16 @@ function NavDropdown() {
               }}
             />
 
-            {/* Menu (above backdrop) */}
             <div
               className="rounded-xl border border-border bg-card shadow-lg"
               style={{
                 position: "fixed",
                 zIndex: 9999,
                 top: pos.top,
-                right: pos.right,
-                left: "auto",
-                width: 208,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+                left: pos.left,
+                width: MENU_W,
                 padding: 4,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -202,7 +212,10 @@ function NavDropdown() {
               <div className="my-1 border-t border-border" />
               <button
                 className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-neutral-100"
-                onClick={() => { setOpen(false); signOut(); }}
+                onClick={() => {
+                  setOpen(false);
+                  signOut();
+                }}
               >
                 Log out
               </button>
@@ -273,7 +286,7 @@ function AppShell({ children, address, domain, onOpenScan }: {
   pb-[calc(56px+env(safe-area-inset-bottom))]
   lg:pb-6
   lg:grid-cols-[220px_1fr]">
-        <section className="min-h-[60dvh]">{children}</section>
+        <section className="min-h-[60dvh] lg:col-span-2">{children}</section>
       </main>
       <BottomNav />
     </div>
@@ -342,7 +355,7 @@ function AppContainer() {
           <div className="p-6">Initialising QuantumAccount wallet…</div>
         ) : (
           <Routes>
-            <Route index element={<Folios />} /> 
+            <Route index element={<Folios />} />
             <Route path="dashboard" element={<Folios />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="contacts" element={<Contacts />} />
@@ -413,9 +426,9 @@ export default function App() {
         <FalconProvider>
           <Routes>
             {/* Public routes */}
-            <Route path="login" element={<LoginPage />} />             
-            <Route path="legal/terms" element={<Terms />} />             
-            <Route path="legal/privacy" element={<Privacy />} />         
+            <Route path="login" element={<LoginPage />} />
+            <Route path="legal/terms" element={<Terms />} />
+            <Route path="legal/privacy" element={<Privacy />} />
 
             {/* All other routes require authentication */}
             <Route path="/*" element={<ProtectedApp />} />

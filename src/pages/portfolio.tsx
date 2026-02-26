@@ -650,7 +650,7 @@ export function Folios() {
           No accounts created yet. Click &quot;Create account&quot; to get started.
         </div>
       ) : (
-        <ul className="space-y-2 overflow-visible">
+        <ul className="space-y-2">
           {sortedPortfolio.map(item => {
             // Look up associated folio and coin
             const folio = folios.find(f => f.id === item.folioId);
@@ -672,64 +672,58 @@ export function Folios() {
                 : "0";
 
             return (
-              <li
-                key={`${item.folioId}-${item.coinId}-${item.walletId}`}
-                className="
-    grid gap-x-6 gap-y-2 rounded-lg border px-4 py-3 text-sm
-    grid-cols-1
-    sm:grid-cols-[80px_80px_1fr_110px] sm:items-start sm:px-8
-  "
-              >
-                <div className="min-w-0">
+              <li key={`${item.folioId}-${item.coinId}-${item.walletId}`} className="w-full">
+                <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
+                  <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[160px_90px_minmax(0,1fr)_110px] sm:items-start">
+                    {/* Col 1: Name */}
+                    <div className="min-w-0 font-medium">{folioName}</div>
 
-                  <span className="font-medium">{folioName}</span>
-                </div>
-                <div className="min-w-0">
+                    {/* Col 2: Coin symbol */}
+                    <div className="min-w-0 text-xs text-muted-foreground sm:pt-1">
+                      {coinSymbol}
+                    </div>
 
-                  <div className="text-xs text-muted">{coinSymbol}</div>
+                    {/* Col 3: Chain + balance */}
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground">{chainName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Balance: {balanceStr} {coinSymbol}
+                      </div>
+                    </div>
 
+                    {/* Col 4: Actions */}
+                    <div className="justify-self-start sm:justify-self-end">
+                      <details className="relative inline-block">
+                        <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-2 py-1 text-xs">
+                          Actions
+                        </summary>
 
-                  <div className="text-xs text-muted">
-                    Balance: {balanceStr} {coinSymbol}
+                        <div className="absolute left-0 sm:right-0 sm:left-auto mt-1 w-40 rounded-md border border-border bg-background shadow-lg z-50">
+                          <button
+                            className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                            onClick={(e) => {
+                              (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                              folio && openEditModal(folio);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <div className="my-1 border-t border-border" />
+
+                          <button
+                            className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                            onClick={(e) => {
+                              (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                              setFolioToDelete(item.folioId);
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </details>
+                    </div>
                   </div>
                 </div>
-                <div className="min-w-0">
-
-                  <div className="text-xs text-muted">{chainName}</div>
-                </div>
-
-                {/* Actions column */}
-                <div className="justify-self-start sm:justify-self-end overflow-visible">
-                  <details className="relative inline-block overflow-visible">
-                    <summary className="cursor-pointer list-none rounded-md border bg-background px-2 py-1 text-xs">
-                      Actions
-                    </summary>
-
-                    <div className="absolute left-0 mt-1 w-40 rounded-md border border-neutral-200 bg-background shadow-lg z-50">
-                      <button
-                        className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
-                        onClick={(e) => {
-                          (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                          folio && openEditModal(folio);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <div className="my-1 border-t" />
-
-                      <button
-                        className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
-                        onClick={(e) => {
-                          (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                          setFolioToDelete(item.folioId);
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </details>
-                </div>
-
               </li>
             );
           })}

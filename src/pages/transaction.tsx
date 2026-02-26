@@ -736,7 +736,7 @@ export function Transactions() {
           No transactions
         </div>
       ) : (
-        <ul className="space-y-2 overflow-visible">
+        <ul className="space-y-2">
           {txns.map(item => {
             // Look up associated folio and coin
             const folio = folios.find(f => f.id === item.folioId);
@@ -755,51 +755,49 @@ export function Transactions() {
             const addressName = addressMap?.name ?? "";
 
             return (
-              <li
-                key={item.id}
-                className="
-    grid gap-x-6 gap-y-2 rounded-lg border px-4 py-3 text-sm
-    grid-cols-1
-    sm:grid-cols-[80px_80px_1fr_110px] sm:items-start sm:px-8
-  "
-              >
+              <li key={item.id} className="w-full">
+                <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
+                  <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[160px_90px_minmax(0,1fr)_110px] sm:items-start">
+                    {/* Col 1: Sender */}
+                    <div className="min-w-0 font-medium">Sender: {folioName}</div>
 
-                <div className="min-w-0">
+                    {/* Col 2: Coin + Chain */}
+                    <div className="min-w-0 text-xs text-muted-foreground sm:pt-1">
+                      <div>{coinSymbol}</div>
+                      <div>{chainName}</div>
+                    </div>
 
-                  <span className="font-medium">Sender: {folioName}</span>
-                </div>
-                <div className="min-w-0">
+                    {/* Col 3: Receiver + tx hashes */}
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground">Receiver: {addressName}</div>
+                      <div
+                        className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
+                        title={item.transactionHash ?? ""}
+                      >
+                        Tx: {item.transactionHash}
+                      </div>
+                      <div
+                        className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
+                        title={item.userOpHash ?? ""}
+                      >
+                        UserOp: {item.userOpHash}
+                      </div>
+                    </div>
 
-                  <div className="text-xs text-muted">Coin: {coinSymbol}</div>
-                </div>
-                <div className="min-w-0">
-
-                  <div className="text-xs text-muted">Chain: {chainName}</div>
-                </div>
-                <div className="min-w-0">
-
-                  <div className="text-xs text-muted">Receiver: {addressName}</div>
-                </div>
-                <div className="min-w-0">
-
-                  <div className="text-xs text-muted">Transaction: {item.transactionHash}</div>
-                </div>
-                <div className="min-w-0">
-
-                  <div className="text-xs text-muted">UserOphash: {item.userOpHash}</div>
-                </div>
-
-                <div className="justify-self-start sm:justify-self-end overflow-visible">
-                  <button
-                    className="underline" // need to replace url with domain value (transactionUrl)
-                    onClick={() => {
-                      if (item.transactionHash) {
-                        window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");// need to swap to domain.transactionUrl
-                      }
-                    }}
-                  >
-                    View on Etherscan
-                  </button>
+                    {/* Col 4: View on Etherscan */}
+                    <div className="justify-self-start sm:justify-self-end">
+                      <button
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted" // need to swap to domain.transactionUrl
+                        onClick={() => {
+                          if (item.transactionHash) {
+                            window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");
+                          }
+                        }}
+                      >
+                        View on Etherscan
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </li>
             );

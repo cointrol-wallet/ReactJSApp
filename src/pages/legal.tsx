@@ -18,10 +18,10 @@ export function Terms() {
 
       <CardContent className="prose px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
-          <p>[Version 1.0 • Last updated: 2026-02-24]</p>
-          <ol className="list-decimal pl-4 space-y-8">
+          <p>[Version 1.0 • Last updated: 2026-02-24]</p><br/>
+          <ol className="list-decimal pl-6 space-y-8">
             <li>
-              <h2>Introduction</h2>
+              <h1 className="text-xl font-semibold">Introduction</h1><br/>
               <p>
                 These Terms and Conditions (“Terms”) govern your use of the Cointrol platform,
                 applications, APIs, smart contracts, websites, and related services (collectively,
@@ -35,11 +35,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Non-Custodial Nature of the Services</h2>
+              <h1 className="text-xl font-semibold">Non-Custodial Nature of the Services</h1><br/>
               <p>
                 Cointrol provides non-custodial wallet and transaction infrastructure. We do not:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>
                   hold customer funds,
                 </li>
@@ -56,7 +56,7 @@ export function Terms() {
               <p>
                 You retain sole control of:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>private keys</li>
                 <li>recovery material</li>
                 <li>transaction approvals</li>
@@ -68,11 +68,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Blockchain Risks and Irreversibility</h2>
+              <h1 className="text-xl font-semibold">Blockchain Risks and Irreversibility</h1><br/>
               <p>
                 You acknowledge that:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>
                   blockchain transactions are irreversible;
                 </li>
@@ -89,7 +89,7 @@ export function Terms() {
               <p>
                 Cointrol does not guarantee:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>transaction finality,</li>
                 <li>confirmation speed,</li>
                 <li>network availability,</li>
@@ -100,11 +100,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Testnet Disclaimer (where applicable)</h2>
+              <h1 className="text-xl font-semibold">Testnet Disclaimer (where applicable)</h1><br/>
               <p>
                 Where Services operate on test networks:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>assets have no real-world value;</li>
                 <li>data may be reset or deleted;</li>
                 <li>addresses must not be reused on mainnet.</li>
@@ -114,11 +114,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Artificial Intelligence &amp; Cryptography</h2>
+              <h1 className="text-xl font-semibold">Artificial Intelligence &amp; Cryptography</h1><br/>
               <p>
                 Certain components of the services may utilise:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>artificial intelligence,</li>
                 <li>automated agents,</li>
                 <li>cryptographic systems including post-quantum algorithms.</li>
@@ -126,7 +126,7 @@ export function Terms() {
               <p>
                 You acknowledge that::
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>AI-generated outputs are probabilistic and may contain errors;</li>
                 <li>cryptographic systems may evolve as standards develop;</li>
                 <li>no cryptographic system is guaranteed to remain secure indefinitely.</li>
@@ -137,11 +137,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>No Financial, Legal, or Investment Advice</h2>
+              <h1 className="text-xl font-semibold">No Financial, Legal, or Investment Advice</h1><br/>
               <p>
                 Nothing provided through the Services constitutes:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>financial advice,</li>
                 <li>legal advice,</li>
                 <li>tax advice,</li>
@@ -153,9 +153,9 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>User Responsibilities</h2>
+              <h1 className="text-xl font-semibold">User Responsibilities</h1><br/>
               <p>You agree to:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>maintain adequate security over credentials and devices;</li>
                 <li>verify all transaction details before approval;</li>
                 <li>comply with applicable laws and regulations;</li>
@@ -167,11 +167,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Third-Party Networks and Services</h2>
+              <h1 className="text-xl font-semibold">Third-Party Networks and Services</h1><br/>
               <p>
                 The Services rely on third parties including:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>blockchain networks</li>
                 <li>RPC providers</li>
                 <li>could platforms</li>
@@ -184,9 +184,9 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Intellectual Property</h2>
+              <h1 className="text-xl font-semibold">Intellectual Property</h1><br/>
               <p>We process personal data in accordance with:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>UK GDPR</li>
                 <li>Data Protection Act 2018</li>
               </ul>
@@ -196,12 +196,12 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Limitation of Liability</h2>
+              <h1 className="text-xl font-semibold">Limitation of Liability</h1><br/>
               <p>
                 To the maximum extent permitted by law,
                 Cointrol shall not be liable for:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>loss of digital assets;</li>
                 <li>blockchain failures;</li>
                 <li>smart contract behaviour;</li>
@@ -216,7 +216,7 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>No Warranties</h2>
+              <h1 className="text-xl font-semibold">No Warranties</h1><br/>
               <p>
                 The Services are provided "as is" and "as available".
               </p>
@@ -229,11 +229,11 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Indemnity</h2>
+              <h1 className="text-xl font-semibold">Indemnity</h1><br/>
               <p>
                 You agree to indemnify Cointrol against claims arising from:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>your misuse of the Services;</li>
                 <li>violation of law;</li>
                 <li>breach of these Terms;</li>
@@ -241,7 +241,7 @@ export function Terms() {
               </ul>
             </li>
             <li>
-              <h2>Suspension and Termination</h2>
+              <h1 className="text-xl font-semibold">Suspension and Termination</h1><br/>
               <p>
                 We may suspend or terminate access where required by law or where use presents security,
                 legal, or operational risk.
@@ -251,12 +251,12 @@ export function Terms() {
               </p>
             </li>
             <li>
-              <h2>Force Majeure</h2>
+              <h1 className="text-xl font-semibold">Force Majeure</h1><br/>
               <p>
                 Cointrol is not liable for delays or failures caused by events beyond reasonable
                 control including:
               </p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>blockchain outages;</li>
                 <li>cyber incidents;</li>
                 <li>infrastructure failures;</li>
@@ -265,14 +265,14 @@ export function Terms() {
               </ul>
             </li>
             <li>
-              <h2>Changes to Terms</h2>
+              <h1 className="text-xl font-semibold">Changes to Terms</h1><br/>
               <p>
                 We may update these Terms periodically. Continued use constitutes acceptance.
               </p>
 
             </li>
             <li>
-              <h2>Governing Law</h2>
+              <h1 className="text-xl font-semibold">Governing Law</h1><br/>
               <p>
                 These Tems are governed by the laws of England and Wales.
                 Courts of England and Wales shall have exclusive jurisdiction.
@@ -301,11 +301,11 @@ export function Privacy() {
 
       <CardContent className="prose px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
-          <p>[Version 1.1 • Last updated: 2026-02-19]</p>
+          <p>[Version 1.1 • Last updated: 2026-02-19]</p><br/>
 
-          <ol className="list-decimal pl-4 space-y-8">
+          <ol className="list-decimal pl-6 space-y-8">
             <li>
-              <h2>Introduction</h2>
+              <h1 className="text-xl font-semibold">Introduction</h1><br/>
               <p>
                 Welcome to <strong>Cointrol Limited</strong> (“Cointrol”, “we”, “our”, “us”). We
                 are committed to upholding privacy, security, and transparency
@@ -327,7 +327,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Our Approach to Privacy</h2>
+              <h1 className="text-xl font-semibold">Our Approach to Privacy</h1><br/>
               <p>
                 Cointrol is built on the principle of user sovereignty. Our
                 architecture is designed so that no personal data is collected,
@@ -337,7 +337,7 @@ export function Privacy() {
               </p>
 
               <p>We will only collect or process data if:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>
                   It is legally required (e.g., by financial regulations or
                   compliance obligations), or
@@ -350,7 +350,7 @@ export function Privacy() {
               </ul>
 
               <p>When data collection is required, we will:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Clearly inform you of what data is being collected and why.</li>
                 <li>Request your informed consent before processing.</li>
                 <li>
@@ -361,7 +361,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Information We May Collect (If Applicable)</h2>
+              <h1 className="text-xl font-semibold">Information We May Collect (If Applicable)</h1><br/>
               <p>
                 While our Services are designed to operate without collecting
                 personal data, certain interactions may require limited
@@ -369,12 +369,12 @@ export function Privacy() {
               </p>
 
               <h3>Contact or Support Enquiries</h3>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Name, email address, message content – to respond to enquiries</li>
               </ul>
 
               <h3>Regulatory Compliance</h3>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>
                   Identity verification documents, proof of address – only if
                   legally required (e.g., AML/KYC)
@@ -382,12 +382,12 @@ export function Privacy() {
               </ul>
 
               <h3>Website Analytics (optional, if consented)</h3>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Anonymous usage metrics – to improve system performance only</li>
               </ul>
 
               <h3>Technical</h3>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>
                   IP address, device information, browser type, application logs
                   – for security monitoring and troubleshooting only
@@ -395,14 +395,14 @@ export function Privacy() {
               </ul>
 
               <h3>Blockchain Identifiers</h3>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Wallet addresses, transaction hashes, and network metadata</li>
                 <li>Blockchain data is public and not controlled by Cointrol</li>
               </ul>
             </li>
 
             <li>
-              <h2>Smart Contract and Blockchain Data</h2>
+              <h1 className="text-xl font-semibold">Smart Contract and Blockchain Data</h1><br/>
               <p>
                 All on-chain transactions (including UserOperations, Paymaster
                 deposits, and QuantumAccount deployments) are public by design and
@@ -421,7 +421,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Cookies and Local Storage</h2>
+              <h1 className="text-xl font-semibold">Cookies and Local Storage</h1><br/>
               <p>
                 Our website may use minimal local storage to maintain
                 functionality (for example, session preferences or authentication
@@ -433,10 +433,10 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Legal Basis for Processing</h2>
+              <h1 className="text-xl font-semibold">Legal Basis for Processing</h1><br/>
               <p>Where we are legally required to process data, we do so under
                 one or more lawful bases:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Consent - You have clearly agreed to the processing.</li>
                 <li>
                   Legal Obligation - There is a requirement to comply with
@@ -451,7 +451,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Data Security</h2>
+              <h1 className="text-xl font-semibold">Data Security</h1><br/>
               <p>
                 Security is central to our mission. We employ post-quantum
                 cryptography (Falcon-512 and Falcon-1024), end-to-end encryption, and strict
@@ -466,9 +466,9 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>How We Use Your Data</h2>
+              <h1 className="text-xl font-semibold">How We Use Your Data</h1><br/>
               <p>We use data to:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>operate and secure services</li>
                 <li>provide support</li>
                 <li>comply with legal obligations</li>
@@ -479,7 +479,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Data Retention</h2>
+              <h1 className="text-xl font-semibold">Data Retention</h1><br/>
               <p>
                 We retain information only for as long as necessary to fulfil its
                 intended purpose or to meet legal requirements, operational requirements,
@@ -493,9 +493,9 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Sharing Information</h2>
+              <h1 className="text-xl font-semibold">Sharing Information</h1><br/>
               <p>We may share data with:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>infrastructure providers</li>
                 <li>analytics providers</li>
                 <li>professional advisors</li>
@@ -505,10 +505,10 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Your Rights</h2>
+              <h1 className="text-xl font-semibold">Your Rights</h1><br/>
               <p>If you have provided data to us under consent, you retain full rights
                 under the UK GDPR, including the right to:</p>
-              <ul>
+              <ul className="list-disc pl-6 space-y-1">
                 <li>Access your information</li>
                 <li>Correct inaccuracies</li>
                 <li>Request deletion of your data (off-chain only)</li>
@@ -521,7 +521,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Security</h2>
+              <h1 className="text-xl font-semibold">Security</h1><br/>
               <p>
                 We use technical and organiational safeguards including encryption,
                 access controls, and monitoring.  However, no system is completely secure.
@@ -529,7 +529,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>International Data Transfers</h2>
+              <h1 className="text-xl font-semibold">International Data Transfers</h1><br/>
               <p>
                 If any data is processed outside the United Kingdom, we will
                 ensure that such transfers are made in compliance with applicable
@@ -541,7 +541,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Updates to This Policy</h2>
+              <h1 className="text-xl font-semibold">Updates to This Policy</h1><br/>
               <p>
                 We may occasionally update this Privacy Policy to reflect changes
                 in regulation or operational practices. All updates will be
@@ -550,7 +550,7 @@ export function Privacy() {
             </li>
 
             <li>
-              <h2>Contact Information</h2>
+              <h1 className="text-xl font-semibold">Contact Information</h1><br/>
               <p>
                 For questions, requests, or concerns regarding this Privacy Policy, please contact us at:
               </p>

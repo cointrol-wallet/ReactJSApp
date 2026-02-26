@@ -400,7 +400,7 @@ export function Coins() {
     e.preventDefault();
 
     const trimmedName = formName.trim();
-    if (!trimmedName) return; 
+    if (!trimmedName) return;
 
     const payload: any = {
       name: trimmedName,
@@ -497,85 +497,96 @@ export function Coins() {
           No coins yet. Add one from the transaction screen or here.
         </div>
       ) : (
-        <ul className="space-y-2 overflow-visible">
-          {coins.map(c => (
-            <li
-              key={c.id}
-              className="
-    grid gap-x-6 gap-y-2 rounded-lg border px-4 py-3 text-sm
-    grid-cols-1
-    sm:grid-cols-[80px_80px_1fr_110px] sm:items-start sm:px-8
-  "
-            >
-              <div className="min-w-0">
-                <span className="font-medium">{c.name}</span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-muted">{c.symbol}</div>
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-muted">{c.type}</div>
-                <div className="text-xs text-muted">
-                  {CHAIN_NAMES[c.chainId] ?? c.chainId} - {c.address}
+        <ul className="space-y-2">
+          {coins.map((c) => (
+            <li key={c.id} className="w-full">
+              <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
+                <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[160px_90px_minmax(0,1fr)_110px] sm:items-start">
+                  {/* Col 1 */}
+                  <div className="min-w-0 font-medium">{c.name}</div>
+
+                  {/* Col 2 */}
+                  <div className="min-w-0 text-xs text-muted-foreground sm:pt-1">
+                    {c.symbol}
+                  </div>
+
+                  {/* Col 3 */}
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground">{c.type}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {CHAIN_NAMES[c.chainId] ?? c.chainId}
+                    </div>
+
+                    {/* Address: wrap on mobile, truncate on desktop */}
+                    <div
+                      className="
+            mt-0.5 text-xs text-muted-foreground font-mono
+            break-words
+            sm:truncate sm:break-normal
+          "
+                      title={c.address ?? ""}
+                    >
+                      {c.address}
+                    </div>
+
+                    {c.tags?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                        {c.tags.map((tag) => (
+                          <span key={tag} className="rounded-full border border-border px-2 py-0.5">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Col 4 (Actions) */}
+                  <div className="justify-self-start sm:justify-self-end">
+                    <details className="relative inline-block">
+                      <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-2 py-1 text-xs">
+                        Actions
+                      </summary>
+
+                      <div className="absolute left-0 sm:right-0 sm:left-auto mt-1 w-40 rounded-md border border-border bg-background shadow-lg z-50">
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                          onClick={(e) => {
+                            (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                            openEditModal(c);
+                          }}
+                        >
+                          Edit
+                        </button>
+
+                        <div className="my-1 border-t border-border" />
+
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
+                          onClick={(e) => {
+                            (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                            setItemToDelete(c.id);
+                          }}
+                        >
+                          Remove
+                        </button>
+
+                        <div className="my-1 border-t border-border" />
+
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setQrPayload(buildCoinShare(c));
+                          }}
+                        >
+                          Share
+                        </button>
+                      </div>
+                    </details>
+                  </div>
                 </div>
-              </div>
-              <div className="min-w-0">
-                {c.tags && c.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-10 text-[11px] text-muted">
-                    {c.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="px-10 py-0.5"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Actions column */}
-              <div className="justify-self-start sm:justify-self-end overflow-visible">
-                <details className="relative inline-block overflow-visible">
-                  <summary className="cursor-pointer list-none rounded-md border bg-background px-2 py-1 text-xs">
-                    Actions
-                  </summary>
-
-                  <div className="absolute left-0 mt-1 w-40 rounded-md border border-neutral-200 bg-background shadow-lg z-50">
-                    <button
-                      className="block w-full px-3 py-2 text-left text-xs hover:bg-muted"
-                      onClick={(e) => {
-                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                        openEditModal(c);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <div className="my-1 border-t" />
-
-                    <button
-                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
-                      onClick={(e) => {
-                        (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                        setItemToDelete(c.id);
-                      }}
-                    >
-                      Remove
-                    </button>
-                    <div className="my-1 border-t" />
-                    <button
-                      type="button"
-                      className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-muted"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setQrPayload(buildCoinShare(c));
-                      }}
-                    >
-                      Share
-                    </button>
-                  </div>
-                </details>
               </div>
             </li>
           ))}

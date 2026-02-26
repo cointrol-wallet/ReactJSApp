@@ -98,7 +98,7 @@ export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
         aria-label="Continue with Facebook"
       >
         <SiFacebook className={iconCls} aria-hidden="true" />
-        <span className="text-white">Continue with Facebook</span>
+        <span className="text-white!">Continue with Facebook</span>
       </button>
     </div>
   );

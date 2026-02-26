@@ -82,7 +82,7 @@ export function LoginPage() {
 
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-center text-xl">Sign in to QuantumAccount</CardTitle>
+            <CardTitle className="text-center text-xl">Sign in to Cointrol Wallet</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-3 pt-2">
@@ -143,6 +143,9 @@ export function LoginPage() {
         <p className="text-center text-xs text-muted-foreground">
           <Link to="/legal/privacy" className="underline underline-offset-2">
             Privacy Policy
+          </Link>&nbsp;
+          <Link to="/legal/terms" className="underline underline-offset-2">
+            Terms &amp; Conditions
           </Link>
         </p>
       </div>

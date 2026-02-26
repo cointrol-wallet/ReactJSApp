@@ -14,8 +14,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-
 import type { Address } from "../../storage/addressStore";
 import { sortAddresses, AddressSortMode } from "../../lib/addressSorting";
 
@@ -118,17 +116,37 @@ function SortableAddressCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <Card className="border shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between py-2">
-          <CardTitle className="text-sm font-semibold">{item.name}</CardTitle>
+    <div ref={setNodeRef} style={style} className="w-full">
+      <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
+        <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[minmax(0,1fr)_110px] sm:items-start">
+          {/* Col 1: Name + address + tags */}
+          <div className="min-w-0">
+            <div className="font-medium">{item.name}</div>
+            <div
+              className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
+              title={item.id}
+            >
+              {item.id}
+            </div>
 
-          <div className="flex items-center gap-2">
+            {item.group && item.group.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                {item.group.map((tag) => (
+                  <span key={tag} className="rounded-full border border-border px-2 py-0.5">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Col 2: Actions */}
+          <div className="flex items-center justify-end gap-2">
             {/* Drag handle – only active in custom mode */}
             <button
               type="button"
               {...(draggable ? { ...attributes, ...listeners } : {})}
-              className="text-xs text-gray-400 hover:text-muted disabled:opacity-40"
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
               disabled={!draggable}
             >
               ☰
@@ -137,30 +155,13 @@ function SortableAddressCard({
             {/* Hide button */}
             <button
               onClick={() => onHide(item.id)}
-              className="text-xs text-red-500 hover:text-red-700 ml-2 border px-2 py-0.5 rounded"
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted"
             >
               Hide
             </button>
           </div>
-        </CardHeader>
-
-        <CardContent className="text-xs py-2 space-y-1">
-          <div className="text-muted break-all">{item.id}</div>
-
-          {item.group && item.group.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {item.group.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full px-2 py-0.5 text-[10px] leading-none"
-                >
-                  {tag}&nbsp;
-                </span>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

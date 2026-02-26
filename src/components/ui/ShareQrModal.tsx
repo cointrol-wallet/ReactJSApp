@@ -4,6 +4,8 @@ import QRCode from "react-qr-code";
 import { encodeSharePayload } from "@/lib/sharePayload";
 import type { SharePayload } from "@/lib/sharePayload";
 
+const QR_CHAR_LIMIT = 2800;
+
 export function ShareQrModal({
   payload,
   onClose,
@@ -12,6 +14,7 @@ export function ShareQrModal({
   onClose: () => void;
 }) {
   const value = encodeSharePayload(payload);
+  const tooLarge = value.length > QR_CHAR_LIMIT;
 
   if (typeof document === "undefined") return null;
 
@@ -57,9 +60,15 @@ export function ShareQrModal({
 
         {/* QR box */}
         <div className="mt-2 flex justify-center">
-          <div className="bg-white p-3 rounded-lg border shadow-sm">
-            <QRCode value={value} size={240} />
-          </div>
+          {tooLarge ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 max-w-xs text-center">
+              This contract&apos;s data is too large to encode as a QR code, even after stripping the ABI. Try reducing the amount of metadata stored on this contract.
+            </div>
+          ) : (
+            <div className="bg-white p-3 rounded-lg border shadow-sm">
+              <QRCode value={value} size={240} />
+            </div>
+          )}
         </div>
 
 
