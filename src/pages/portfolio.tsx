@@ -37,7 +37,7 @@ export function Folios() {
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
   const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
-  const [selectDomain, setSelectDomain] = React.useState<any>(null);
+  const [selectDomain, setSelectDomain] = React.useState<any>("ETHEREUM SEPOLIA");
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -449,6 +449,8 @@ export function Folios() {
   }
 
   function openAddModal() {
+
+    if (!selectDomain) return;
     resetForm();
     const chainFolios = folios.filter((f) => f.chainId === selectDomain.chainId);
     if (chainFolios.length === 0) {

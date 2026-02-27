@@ -122,12 +122,6 @@ function SortableAddressCard({
           {/* Col 1: Name + address + tags */}
           <div className="min-w-0">
             <div className="font-medium">{item.name}</div>
-            <div
-              className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
-              title={item.id}
-            >
-              {item.id}
-            </div>
 
             {item.group && item.group.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
