@@ -2,7 +2,7 @@ import { PaymasterAPI, GenericResponse } from "./submitTransaction";
 import { getAddress, getFalconPublicKey, getSecretKey } from "../storage/keyStore";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { createAccountToBytes } from "./bytesEncoder";
-import { stringToHex, bytesToHex, Address } from "viem";
+import { bytesToHex, Address } from "viem";
 import { FalconLevel, ensureFalconKeypair } from "../storage/keyStore";
 
 export async function initWallet(): Promise<string> {
@@ -46,7 +46,7 @@ export async function createQuantumAccount({
     sender,
     domain,
     publicKey: bytesToHex(publicKey),
-    salt: stringToHex(salt),
+    salt: salt as `0x${string}`,
   });
 
   const falcon = createFalconWorkerClient();
@@ -62,7 +62,7 @@ export async function createQuantumAccount({
     sender,
     domain,
     bytesToHex(publicKey),
-    stringToHex(salt),
+    salt,
     bytesToHex(signature),
   );
 

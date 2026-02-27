@@ -713,8 +713,6 @@ export function Transactions() {
               </option>
             ))}
           </select>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
           <select
             className="h-9 w-[140px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
             value={sortMode}

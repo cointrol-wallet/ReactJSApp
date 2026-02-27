@@ -37,7 +37,7 @@ export function Folios() {
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
   const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
-  const [selectDomain, setSelectDomain] = React.useState<any>("ETHEREUM SEPOLIA");
+  const [selectDomain, setSelectDomain] = React.useState<any>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -498,8 +498,11 @@ export function Folios() {
         await updateFolio(editingFolio.id, payload);
       } else {
         const salt = await getUUID();
-        if (!salt) { return setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." }); }
-        const sender = await getAddress(salt, 512);  
+        if (!salt) {
+          setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." });
+          return;
+        }
+        const sender = await getAddress(salt, 512);
         if (!sender) {
           setSubmitState({ status: "error", message: "No sender address available for new account." });
           return;
@@ -526,7 +529,7 @@ export function Folios() {
         const chainCoins = coins.filter((c) => c.chainId === selectDomain.chainId);
 
         const wallet: Wallet[] = chainCoins.map((c) => ({
-          coin: c.id,     
+          coin: c.id,
           balance: 0n,
         }));
 
@@ -539,18 +542,17 @@ export function Folios() {
           wallet: wallet,
         }
 
-
         await addFolio({ ...payload, ...domainDetails });
 
       }
+
+      closeModal();
     } catch (err: any) {
       const msg =
         typeof err?.message === "string"
           ? err.message
           : "Something went wrong while creating the account.";
       setSubmitState({ status: "error", message: msg });
-    } finally {
-      closeModal();
     }
   }
 
@@ -609,11 +611,9 @@ export function Folios() {
           >
             &nbsp;{refreshing ? "Refreshing…" : "Refresh balances"}&nbsp;
           </button>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            className="rounded border px-3 py-2"
+            className="h-9 rounded-md border border-border bg-card px-3 text-sm "
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -628,7 +628,7 @@ export function Folios() {
 
           <button
             type="button"
-            className="rounded bg-black px-3 py-2 text-white"
+            className="h-9 rounded-md border border-border bg-card px-3 text-sm "
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

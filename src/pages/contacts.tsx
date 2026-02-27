@@ -257,11 +257,22 @@ export function Contacts() {
   // --- Modal helpers ---------------------------------------------------------
 
   function updateAddressFromContact(contact: Contact, isVisible: boolean) {
-    storeUpdateAddress(contact.id, {
-      name: contact.name,
-      isVisible: isVisible,
-      group: contact.tags ?? [],
-    });
+    if (addressMap[contact.id]) {
+      storeUpdateAddress(contact.id, {
+        name: contact.name,
+        isVisible: isVisible,
+        group: contact.tags ?? [],
+      });
+    } else {
+      storeAddAddress({
+        id: contact.id,
+        name: contact.name,
+        isVisible: isVisible,
+        group: contact.tags ?? [],
+        isContact: true,
+        indexOrder: 0,
+      });
+    }
   }
 
   const addressMap = useMemo(() => {

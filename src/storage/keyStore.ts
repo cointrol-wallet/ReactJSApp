@@ -1,7 +1,7 @@
 import { get, set, del } from "idb-keyval";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { predictQuantumAccountAddress } from "@/lib/predictQuantumAccountAddress";
-import { stringToHex, bytesToHex } from "viem";
+import { stringToHex, bytesToHex, Hex } from "viem";
 
 export type FalconLevel = 512 | 1024;
 
@@ -230,7 +230,7 @@ export async function getAddress(salt: string, level: FalconLevel): Promise<stri
     factory: factoryAddress,
     falcon: falconAddress,
     publicKeyBytes: bytesToHex(pk),
-    salt: stringToHex(salt),
+    salt: salt.startsWith("0x") ? salt as Hex : stringToHex(salt),
   });
   return address;
 }

@@ -257,11 +257,22 @@ export function Contracts() {
   // --- Modal helpers ---------------------------------------------------------
 
   function updateAddressFromContract(contract: Contract, isVisible: boolean) {
-    storeUpdateAddress(contract.id, {
-      name: contract.name,
-      isVisible: isVisible,
-      group: contract.tags ?? [],
-    });
+    if (addressMap[contract.id]) {
+      storeUpdateAddress(contract.id, {
+        name: contract.name,
+        isVisible: isVisible,
+        group: contract.tags ?? [],
+      });
+    } else {
+      storeAddAddress({
+        id: contract.id,
+        name: contract.name,
+        isVisible: isVisible,
+        group: contract.tags ?? [],
+        isContact: false,
+        indexOrder: 0,
+      });
+    }
   }
 
   const addressMap = useMemo(() => {

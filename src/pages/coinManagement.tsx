@@ -440,7 +440,7 @@ export function Coins() {
         Coins
       </h1>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <input
           className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm text-foreground placeholder:text-muted sm:max-w-md"
           placeholder="Search by name or address…"
