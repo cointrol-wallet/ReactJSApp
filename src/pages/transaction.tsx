@@ -12,18 +12,18 @@ import { useDomains } from "@/hooks/useDomains";
 import { useFolioList } from "@/hooks/useFolioList";
 import { useAddressList } from "@/hooks/useAddressList";
 import { useTx } from "@/lib/submitTransaction";
-import { Abi, encodeFunctionData, createPublicClient, http, type Hex } from "viem";
+import { Abi, encodeFunctionData, createPublicClient, http, type Hex, parseEther } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
-import { 
-  AbiFunctionFragment, 
-  getFunctions, 
-  getInputName, 
-  extractAbi, 
-  erc20Abi, 
-  erc721Abi, 
-  erc1155Abi, 
-  nativeAbi, 
-  quantumAccountAbi 
+import {
+  AbiFunctionFragment,
+  getFunctions,
+  getInputName,
+  extractAbi,
+  erc20Abi,
+  erc721Abi,
+  erc1155Abi,
+  nativeAbi,
+  quantumAccountAbi
 } from "@/lib/abiTypes";
 import { TxStatus } from "@/lib/submitTransaction";
 import { createPortal } from "react-dom";
@@ -63,6 +63,7 @@ export function Transactions() {
 
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
+  const [payableValue, setPayableValue] = React.useState<string>("");
 
   //const [calldata, setCalldata] = React.useState<`0x${string}` | null>(null);
   //const [selector, setSelector] = React.useState<`0x${string}` | null>(null);
@@ -214,6 +215,7 @@ export function Transactions() {
     setSelectedFnName("");
     setArgValues({});
     setAddressFieldState({});
+    setPayableValue("");
 
     // clear results and errors
     setReadResult(null);
@@ -368,6 +370,15 @@ export function Transactions() {
 
   const functions = React.useMemo(() => getFunctions(abi), [abi]);
 
+  const isPayable = React.useMemo(() => {
+    const fn = functions.find((f) => f.name === selectedFnName);
+    return fn?.stateMutability === "payable";
+  }, [functions, selectedFnName]);
+
+  const submitDisabled =
+  isReading ||
+  (!transferOrTransaction && isPayable && !(payableValue || "").trim());
+
   const writeFunctions = React.useMemo(
     () =>
       functions.filter((f) => {
@@ -396,6 +407,7 @@ export function Transactions() {
     // Whenever contract changes, reset function selection
     setSelectedFnName("");
     setArgValues({});
+    setPayableValue("");
     //setSelector(null);
     //setCalldata(null);
     setReadResult(null);
@@ -421,6 +433,7 @@ export function Transactions() {
 
     // clear BOTH types of inputs whenever function changes
     setArgValues({});
+    setPayableValue("");
     setAddressFieldState({});
     setReadResult(null);
     setError(null);
@@ -467,6 +480,11 @@ export function Transactions() {
 
     if (!selectContract && !transferOrTransaction) {
       setError("No contract selected");
+      return;
+    }
+
+    if (isPayable && !(payableValue || "").trim()) {
+      setError("Enter a payable value");
       return;
     }
 
@@ -543,7 +561,7 @@ export function Transactions() {
             return;
           }
           dest = tokenAddr as `0x${string}`;
-          value = 0n;
+          value = 0n; 
         } else {
           // contract call: dest = selected contract address
           const cAddr = (selectContract?.address ?? "").trim();
@@ -552,7 +570,7 @@ export function Transactions() {
             return;
           }
           dest = cAddr as `0x${string}`;
-          value = 0n; // (if you later support payable contract calls, take value from UI)
+          value = isPayable ? parseEther((payableValue || "0").trim()) : 0n;
         }
       }
 
@@ -952,6 +970,24 @@ export function Transactions() {
               )
             )}
 
+            {!transferOrTransaction && isPayable && (
+              <div className="space-y-1">
+                <div className="min-w-0">
+                  <label className="text-xs font-medium">
+                    Payable value <span className="text-muted">(ETH)</span>
+                  </label>
+                </div>
+                <div className="min-w-0">
+                  <input
+                    className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                    value={payableValue}
+                    onChange={(e) => setPayableValue(e.target.value)}
+                    placeholder="0.0"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Dynamic inputs */}
             {selectedFn?.inputs.map((input, index) => {
               const key = getInputName(input, index);
@@ -1082,6 +1118,7 @@ export function Transactions() {
               ) : (
                 <button
                   type="button"
+                  disabled={submitDisabled}
                   className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-background"
                   onClick={handleBuildCalldata}
                 >
