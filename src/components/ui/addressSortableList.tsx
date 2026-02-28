@@ -15,20 +15,34 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Address } from "../../storage/addressStore";
+import type { Coin } from "../../storage/coinStore";
+import type { Contact } from "../../storage/contactStore";
+import type { Contract } from "../../storage/contractStore";
 import { sortAddresses, AddressSortMode } from "../../lib/addressSorting";
+import { extractAbi, getFunctions } from "../../lib/abiTypes";
 
 type AddressSortableListProps = {
   items: Address[];
   sortMode: AddressSortMode;
   onReorder: (items: Address[]) => void;
   onHide: (id: string) => void;
+  coins: Coin[];
+  contacts: Contact[];
+  contracts: Contract[];
+  onSendCoins: (item: Address, coinId: string) => void;
+  onUseContract: (item: Address, functionName: string) => void;
 };
 
 export function AddressSortableList({
   items,
   sortMode,
   onReorder,
-  onHide,        
+  onHide,
+  coins,
+  contacts,
+  contracts,
+  onSendCoins,
+  onUseContract,
 }: AddressSortableListProps) {
   // Only show visible items, then sort them
   const sortedItems = useMemo(() => {
@@ -79,7 +93,12 @@ export function AddressSortableList({
               key={addr.id}
               item={addr}
               draggable={sortMode === "custom"}
-              onHide={onHide}       
+              onHide={onHide}
+              coins={coins}
+              contacts={contacts}
+              onSendCoins={onSendCoins}
+              onUseContract={onUseContract}
+              contracts={contracts}
             />
           ))}
         </div>
@@ -92,13 +111,38 @@ type SortableAddressCardProps = {
   item: Address;
   draggable: boolean;
   onHide: (id: string) => void;
+  coins: Coin[];
+  contacts: Contact[];
+  contracts: Contract[];
+  onSendCoins: (item: Address, coinId: string) => void;
+  onUseContract: (item: Address, functionName: string) => void;
 };
 
 function SortableAddressCard({
   item,
   draggable,
-  onHide, 
+  onHide,
+  coins,
+  contacts,
+  contracts,
+  onSendCoins,
+  onUseContract,
 }: SortableAddressCardProps) {
+  const [selectedCoinId, setSelectedCoinId] = React.useState("");
+  const [selectedFnName, setSelectedFnName] = React.useState("");
+
+  const entryId = item.id.replace(/^address:/, '');
+
+  const contactId = entryId;
+  const contact = item.isContact ? contacts.find(c => c.id === contactId) : undefined;
+  const contactChainIds = new Set(contact?.wallets?.map(w => w.chainId) ?? []);
+  const filteredCoins = item.isContact
+    ? coins.filter(c => contactChainIds.has(c.chainId))
+    : [];
+
+  const contract = !item.isContact ? contracts.find(c => c.id === entryId) : undefined;
+  const contractAbi = contract ? extractAbi(contract.metadata) : null;
+  const contractFunctions = getFunctions(contractAbi);
   const {
     attributes,
     listeners,
@@ -136,6 +180,57 @@ function SortableAddressCard({
 
           {/* Col 2: Actions */}
           <div className="flex items-center justify-end gap-2">
+            {/* Contact: chain-filtered coin selector + Send button */}
+            {item.isContact && (
+              <>
+                <select
+                  className="h-7 rounded border border-border bg-background px-1 text-xs text-foreground"
+                  value={selectedCoinId}
+                  onChange={e => setSelectedCoinId(e.target.value)}
+                >
+                  <option value="">Coin…</option>
+                  {filteredCoins.map(c => (
+                    <option key={c.id} value={c.id}>{c.symbol}</option>
+                  ))}
+                </select>
+                <button
+                  disabled={!selectedCoinId}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-40"
+                  onClick={() => onSendCoins(item, selectedCoinId)}
+                >
+                  Send
+                </button>
+              </>
+            )}
+
+            {/* Contract: function selector + Use button */}
+            {!item.isContact && (
+              <>
+                <select
+                  className="h-7 w-28 rounded border border-border bg-background px-1 text-xs text-foreground"
+                  value={selectedFnName}
+                  onChange={e => setSelectedFnName(e.target.value)}
+                >
+                  <option value="">Function…</option>
+                  {contractFunctions.map(fn => (
+                    <option
+                      key={`${fn.name}(${fn.inputs.map(i => i.type).join(",")})`}
+                      value={fn.name}
+                    >
+                      {fn.name}({fn.inputs.map(i => i.type).join(",")})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={!selectedFnName}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-40"
+                  onClick={() => onUseContract(item, selectedFnName)}
+                >
+                  Use
+                </button>
+              </>
+            )}
+
             {/* Drag handle – only active in custom mode */}
             <button
               type="button"

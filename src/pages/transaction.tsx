@@ -11,7 +11,8 @@ import { Domain } from "@/storage/domainStore";
 import { useDomains } from "@/hooks/useDomains";
 import { useFolioList } from "@/hooks/useFolioList";
 import { useAddressList } from "@/hooks/useAddressList";
-import { useTx } from "@/lib/submitTransaction";
+import { useTx, BundlerAPI } from "@/lib/submitTransaction";
+import { useLocation } from "react-router-dom";
 import { Abi, encodeFunctionData, createPublicClient, http, type Hex, parseEther } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
 import {
@@ -71,6 +72,11 @@ export function Transactions() {
   const [readResult, setReadResult] = React.useState<string | null>(null);
   const [formError, setError] = React.useState<string | null>(null);
   const [isReading, setIsReading] = React.useState(false);
+  const [isRefreshingTxHashes, setIsRefreshingTxHashes] = React.useState(false);
+
+  const location = useLocation();
+  const prefillHandled = React.useRef(false);
+  const pendingPrefillFnRef = React.useRef("");
 
 
   const CHAIN_NAMES: Record<number, string> = {
@@ -205,6 +211,50 @@ export function Transactions() {
     }
   }, [isModalOpen, folios, selectFolio]);
 
+  React.useEffect(() => {
+    if (prefillHandled.current) return;
+    const prefill = location.state?.prefill as
+      | { mode: 'transfer'; addressId: string; coinId: string }
+      | { mode: 'contract'; addressId: string; functionName: string }
+      | undefined;
+    if (!prefill) return;
+    if (cLoading || coLoading || crLoading || fLoading || aLoading) return;
+
+    prefillHandled.current = true;
+
+    if (prefill.mode === 'transfer') {
+      const coin = coins.find(c => c.id === prefill.coinId) ?? null;
+      const contactId = prefill.addressId.replace(/^address:/, '');
+      const contact = contacts.find(c => c.id === contactId) ?? null;
+      const folio = folios.find(f => f.chainId === coin?.chainId) ?? null;
+      const addrIdx = address.findIndex(a => a.id === prefill.addressId);
+
+      setSelectCoin(coin);
+      setSelectContact(contact);
+      if (folio) setSelectFolio(folio);
+      setTransferOrTransaction(true);
+      setCardTitle("Send or Approve Coins");
+      setCardDescription("Select any coin and then choose an option.");
+      setSelectedFnName("transfer");
+      if (addrIdx !== -1) {
+        setAddressFieldState({ to: { mode: 'address', manual: '', selectedIndex: addrIdx } });
+      }
+      setIsModalOpen(true);
+
+    } else if (prefill.mode === 'contract') {
+      const contractId = prefill.addressId.replace(/^address:/, '');
+      const contract = contracts.find(c => c.id === contractId) ?? null;
+
+      setSelectContract(contract);
+      setTransferOrTransaction(false);
+      setCardTitle("Use a Smart Contract");
+      setCardDescription("Select any contract and then choose a function");
+      if (prefill.functionName) pendingPrefillFnRef.current = prefill.functionName;
+      setIsModalOpen(true);
+    }
+  }, [location.state, cLoading, coLoading, crLoading, fLoading, aLoading,
+      coins, contacts, contracts, folios, address]);
+
   function resetForm() {
     setSelectCoin(null);
     setSelectContact(null);
@@ -270,7 +320,8 @@ export function Transactions() {
       if (!addrRow) return "";
 
       if (addrRow.isContact) {
-        const contact = contacts.find(c => c.id === addrRow.id);
+        const contactId = addrRow.id.replace(/^address:/, '');
+        const contact = contacts.find(c => c.id === contactId);
         if (!contact?.wallets?.length) return "";
 
         const w = contact.wallets.find(w => w.chainId === selectDomain?.chainId);
@@ -330,6 +381,31 @@ export function Transactions() {
     await addTxn({ ...payload });
 
     closeModal();
+  }
+
+  async function refreshTxHashes() {
+    const pending = txns.filter(t => !t.transactionHash);
+    if (pending.length === 0) return;
+    setIsRefreshingTxHashes(true);
+    try {
+      for (const txn of pending) {
+        const folio = folios.find(f => f.id === txn.folioId);
+        if (!folio?.address || !txn.userOpHash) continue;
+        try {
+          const rec = await BundlerAPI.getTxReceipt(
+            folio.address as `0x${string}`,
+            txn.userOpHash as `0x${string}`
+          );
+          if (rec.success && rec.txHash) {
+            await updateTxn(txn.id, { transactionHash: rec.txHash });
+          }
+        } catch {
+          // skip failed lookups, don't block others
+        }
+      }
+    } finally {
+      setIsRefreshingTxHashes(false);
+    }
   }
 
   const abi: Abi | null = React.useMemo(() => {
@@ -416,8 +492,11 @@ export function Transactions() {
 
   React.useEffect(() => {
     if (!selectedFnName && functions.length > 0) {
-      // Prefer a write function first, otherwise any function.
-      if (writeFunctions.length > 0) {
+      if (pendingPrefillFnRef.current) {
+        setSelectedFnName(pendingPrefillFnRef.current);
+        pendingPrefillFnRef.current = "";
+      } else if (writeFunctions.length > 0) {
+        // Prefer a write function first, otherwise any function.
         setSelectedFnName(writeFunctions[0].name);
       } else {
         setSelectedFnName(functions[0].name);
@@ -743,6 +822,13 @@ export function Transactions() {
             onClick={openContractTransaction}
           >
             &nbsp;Use a smart contract&nbsp;
+          </button>
+          <button
+            className="h-9 rounded-md border border-border bg-card px-3 text-sm"
+            onClick={refreshTxHashes}
+            disabled={isRefreshingTxHashes}
+          >
+            &nbsp;{isRefreshingTxHashes ? "Refreshing…" : "Refresh TX hashes"}&nbsp;
           </button>
         </div>
       </div>

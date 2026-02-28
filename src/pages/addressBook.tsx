@@ -1,10 +1,15 @@
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import { useAddressList } from "../hooks/useAddressList";
 import { AddressSortableList } from "../components/ui/addressSortableList"
 import { Address } from "@/storage/addressStore";
 import { createPortal } from "react-dom";
+import { useCoinList } from "@/hooks/useCoinList";
+import { useContacts } from "@/hooks/useContacts";
+import { useContracts } from "@/hooks/useContracts";
 
 export function AddressBook() {
+  const navigate = useNavigate();
   const [query, setQuery] = React.useState("");
   const [sortMode, setSortMode] = React.useState<"nameAsc" | "createdDesc" | "nameDesc" | "createdAsc" | "custom">(
     "nameAsc"
@@ -21,6 +26,18 @@ export function AddressBook() {
     deleteAddress,
     updateAddress,
   } = useAddressList({ query, sortMode, tags, tagMode });
+
+  const { coins } = useCoinList({ query: "", sortMode: "nameAsc", standard: "", chainId: 0 });
+  const { contacts } = useContacts();
+  const { contracts } = useContracts();
+
+  function handleSendCoins(item: Address, coinId: string) {
+    navigate('/transactions', { state: { prefill: { mode: 'transfer', addressId: item.id, coinId } } });
+  }
+
+  function handleUseContract(item: Address, functionName: string) {
+    navigate('/transactions', { state: { prefill: { mode: 'contract', addressId: item.id, functionName } } });
+  }
 
   // --- Filtering and sorting ----------------------------------------------------
 
@@ -282,6 +299,11 @@ export function AddressBook() {
         sortMode={sortMode}
         onReorder={handleReorder}
         onHide={handleHide}
+        coins={coins}
+        contacts={contacts}
+        contracts={contracts}
+        onSendCoins={handleSendCoins}
+        onUseContract={handleUseContract}
       />
 
 
