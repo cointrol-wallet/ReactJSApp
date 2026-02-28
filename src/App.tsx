@@ -4,14 +4,15 @@ import { Button } from "./components/ui/button";
 import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
 import './index.css'
-import { AddressBook } from "./pages/addressBook";
-import { Contracts } from "./pages/contracts";
-import { Contacts } from "./pages/contacts";
-import { Coins } from "./pages/coinManagement";
-import { Folios } from "./pages/portfolio";
-import { Privacy, Terms } from "./pages/legal";
-import { Transactions } from "./pages/transaction";
-import { LoginPage } from "./pages/LoginPage";
+const AddressBook  = React.lazy(() => import("./pages/addressBook").then(m => ({ default: m.AddressBook })));
+const Contracts    = React.lazy(() => import("./pages/contracts").then(m => ({ default: m.Contracts })));
+const Contacts     = React.lazy(() => import("./pages/contacts").then(m => ({ default: m.Contacts })));
+const Coins        = React.lazy(() => import("./pages/coinManagement").then(m => ({ default: m.Coins })));
+const Folios       = React.lazy(() => import("./pages/portfolio").then(m => ({ default: m.Folios })));
+const Terms        = React.lazy(() => import("./pages/legal").then(m => ({ default: m.Terms })));
+const Privacy      = React.lazy(() => import("./pages/legal").then(m => ({ default: m.Privacy })));
+const Transactions = React.lazy(() => import("./pages/transaction").then(m => ({ default: m.Transactions })));
+const LoginPage    = React.lazy(() => import("./pages/LoginPage").then(m => ({ default: m.LoginPage })));
 import { initWallet } from "./lib/wallets";
 import logo from "./assets/logo.png";
 import { FalconProvider } from "./crypto/falconProvider";
@@ -424,15 +425,21 @@ export default function App() {
     <HashRouter>
       <AuthProvider>
         <FalconProvider>
-          <Routes>
-            {/* Public routes */}
-            <Route path="login" element={<LoginPage />} />
-            <Route path="legal/terms" element={<Terms />} />
-            <Route path="legal/privacy" element={<Privacy />} />
+          <React.Suspense fallback={
+            <div className="min-h-dvh flex items-center justify-center text-sm text-muted-foreground">
+              Loading…
+            </div>
+          }>
+            <Routes>
+              {/* Public routes */}
+              <Route path="login" element={<LoginPage />} />
+              <Route path="legal/terms" element={<Terms />} />
+              <Route path="legal/privacy" element={<Privacy />} />
 
-            {/* All other routes require authentication */}
-            <Route path="/*" element={<ProtectedApp />} />
-          </Routes>
+              {/* All other routes require authentication */}
+              <Route path="/*" element={<ProtectedApp />} />
+            </Routes>
+          </React.Suspense>
         </FalconProvider>
       </AuthProvider>
     </HashRouter>

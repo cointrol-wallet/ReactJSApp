@@ -104,5 +104,26 @@ export default defineConfig(() => {
     },
 
     optimizeDeps: { exclude: ["@openforge-sh/liboqs"] },
+
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('/firebase/'))     return 'vendor-firebase';
+            if (id.includes('/viem/'))         return 'vendor-viem';
+            if (id.includes('/@dnd-kit/'))     return 'vendor-dnd';
+            if (id.includes('/lucide-react/')) return 'vendor-lucide';
+            if (id.includes('/react-icons/')  ||
+                id.includes('/simple-icons/')) return 'vendor-icons';
+            if (id.includes('/@zxing/')       ||
+                id.includes('/react-qr-code/')) return 'vendor-qr';
+            if (id.includes('/react/')        ||
+                id.includes('/react-dom/')    ||
+                id.includes('/react-router')) return 'vendor-react';
+          },
+        },
+      },
+    },
   };
 });
