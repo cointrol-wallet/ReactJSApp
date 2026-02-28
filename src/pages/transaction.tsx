@@ -214,7 +214,7 @@ export function Transactions() {
   React.useEffect(() => {
     if (prefillHandled.current) return;
     const prefill = location.state?.prefill as
-      | { mode: 'transfer'; addressId: string; coinId: string }
+      | { mode: 'transfer'; addressId: string; coinId: string; functionName?: string }
       | { mode: 'contract'; addressId: string; functionName: string }
       | undefined;
     if (!prefill) return;
@@ -235,7 +235,8 @@ export function Transactions() {
       setTransferOrTransaction(true);
       setCardTitle("Send or Approve Coins");
       setCardDescription("Select any coin and then choose an option.");
-      setSelectedFnName("transfer");
+      pendingPrefillFnRef.current = prefill.functionName ?? "transfer";
+      setSelectedFnName("");
       if (addrIdx !== -1) {
         setAddressFieldState({ to: { mode: 'address', manual: '', selectedIndex: addrIdx } });
       }
@@ -495,17 +496,16 @@ export function Transactions() {
       if (pendingPrefillFnRef.current) {
         setSelectedFnName(pendingPrefillFnRef.current);
         pendingPrefillFnRef.current = "";
+      } else if (transferOrTransaction) {
+        setSelectedFnName("transfer");
       } else if (writeFunctions.length > 0) {
         // Prefer a write function first, otherwise any function.
         setSelectedFnName(writeFunctions[0].name);
       } else {
         setSelectedFnName(functions[0].name);
       }
-      if (transferOrTransaction) {
-        setSelectedFnName("transfer");
-      }
     }
-  }, [selectedFnName, functions, writeFunctions]);
+  }, [selectedFnName, functions, writeFunctions, transferOrTransaction]);
 
   React.useEffect(() => {
     if (!selectedFnName) return;

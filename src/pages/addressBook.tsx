@@ -35,6 +35,10 @@ export function AddressBook() {
     navigate('/transactions', { state: { prefill: { mode: 'transfer', addressId: item.id, coinId } } });
   }
 
+  function handleApproveCoins(item: Address, coinId: string) {
+    navigate('/transactions', { state: { prefill: { mode: 'transfer', addressId: item.id, coinId, functionName: 'approve' } } });
+  }
+
   function handleUseContract(item: Address, functionName: string) {
     navigate('/transactions', { state: { prefill: { mode: 'contract', addressId: item.id, functionName } } });
   }
@@ -303,6 +307,7 @@ export function AddressBook() {
         contacts={contacts}
         contracts={contracts}
         onSendCoins={handleSendCoins}
+        onApproveCoins={handleApproveCoins}
         onUseContract={handleUseContract}
       />
 

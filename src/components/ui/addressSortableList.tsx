@@ -30,6 +30,7 @@ type AddressSortableListProps = {
   contacts: Contact[];
   contracts: Contract[];
   onSendCoins: (item: Address, coinId: string) => void;
+  onApproveCoins: (item: Address, coinId: string) => void;
   onUseContract: (item: Address, functionName: string) => void;
 };
 
@@ -42,6 +43,7 @@ export function AddressSortableList({
   contacts,
   contracts,
   onSendCoins,
+  onApproveCoins,
   onUseContract,
 }: AddressSortableListProps) {
   // Only show visible items, then sort them
@@ -97,6 +99,7 @@ export function AddressSortableList({
               coins={coins}
               contacts={contacts}
               onSendCoins={onSendCoins}
+              onApproveCoins={onApproveCoins}
               onUseContract={onUseContract}
               contracts={contracts}
             />
@@ -115,6 +118,7 @@ type SortableAddressCardProps = {
   contacts: Contact[];
   contracts: Contract[];
   onSendCoins: (item: Address, coinId: string) => void;
+  onApproveCoins: (item: Address, coinId: string) => void;
   onUseContract: (item: Address, functionName: string) => void;
 };
 
@@ -126,6 +130,7 @@ function SortableAddressCard({
   contacts,
   contracts,
   onSendCoins,
+  onApproveCoins,
   onUseContract,
 }: SortableAddressCardProps) {
   const [selectedCoinId, setSelectedCoinId] = React.useState("");
@@ -199,6 +204,13 @@ function SortableAddressCard({
                   onClick={() => onSendCoins(item, selectedCoinId)}
                 >
                   Send
+                </button>
+                <button
+                  disabled={!selectedCoinId}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-40"
+                  onClick={() => onApproveCoins(item, selectedCoinId)}
+                >
+                  Approve
                 </button>
               </>
             )}
