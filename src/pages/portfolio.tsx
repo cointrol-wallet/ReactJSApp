@@ -20,6 +20,174 @@ type SubmitState =
   | { status: "pending"; message: string }
   | { status: "error"; message: string };
 
+type PortfolioFiltersDropdownProps = {
+  primarySortMode: string;
+  setPrimarySortMode: (v: any) => void;
+  secondarySortMode: string;
+  setSecondarySortMode: (v: any) => void;
+  tagSearch: string;
+  setTagSearch: (v: string) => void;
+  setTags: (tags: string[]) => void;
+  tagMode: "any" | "all";
+  setTagSearchMode: (v: "any" | "all") => void;
+};
+
+function PortfolioFiltersDropdown({
+  primarySortMode,
+  setPrimarySortMode,
+  secondarySortMode,
+  setSecondarySortMode,
+  tagSearch,
+  setTagSearch,
+  setTags,
+  tagMode,
+  setTagSearchMode,
+}: PortfolioFiltersDropdownProps) {
+  const [open, setOpen] = React.useState(false);
+  const btnRef = React.useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 320,
+  });
+
+  const close = () => setOpen(false);
+
+  const updatePos = React.useCallback(() => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const margin = 8;
+    const width = Math.min(360, window.innerWidth - margin * 2);
+    const top = r.bottom + 8;
+    const preferredLeft = r.right - width;
+    const left = Math.min(Math.max(margin, preferredLeft), window.innerWidth - width - margin);
+    setPos({ top, left, width });
+  }, []);
+
+  const toggle = () => {
+    const next = !open;
+    if (next) updatePos();
+    setOpen(next);
+  };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true);
+    return () => {
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
+  }, [open, updatePos]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="h-9 whitespace-nowrap rounded-md border border-border bg-card px-3 text-sm text-foreground"
+        onClick={toggle}
+      >
+        &nbsp;Sort / Filter&nbsp;
+      </button>
+
+      {open && typeof document !== "undefined" && createPortal(
+        <>
+          <div onClick={close} style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.35)" }} />
+          <div
+            className="rounded-xl border border-border bg-card shadow-lg"
+            style={{ position: "fixed", zIndex: 9999, top: pos.top, left: pos.left, width: pos.width, padding: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-sm font-semibold">Sort</div>
+            <select
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+              value={primarySortMode}
+              onChange={(e) => setPrimarySortMode(e.target.value as any)}
+            >
+              <option value="nameAsc">Name (A → Z)</option>
+              <option value="nameDesc">Name (Z → A)</option>
+              <option value="symbolAsc">Symbol (A → Z)</option>
+              <option value="symbolDesc">Symbol (Z → A)</option>
+              <option value="chainIdAsc">Chain ID (Low → High)</option>
+              <option value="chainIdDesc">Chain ID (High → Low)</option>
+              <option value="createdDesc">Newest first</option>
+              <option value="createdAsc">Oldest first</option>
+            </select>
+
+            <div className="mb-2 text-sm font-semibold">Sort</div>
+            <select
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+              value={secondarySortMode}
+              onChange={(e) => setSecondarySortMode(e.target.value as any)}
+            >
+              <option value="nameAsc">Name (A → Z)</option>
+              <option value="nameDesc">Name (Z → A)</option>
+              <option value="symbolAsc">Symbol (A → Z)</option>
+              <option value="symbolDesc">Symbol (Z → A)</option>
+              <option value="chainIdAsc">Chain ID (Low → High)</option>
+              <option value="chainIdDesc">Chain ID (High → Low)</option>
+              <option value="createdDesc">Newest first</option>
+              <option value="createdAsc">Oldest first</option>
+            </select>
+
+            <div className="my-3 border-t border-border" />
+
+            <div className="mb-2 text-sm font-semibold">Filter by tags</div>
+            <input
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted"
+              placeholder="Tags separated by space or comma…"
+              value={tagSearch}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setTagSearch(raw);
+                setTags(raw.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean));
+              }}
+            />
+
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-muted">Mode</span>
+              <select
+                className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                value={tagMode}
+                onChange={(e) => setTagSearchMode(e.target.value as "any" | "all")}
+              >
+                <option value="any">Match any</option>
+                <option value="all">Match all</option>
+              </select>
+              <button
+                type="button"
+                className="h-9 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted"
+                onClick={() => { setTagSearch(""); setTags([]); setTagSearchMode("any"); }}
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                className="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground"
+                onClick={close}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export function Folios() {
   const [query, setQuery] = React.useState("");
   const [primarySortMode, setPrimarySortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc" | "coinBalanceAsc" | "coinBalanceDesc">(
@@ -222,226 +390,6 @@ export function Folios() {
     doRefresh();
   }, [loading, cLoading, dLoading, error, cError, dError, folios, doRefresh]);
 
-  // --- Filtering and sorting ----------------------------------------------------
-
-  type FiltersDropdownProps = {
-    primarySortMode: string;
-    setPrimarySortMode: (v: any) => void;
-
-    secondarySortMode: string;
-    setSecondarySortMode: (v: any) => void;
-
-    tagSearch: string;
-    setTagSearch: (v: string) => void;
-
-    setTags: (tags: string[]) => void;
-
-    tagMode: "any" | "all";
-    setTagSearchMode: (v: "any" | "all") => void;
-  };
-
-  function FiltersDropdown({
-    primarySortMode,
-    setPrimarySortMode,
-    secondarySortMode,
-    setSecondarySortMode,
-    tagSearch,
-    setTagSearch,
-    setTags,
-    tagMode,
-    setTagSearchMode,
-  }: FiltersDropdownProps) {
-    const [open, setOpen] = React.useState(false);
-    const btnRef = React.useRef<HTMLButtonElement | null>(null);
-
-    const [pos, setPos] = React.useState<{ top: number; left: number; width: number }>({
-      top: 0,
-      left: 0,
-      width: 320,
-    });
-
-    const close = () => setOpen(false);
-
-    const updatePos = React.useCallback(() => {
-      if (!btnRef.current) return;
-
-      const r = btnRef.current.getBoundingClientRect();
-      const margin = 8;
-
-      // panel width adapts to viewport (fits small screens)
-      const width = Math.min(360, window.innerWidth - margin * 2);
-
-      const top = r.bottom + 8;
-
-      // Prefer right-align to button, but clamp inside viewport
-      const preferredLeft = r.right - width;
-      const left = Math.min(
-        Math.max(margin, preferredLeft),
-        window.innerWidth - width - margin
-      );
-
-      setPos({ top, left, width });
-    }, []);
-
-    const toggle = () => {
-      const next = !open;
-      if (next) updatePos();
-      setOpen(next);
-    };
-
-    // close on Escape
-    React.useEffect(() => {
-      if (!open) return;
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") close();
-      };
-      window.addEventListener("keydown", onKeyDown);
-      return () => window.removeEventListener("keydown", onKeyDown);
-    }, [open]);
-
-    // keep anchored to button on resize/scroll
-    React.useEffect(() => {
-      if (!open) return;
-      window.addEventListener("resize", updatePos);
-      window.addEventListener("scroll", updatePos, true);
-      return () => {
-        window.removeEventListener("resize", updatePos);
-        window.removeEventListener("scroll", updatePos, true);
-      };
-    }, [open, updatePos]);
-
-    return (
-      <>
-        <button
-          ref={btnRef}
-          type="button"
-          className="h-9 whitespace-nowrap rounded-md border border-border bg-card px-3 text-sm text-foreground"
-          onClick={toggle}
-        >
-          &nbsp;Sort / Filter&nbsp;
-        </button>
-
-        {open &&
-          typeof document !== "undefined" &&
-          createPortal(
-            <>
-              {/* Backdrop */}
-              <div
-                onClick={close}
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  zIndex: 9998,
-                  background: "rgba(0,0,0,0.35)",
-                }}
-              />
-
-              {/* Panel */}
-              <div
-                className="rounded-xl border border-border bg-card shadow-lg"
-                style={{
-                  position: "fixed",
-                  zIndex: 9999,
-                  top: pos.top,
-                  left: pos.left,
-                  width: pos.width,
-                  padding: 12,
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="mb-2 text-sm font-semibold">Sort</div>
-                <select
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                  value={primarySortMode}
-                  onChange={(e) => setPrimarySortMode(e.target.value as any)}
-                >
-                  <option value="nameAsc">Name (A → Z)</option>
-                  <option value="nameDesc">Name (Z → A)</option>
-                  <option value="symbolAsc">Symbol (A → Z)</option>
-                  <option value="symbolDesc">Symbol (Z → A)</option>
-                  <option value="chainIdAsc">Chain ID (Low → High)</option>
-                  <option value="chainIdDesc">Chain ID (High → Low)</option>
-                  <option value="createdDesc">Newest first</option>
-                  <option value="createdAsc">Oldest first</option>
-                </select>
-
-                <div className="mb-2 text-sm font-semibold">Sort</div>
-                <select
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                  value={secondarySortMode}
-                  onChange={(e) => setSecondarySortMode(e.target.value as any)}
-                >
-                  <option value="nameAsc">Name (A → Z)</option>
-                  <option value="nameDesc">Name (Z → A)</option>
-                  <option value="symbolAsc">Symbol (A → Z)</option>
-                  <option value="symbolDesc">Symbol (Z → A)</option>
-                  <option value="chainIdAsc">Chain ID (Low → High)</option>
-                  <option value="chainIdDesc">Chain ID (High → Low)</option>
-                  <option value="createdDesc">Newest first</option>
-                  <option value="createdAsc">Oldest first</option>
-                </select>
-
-                <div className="my-3 border-t border-border" />
-
-                <div className="mb-2 text-sm font-semibold">Filter by tags</div>
-                <input
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted"
-                  placeholder="Comma-separated tags…"
-                  value={tagSearch}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setTagSearch(raw);
-
-                    const tokens = raw
-                      .split(",")
-                      .map((t) => t.trim())
-                      .filter(Boolean);
-
-                    setTags(tokens);
-                  }}
-                />
-
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs text-muted">Mode</span>
-                  <select
-                    className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                    value={tagMode}
-                    onChange={(e) => setTagSearchMode(e.target.value as "any" | "all")}
-                  >
-                    <option value="any">Match any</option>
-                    <option value="all">Match all</option>
-                  </select>
-
-                  <button
-                    type="button"
-                    className="h-9 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setTagSearch("");
-                      setTags([]);
-                      setTagSearchMode("any");
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    className="h-9 rounded-md bg-primary px-3 text-sm text-primary-foreground"
-                    onClick={close}
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </>,
-            document.body
-          )}
-      </>
-    );
-  }
-
   // --- Modal helpers ---------------------------------------------------------
 
   function resetForm() {
@@ -585,7 +533,7 @@ export function Folios() {
         />
 
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <FiltersDropdown
+          <PortfolioFiltersDropdown
             primarySortMode={primarySortMode}
             setPrimarySortMode={setPrimarySortMode}
             secondarySortMode={secondarySortMode}

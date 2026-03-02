@@ -5,6 +5,7 @@ import { get, set } from "idb-keyval";
 const COIN_KEY = "cointrol:coins:v1";
 const COIN_SCHEMA_VERSION_KEY = "cointrol:coins:schemaVersion";
 const CURRENT_COIN_SCHEMA_VERSION = 1;
+const BUILTIN_COIN_TAGS_KEY = "cointrol:builtin-coin-tags:v1";
 
 // Contact schema v1
 export type Coin = {
@@ -66,8 +67,13 @@ const BUILTIN_COINS: Coin[] = [
 type coinListener = (coin: Coin[]) => void;
 const listeners = new Set<coinListener>();
 
-function notifyCoinsUpdated(coins: Coin[]) {
-  const allCoins = [...BUILTIN_COINS, ...coins];
+async function notifyCoinsUpdated(coins: Coin[]) {
+  const builtinTags = await getBuiltinCoinTags();
+  const mergedBuiltins = BUILTIN_COINS.map(c => ({
+    ...c,
+    tags: builtinTags[c.id] ?? c.tags ?? [],
+  }));
+  const allCoins = [...mergedBuiltins, ...coins];
   for (const listener of listeners) {
     listener(allCoins);
   }
@@ -78,6 +84,10 @@ export function subscribeToCoins(listener: coinListener): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+async function getBuiltinCoinTags(): Promise<Record<string, string[]>> {
+  return (await get<Record<string, string[]> | undefined>(BUILTIN_COIN_TAGS_KEY)) ?? {};
 }
 
 // --- Schema migration scaffolding -------------------------------------------
@@ -136,14 +146,18 @@ async function loadCoinsRaw(): Promise<Coin[]> {
 
 async function saveCoinsRaw(coins: Coin[]): Promise<void> {
   await set(COIN_KEY, coins);
-  notifyCoinsUpdated(coins);
+  await notifyCoinsUpdated(coins);
 }
 
 // --- Public API --------------------------------------------------------------
 
 export async function getAllCoins(): Promise<Coin[]> {
-  const coins = await loadCoinsRaw();
-  return [...BUILTIN_COINS, ...coins];
+  const [coins, builtinTags] = await Promise.all([loadCoinsRaw(), getBuiltinCoinTags()]);
+  const mergedBuiltins = BUILTIN_COINS.map(c => ({
+    ...c,
+    tags: builtinTags[c.id] ?? c.tags ?? [],
+  }));
+  return [...mergedBuiltins, ...coins];
 }
 
 export async function addCoin(input: {
@@ -180,9 +194,15 @@ export async function updateCoin(
   id: string,
   patch: Partial<Omit<Coin, "id" | "createdAt">>
 ): Promise<Coin[]> {
-  // Prevent editing built-in coins
+  // For built-in coins, only allow tag updates — all other fields are protected
   if (BUILTIN_COINS.some(c => c.id === id)) {
-    // future option to include error
+    if (patch.tags !== undefined) {
+      const builtinTags = await getBuiltinCoinTags();
+      builtinTags[id] = patch.tags;
+      await set(BUILTIN_COIN_TAGS_KEY, builtinTags);
+      const userCoins = await loadCoinsRaw();
+      await notifyCoinsUpdated(userCoins);
+    }
     return getAllCoins();
   }
 
@@ -199,7 +219,7 @@ export async function updateCoin(
   );
 
   await saveCoinsRaw(updated);
-  return [...BUILTIN_COINS, ...updated];
+  return getAllCoins();
 }
 
 export async function deleteCoin(id: string): Promise<Coin[]> {
@@ -212,7 +232,7 @@ export async function deleteCoin(id: string): Promise<Coin[]> {
   const coins = await loadCoinsRaw();
   const updated = coins.filter(c => c.id !== id);
   await saveCoinsRaw(updated);
-  return [...BUILTIN_COINS, ...updated];
+  return getAllCoins();
 }
 
 export async function clearCoins(): Promise<void> {
