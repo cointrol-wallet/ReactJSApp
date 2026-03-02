@@ -259,7 +259,7 @@ export const useTx = create<TxStore>((set, get) => ({
     const publicClient = createPublicClient({
           transport: http(domain.rpcUrl), 
         });
-    const [nonce, feeData] = await Promise.all([
+    const [nonce, feeData, estimatedCallGas] = await Promise.all([
       publicClient.readContract({
         address: domain.entryPoint as `0x${string}`,
         abi: entryPointAbi,
@@ -267,26 +267,33 @@ export const useTx = create<TxStore>((set, get) => ({
         args: [folio.address as `0x${string}`, 0n], // key = 0 for normal ops TODO: update for admin/large keys
       }) as Promise<bigint>,
       publicClient.estimateFeesPerGas().catch(() => null),
+      // Simulate EntryPoint → account to get real callGasLimit for this specific callData
+      publicClient.estimateGas({
+        account: domain.entryPoint as `0x${string}`,
+        to: folio.address as `0x${string}`,
+        data: encoded as `0x${string}`,
+      }).catch(() => null),
     ]);
     // Apply 20% buffer to live network fees to avoid being priced out of the next block
     const maxFeePerGas = (feeData?.maxFeePerGas ?? 4_000_000_000n) * 12n / 10n;
     const maxPriorityFeePerGas = (feeData?.maxPriorityFeePerGas ?? 2_000_000n) * 12n / 10n;
+    // Apply 50% buffer to call gas estimate; fall back to 500k if estimation fails
+    const callGasLimit = estimatedCallGas ? (estimatedCallGas * 15n / 10n) : 500_000n;
     const paymaster =
       (folio.paymaster?.startsWith("0x") ? folio.paymaster : undefined) as `0x${string}` | undefined;
     const userOpBase: Omit<PackedUserOperation, "signature"> = {
       sender: folio.address,
-      nonce: toHex(nonce), 
+      nonce: toHex(nonce),
       initCode: emptyHex(),
-      callData: encoded,  
-      accountGasLimits: defaultAccountGasLimits(), // only changes if ecdsa supported
+      callData: encoded,
+      accountGasLimits: defaultAccountGasLimits(8_500_000n, callGasLimit),
       preVerificationGas: hexlify(200_000), // will come from bundler api?
       gasFees: packGasFees(maxPriorityFeePerGas, maxFeePerGas),
       paymasterAndData: paymaster
         ? packPaymasterAndDataV08({
           paymaster,
-          // choose sane limits (tune later). must fit uint128
           validationGasLimit: 100_000n,
-          postOpGasLimit: 0n,
+          postOpGasLimit: 100_000n, // paymaster _postOp does storage write on revert
           extraData: "0x", // no signature
         })
         : "0x",
