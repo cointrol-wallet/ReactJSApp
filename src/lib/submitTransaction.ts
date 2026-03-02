@@ -112,8 +112,8 @@ export function parseBalance(
 
 
 // --- HTTP util ---
-const BUNDLER = `https://app.cointrol.co/bundler` as string;
-const PAYMASTER = `https://app.cointrol.co/paymentgateway` as string;
+const BUNDLER = `https://app.cointrol.co/bundler/userop` as string;
+const PAYMASTER = `https://app.cointrol.co/paymentgateway/pmg` as string;
 
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
