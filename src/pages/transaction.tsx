@@ -347,7 +347,7 @@ export function Transactions() {
     }));
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(txStatus?: TxStatus) {
     //e.preventDefault();
     var addressId;
     if (transferOrTransaction) {
@@ -367,9 +367,10 @@ export function Transactions() {
       }
     }
 
+    const activeStatus = txStatus ?? recStatus;
     const payload: any = {
-      userOpHash: recStatus?.userOpHash,
-      transactionHash: recStatus?.hash,
+      userOpHash: activeStatus?.userOpHash,
+      transactionHash: activeStatus?.hash,
       chainId: selectFolio?.chainId,
       addressId: addressId,
       coinId: selectCoin?.id,
@@ -682,7 +683,7 @@ export function Transactions() {
         return;
       }
 
-      handleSubmit();
+      handleSubmit(currentStatus);
 
     } catch (err: any) {
       console.error(err);
@@ -843,7 +844,11 @@ export function Transactions() {
             // Look up associated folio and coin
             const folio = folios.find(f => f.id === item.folioId);
             const coin = coins.find(c => c.id === item.coinId);
-            const addressMap = address.find(a => a.id === item.addressId);
+            const addressMap =
+              address.find(a => a.id === item.addressId) ??
+              contacts.find(c => c.id === item.addressId) ??
+              contracts.find(c => c.id === item.addressId);
+            const domain = domains.find(d => d.chainId === item.chainId);
 
             const folioName = folio?.name ?? item.folioId;
             const coinSymbol = coin?.symbol ?? "—";
@@ -889,14 +894,13 @@ export function Transactions() {
                     {/* Col 4: View on Etherscan */}
                     <div className="justify-self-start sm:justify-self-end">
                       <button
-                        className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted" // need to swap to domain.transactionUrl
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={!item.transactionHash || !domain?.transactionUrl}
                         onClick={() => {
-                          if (item.transactionHash) {
-                            window.open(`https://sepolia.etherscan.io/tx/${item.transactionHash}`, "_blank", "noopener,noreferrer");
-                          }
+                          window.open(`${domain!.transactionUrl}${item.transactionHash}`, "_blank", "noopener,noreferrer");
                         }}
                       >
-                        View on Etherscan
+                        View on Explorer
                       </button>
                     </div>
                   </div>
