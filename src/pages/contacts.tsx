@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
 import { buildContactShare } from "@/lib/shareBuilders";
 import { FiltersDropdown } from "@/components/ui/FiltersDropdown";
+import { useLocation } from "react-router-dom";
 
 export function Contacts() {
   const [query, setQuery] = React.useState("");
@@ -29,6 +30,8 @@ export function Contacts() {
   const [tagInput, setTagInput] = React.useState("");
   const [formWallets, setFormWallets] = React.useState<Wallet[]>([]);
   const [contactToDelete, setContactToDelete] = React.useState<string | null>(null);
+
+  const location = useLocation();
 
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
@@ -111,6 +114,29 @@ export function Contacts() {
       document.body.style.overflow = prev;
     };
   }, [isModalOpen]);
+
+  // Handle prefillContact from navigation state (e.g. "Add Contact" from a received transfer)
+  React.useEffect(() => {
+    const state = location.state?.prefillContact as
+      | { prefillAddress: string; chainId: number }
+      | undefined;
+    if (!state) return;
+
+    setEditingContact(null);
+    setFormSurname("");
+    setFormTags([]);
+    setTagInput("");
+    setFormWallets([{ chainId: state.chainId, address: state.prefillAddress }]);
+
+    // Pre-fill name: strip ".eth" suffix if present, otherwise leave blank
+    if (state.prefillAddress.toLowerCase().endsWith(".eth")) {
+      setFormName(state.prefillAddress.slice(0, -4));
+    } else {
+      setFormName("");
+    }
+
+    setIsModalOpen(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function resetForm() {
     setFormName("");

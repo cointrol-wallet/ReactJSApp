@@ -26,3 +26,9 @@ yarn-error.log*
 
 security-audit.md
 research.md
+plan.md
+user_guide_integration.md
+user_guide_implementation.md
+user_guide_project_plan.md
+
+dist-web/

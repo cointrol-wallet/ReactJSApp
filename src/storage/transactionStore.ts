@@ -4,9 +4,9 @@ import { get, set } from "idb-keyval";
 
 const TXN_KEY = "cointrol:txns:v1";
 const TXN_SCHEMA_VERSION_KEY = "cointrol:txns:schemaVersion";
-const CURRENT_TXN_SCHEMA_VERSION = 1;
+const CURRENT_TXN_SCHEMA_VERSION = 2;
 
-// Transaction schema v1
+// Transaction schema v2
 
 export type Txn = {
   id: string;  // unique identifier
@@ -19,6 +19,14 @@ export type Txn = {
   walletId: string | ""; // wallet id if applicable
   createdAt: number;       // ms since epoch
   updatedAt: number;       // ms since epoch
+  // v2 fields
+  direction: "outgoing" | "incoming";
+  fromAddress?: string;   // sender address (for incoming; for outgoing this is the folio address)
+  toAddress?: string;     // recipient address (for outgoing; for incoming this is the folio address)
+  amount?: string;        // transfer amount as decimal string (e.g. "1.5")
+  tokenSymbol?: string;   // cached symbol for display (e.g. "USDC")
+  ensFromName?: string;   // resolved ENS name for fromAddress, if any
+  ensToName?: string;     // resolved ENS name for toAddress, if any
 }
 
 // --- In-memory subscribers for live updates ---------------------------------
@@ -43,8 +51,8 @@ export function subscribeToTxns(listener: txnListener): () => void {
 
 async function getTxnSchemaVersion(): Promise<number> {
   const v = await get<number | undefined>(TXN_SCHEMA_VERSION_KEY);
-  // If nothing stored yet, assume current version (fresh install)
-  if (!v) return CURRENT_TXN_SCHEMA_VERSION;
+  // If nothing stored yet, assume v1 (could be an existing install with no version key)
+  if (!v) return 1;
   return v;
 }
 
@@ -54,8 +62,7 @@ async function setTxnSchemaVersion(v: number): Promise<void> {
 
 /**
  * Run migrations if stored schema version is older than current.
- * Right now it's a no-op because v1 is the first schema.
- * When you introduce v2, add migration steps here.
+ * v1 → v2: set direction = "outgoing" on all existing records.
  */
 async function ensureTxnSchemaMigrated(): Promise<void> {
   const storedVersion = await getTxnSchemaVersion();
@@ -64,26 +71,16 @@ async function ensureTxnSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let txns = await get<Txn[] | undefined>(TXN_KEY);
+  let txns = await get<any[] | undefined>(TXN_KEY);
   if (!txns) txns = [];
 
-  // Example future migration (v1 → v2):
-  //
-  // if (storedVersion < 2) {
-  //   const migrated = contacts.map(c => 
-// --- In-memory subscribers for live updates ---------------------------------
-//({
-  //     ...c,
-  //     tags: [], // new field with default
-  //   }));
-  //   await set(CONTACTS_KEY, migrated);
-  //   await setContactsSchemaVersion(2);
-  // }
-  //
-  // For now we just bump the version if needed.
-
-  if (storedVersion < CURRENT_TXN_SCHEMA_VERSION) {
-    await setTxnSchemaVersion(CURRENT_TXN_SCHEMA_VERSION);
+  if (storedVersion < 2) {
+    const migrated = txns.map(t => ({
+      ...t,
+      direction: t.direction ?? "outgoing",
+    }));
+    await set(TXN_KEY, migrated);
+    await setTxnSchemaVersion(2);
   }
 }
 
@@ -107,22 +104,29 @@ export async function getAllTxns(): Promise<Txn[]> {
 }
 
 export async function addTxn(input: {
-  id: string;  // unique identifier
-  userOpHash: string;  // userOp hash
-  transactionHash: string;  // txn reference
-  chainId: number;  // chain identifier
-  addressId: string; // address
-  coinId: string | ""; // coin id (can be "")
-  folioId: string; //folio id
-  walletId: string | ""; // wallet id if applicable
-  createdAt: number;       // ms since epoch
-  updatedAt: number;       // ms since epoch
+  id?: string;
+  userOpHash: string;
+  transactionHash: string;
+  chainId: number;
+  addressId: string;
+  coinId: string | "";
+  folioId: string;
+  walletId: string | "";
+  createdAt?: number;
+  updatedAt?: number;
+  direction?: "outgoing" | "incoming";
+  fromAddress?: string;
+  toAddress?: string;
+  amount?: string;
+  tokenSymbol?: string;
+  ensFromName?: string;
+  ensToName?: string;
 }): Promise<Txn[]> {
   const now = Date.now();
   const txns = await loadTxnsRaw();
 
   const newTxn: Txn = {
-    id: `txn:${crypto.randomUUID?.() ?? `${now}:${txns.length}`}`,
+    id: input.id ?? `txn:${crypto.randomUUID?.() ?? `${now}:${txns.length}`}`,
     chainId: input.chainId,
     userOpHash: input.userOpHash,
     transactionHash: input.transactionHash,
@@ -130,8 +134,15 @@ export async function addTxn(input: {
     coinId: input.coinId,
     folioId: input.folioId,
     walletId: input.walletId,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now,
+    direction: input.direction ?? "outgoing",
+    fromAddress: input.fromAddress,
+    toAddress: input.toAddress,
+    amount: input.amount,
+    tokenSymbol: input.tokenSymbol,
+    ensFromName: input.ensFromName,
+    ensToName: input.ensToName,
   };
 
   const updated = [...txns, newTxn];
@@ -168,4 +179,27 @@ export async function deleteTxn(id: string): Promise<Txn[]> {
 
 export async function clearTxns(): Promise<void> {
   await saveTxnsRaw([]);
+}
+
+/**
+ * Merge incoming transfers by id (deduplication key = incoming:chainId:txHash:logIndex).
+ * Never overwrites records with direction = "outgoing".
+ */
+export async function upsertIncomingTxns(incoming: Txn[]): Promise<Txn[]> {
+  const txns = await loadTxnsRaw();
+
+  const merged = [...txns];
+  for (const txn of incoming) {
+    const existingIdx = merged.findIndex(t => t.id === txn.id);
+    if (existingIdx !== -1) {
+      // Never overwrite outgoing records
+      if (merged[existingIdx].direction === "outgoing") continue;
+      merged[existingIdx] = txn;
+    } else {
+      merged.push(txn);
+    }
+  }
+
+  await saveTxnsRaw(merged);
+  return merged;
 }

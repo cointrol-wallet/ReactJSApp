@@ -12,7 +12,7 @@ import { useDomains } from "@/hooks/useDomains";
 import { useFolioList } from "@/hooks/useFolioList";
 import { useAddressList } from "@/hooks/useAddressList";
 import { useTx, BundlerAPI } from "@/lib/submitTransaction";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Abi, encodeFunctionData, createPublicClient, http, type Hex, parseEther } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
 import {
@@ -28,6 +28,11 @@ import {
 } from "@/lib/abiTypes";
 import { TxStatus } from "@/lib/submitTransaction";
 import { createPortal } from "react-dom";
+import { resolveEnsAddress, lookupEnsName } from "@/lib/ens";
+import { fetchIncomingTransfers } from "@/lib/fetchIncomingTransfers";
+import { upsertIncomingTxns } from "@/storage/transactionStore";
+
+const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 
 export function Transactions() {
 
@@ -41,7 +46,14 @@ export function Transactions() {
     selectedIndex: number | null; // index into the relevant array
   };
 
+  type EnsResolution = {
+    status: "resolving" | "resolved" | "not-found";
+    resolvedAddress?: string;
+  };
+
   const [addressFieldState, setAddressFieldState] = React.useState<Record<string, AddressFieldState>>({});
+  const [ensResolutionState, setEnsResolutionState] = React.useState<Record<string, EnsResolution>>({});
+  const ensDebounceTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const [query, setQuery] = React.useState("");
   const [sortMode, setSortMode] = React.useState<"createdDesc" | "addressAsc" | "addressDesc" | "createdAsc" | "chainIdAsc" | "chainIdDesc" | "nameAsc" | "nameDesc" | "coinSymbolAsc" | "coinSymbolDesc">(
@@ -60,21 +72,23 @@ export function Transactions() {
   const [selectContract, setSelectContract] = React.useState<Contract | null>(null);
   const [selectFolio, setSelectFolio] = React.useState<Folio | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<Domain | null>(null);
-  //const [selectWallet, setSelectWallet] = React.useState<number>(-1);
 
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
   const [payableValue, setPayableValue] = React.useState<string>("");
 
-  //const [calldata, setCalldata] = React.useState<`0x${string}` | null>(null);
-  //const [selector, setSelector] = React.useState<`0x${string}` | null>(null);
-
   const [readResult, setReadResult] = React.useState<string | null>(null);
   const [formError, setError] = React.useState<string | null>(null);
   const [isReading, setIsReading] = React.useState(false);
-  const [isRefreshingTxHashes, setIsRefreshingTxHashes] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [refreshError, setRefreshError] = React.useState<string | null>(null);
+
+  // ENS reverse-lookup cache for history display (non-blocking, not persisted)
+  const [ensLookupCache, setEnsLookupCache] = React.useState<Record<string, string | null>>({});
+  const pendingEnsLookups = React.useRef(new Set<string>());
 
   const location = useLocation();
+  const navigate = useNavigate();
   const prefillHandled = React.useRef(false);
   const pendingPrefillFnRef = React.useRef("");
   const pendingAddressFieldRef = React.useRef<Record<string, AddressFieldState> | null>(null);
@@ -147,6 +161,12 @@ export function Transactions() {
     deleteContact,
     updateContact,
   } = useContacts();
+
+  // ENS mainnet RPC: prefer a user-configured domain with chainId=1, else cloudflare
+  const mainnetRpcUrl = React.useMemo(() => {
+    const mainnetDomain = domains.find(d => d.chainId === 1);
+    return mainnetDomain?.rpcUrl ?? "https://cloudflare-eth.com";
+  }, [domains]);
 
   function formatBalance(balance: bigint, decimals: number): string {
     if (decimals <= 0) return balance.toString();
@@ -257,6 +277,32 @@ export function Transactions() {
   }, [location.state, cLoading, coLoading, crLoading, fLoading, aLoading,
       coins, contacts, contracts, folios, address]);
 
+  // Trigger non-blocking ENS reverse lookups for history addresses
+  React.useEffect(() => {
+    for (const txn of txns) {
+      if (txn.direction === "incoming" && txn.fromAddress && !txn.ensFromName) {
+        const addr = txn.fromAddress.toLowerCase();
+        if (!(addr in ensLookupCache) && !pendingEnsLookups.current.has(addr)) {
+          pendingEnsLookups.current.add(addr);
+          lookupEnsName(addr as `0x${string}`, mainnetRpcUrl).then(name => {
+            pendingEnsLookups.current.delete(addr);
+            setEnsLookupCache(prev => ({ ...prev, [addr]: name }));
+          });
+        }
+      }
+      if (txn.direction === "outgoing" && txn.toAddress && !txn.ensToName) {
+        const addr = txn.toAddress.toLowerCase();
+        if (!(addr in ensLookupCache) && !pendingEnsLookups.current.has(addr)) {
+          pendingEnsLookups.current.add(addr);
+          lookupEnsName(addr as `0x${string}`, mainnetRpcUrl).then(name => {
+            pendingEnsLookups.current.delete(addr);
+            setEnsLookupCache(prev => ({ ...prev, [addr]: name }));
+          });
+        }
+      }
+    }
+  }, [txns, mainnetRpcUrl]);
+
   function resetForm() {
     setSelectCoin(null);
     setSelectContact(null);
@@ -267,6 +313,7 @@ export function Transactions() {
     setSelectedFnName("");
     setArgValues({});
     setAddressFieldState({});
+    setEnsResolutionState({});
     setPayableValue("");
 
     // clear results and errors
@@ -306,13 +353,61 @@ export function Transactions() {
     );
   }
 
+  // --- ENS resolution for address input fields ------------------------------
 
-  function getResolvedAddress(key: string): string {
+  async function resolveAddressField(key: string, value: string) {
+    if (!ENS_REGEX.test(value.trim())) {
+      setEnsResolutionState(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    setEnsResolutionState(prev => ({ ...prev, [key]: { status: "resolving" } }));
+    const resolved = await resolveEnsAddress(value.trim(), mainnetRpcUrl);
+    setEnsResolutionState(prev => ({
+      ...prev,
+      [key]: resolved
+        ? { status: "resolved", resolvedAddress: resolved }
+        : { status: "not-found" },
+    }));
+  }
+
+  function handleManualAddressChange(key: string, st: AddressFieldState, manual: string) {
+    setAddressFieldState(prev => ({ ...prev, [key]: { ...st, manual } }));
+
+    if (ensDebounceTimers.current[key]) {
+      clearTimeout(ensDebounceTimers.current[key]);
+    }
+    ensDebounceTimers.current[key] = setTimeout(() => {
+      resolveAddressField(key, manual);
+    }, 600);
+  }
+
+  function handleManualAddressBlur(key: string, value: string) {
+    if (ensDebounceTimers.current[key]) {
+      clearTimeout(ensDebounceTimers.current[key]);
+    }
+    resolveAddressField(key, value);
+  }
+
+  // --- Address resolution (async for ENS support) ---------------------------
+
+  async function getResolvedAddress(key: string): Promise<string> {
     const st = addressFieldState[key];
 
     if (!st) return "";
 
-    if (st.mode === "manual") return (st.manual ?? "").trim();
+    if (st.mode === "manual") {
+      const manual = (st.manual ?? "").trim();
+      if (ENS_REGEX.test(manual)) {
+        const resolved = await resolveEnsAddress(manual, mainnetRpcUrl);
+        return resolved ?? "";
+      }
+      return manual;
+    }
 
     const idx = st.selectedIndex;
     if (idx == null) return "";
@@ -327,10 +422,20 @@ export function Transactions() {
         if (!contact?.wallets?.length) return "";
 
         const w = contact.wallets.find(w => w.chainId === selectDomain?.chainId);
-        return (w?.address ?? "").trim();
+        const addr = (w?.address ?? "").trim();
+        if (ENS_REGEX.test(addr)) {
+          const resolved = await resolveEnsAddress(addr, mainnetRpcUrl);
+          return resolved ?? "";
+        }
+        return addr;
       } else {
         const contract = contracts.find(c => c.id === addrRow.id);
-        return (contract?.address ?? "").trim();
+        const addr = (contract?.address ?? "").trim();
+        if (ENS_REGEX.test(addr)) {
+          const resolved = await resolveEnsAddress(addr, mainnetRpcUrl);
+          return resolved ?? "";
+        }
+        return addr;
       }
     }
     if (st.mode === "coin") return (coins[idx]?.address ?? "").trim();
@@ -349,7 +454,6 @@ export function Transactions() {
   }
 
   async function handleSubmit(txStatus?: TxStatus) {
-    //e.preventDefault();
     var addressId;
     if (transferOrTransaction) {
       addressId = selectContact?.id;
@@ -369,6 +473,15 @@ export function Transactions() {
     }
 
     const activeStatus = txStatus ?? recStatus;
+
+    // Capture ENS name if the "to" address field was an ENS name
+    const toKey = "to";
+    const toFieldState = addressFieldState[toKey];
+    const ensToName =
+      toFieldState?.mode === "manual" && ENS_REGEX.test((toFieldState.manual ?? "").trim())
+        ? toFieldState.manual.trim()
+        : undefined;
+
     const payload: any = {
       userOpHash: activeStatus?.userOpHash,
       transactionHash: activeStatus?.hash,
@@ -377,20 +490,48 @@ export function Transactions() {
       coinId: selectCoin?.id,
       folioId: selectFolio?.id,
       walletId: selectWallet,
+      direction: "outgoing",
+      ensToName,
     };
-
-
 
     await addTxn({ ...payload });
 
     closeModal();
   }
 
-  async function refreshTxHashes() {
-    const pending = txns.filter(t => !t.transactionHash);
-    if (pending.length === 0) return;
-    setIsRefreshingTxHashes(true);
+  // --- Unified refresh: incoming transfers + outgoing tx hashes -------------
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    setRefreshError(null);
+
     try {
+      // Step 1: fetch incoming transfers for each domain
+      for (const domain of domains) {
+        const domainFolios = folios
+          .filter(f => f.chainId === domain.chainId)
+          .map(f => ({ id: f.id, address: f.address }));
+
+        if (domainFolios.length === 0) continue;
+
+        try {
+          const incoming = await fetchIncomingTransfers(
+            domainFolios,
+            domain.chainId,
+            domain.rpcUrl,
+            undefined,
+            mainnetRpcUrl
+          );
+          if (incoming.length > 0) {
+            await upsertIncomingTxns(incoming);
+          }
+        } catch (err) {
+          console.warn(`fetchIncomingTransfers failed for chain ${domain.chainId}`, err);
+        }
+      }
+
+      // Step 2: re-query bundler for outgoing txns missing transactionHash
+      const pending = txns.filter(t => t.direction !== "incoming" && !t.transactionHash);
       for (const txn of pending) {
         const folio = folios.find(f => f.id === txn.folioId);
         if (!folio?.address || !txn.userOpHash) continue;
@@ -406,8 +547,10 @@ export function Transactions() {
           // skip failed lookups, don't block others
         }
       }
+    } catch (err: any) {
+      setRefreshError(err?.message ?? "Refresh failed");
     } finally {
-      setIsRefreshingTxHashes(false);
+      setIsRefreshing(false);
     }
   }
 
@@ -487,8 +630,6 @@ export function Transactions() {
     setSelectedFnName("");
     setArgValues({});
     setPayableValue("");
-    //setSelector(null);
-    //setCalldata(null);
     setReadResult(null);
     setError(null);
   }, [abi]);
@@ -515,6 +656,7 @@ export function Transactions() {
     // clear BOTH types of inputs whenever function changes
     setArgValues({});
     setPayableValue("");
+    setEnsResolutionState({});
     if (pendingAddressFieldRef.current) {
       setAddressFieldState(pendingAddressFieldRef.current);
       pendingAddressFieldRef.current = null;
@@ -534,23 +676,27 @@ export function Transactions() {
     setArgValues((prev) => ({ ...prev, [paramKey]: value }));
   }
 
-  function buildArgs() {
+  async function buildArgs(): Promise<unknown[]> {
     if (!selectedFn) return [];
 
-    return selectedFn.inputs.map((input, index) => {
-      const key = getInputName(input, index);
+    const results = await Promise.all(
+      selectedFn.inputs.map(async (input, index) => {
+        const key = getInputName(input, index);
 
-      if (input.type === "address") {
-        return getResolvedAddress(key);
-      }
+        if (input.type === "address") {
+          return await getResolvedAddress(key);
+        }
 
-      if (key === "value" && transferOrTransaction) {
-        return getBalance(Number(argValues[key]), selectCoin?.decimals ?? 18);
-      }
+        if (key === "value" && transferOrTransaction) {
+          return getBalance(Number(argValues[key]), selectCoin?.decimals ?? 18);
+        }
 
-      const raw = argValues[key] ?? "";
-      return parseAbiArg(input.type, raw);
-    });
+        const raw = argValues[key] ?? "";
+        return parseAbiArg(input.type, raw);
+      })
+    );
+
+    return results;
   }
 
   const { startFlow } = useTx();
@@ -604,7 +750,7 @@ export function Transactions() {
           return;
         }
 
-        const args = buildArgs(); // expected: [_to, _value]
+        const args = await buildArgs(); // expected: [_to, _value]
 
         const to = (args?.[0] as string | undefined)?.trim();
         const amount = args?.[1] as bigint | undefined;
@@ -632,7 +778,7 @@ export function Transactions() {
           return;
         }
 
-        const args = buildArgs();
+        const args = await buildArgs();
         innerData = encodeFunctionData({
           abi,
           functionName: selectedFn.name,
@@ -640,14 +786,22 @@ export function Transactions() {
         }) as Hex;
 
         if (transferOrTransaction) {
-          // token call: dest = token contract address
-          const tokenAddr = (selectCoin?.address ?? "").trim();
-          if (!tokenAddr.startsWith("0x")) {
+          // token call: dest = token contract address (resolve ENS if needed)
+          const rawTokenAddr = (selectCoin?.address ?? "").trim();
+          if (ENS_REGEX.test(rawTokenAddr)) {
+            const resolved = await resolveEnsAddress(rawTokenAddr, mainnetRpcUrl);
+            if (!resolved) {
+              setError("Could not resolve ENS address for coin contract");
+              return;
+            }
+            dest = resolved as `0x${string}`;
+          } else if (!rawTokenAddr.startsWith("0x")) {
             setError("Coin has no valid contract address");
             return;
+          } else {
+            dest = rawTokenAddr as `0x${string}`;
           }
-          dest = tokenAddr as `0x${string}`;
-          value = 0n; 
+          value = 0n;
         } else {
           // contract call: dest = selected contract address
           const cAddr = (selectContract?.address ?? "").trim();
@@ -735,7 +889,7 @@ export function Transactions() {
 
     try {
       setIsReading(true);
-      const args = buildArgs();
+      const args = await buildArgs();
 
       const client = createPublicClient({
         transport: http(selectDomain?.rpcUrl),
@@ -770,6 +924,45 @@ export function Transactions() {
     (selectedFn.stateMutability === "view" || selectedFn.stateMutability === "pure");
 
   const hasAbi = !!abi && functions.length > 0;
+
+  // --- Contact-from-transfer helpers ----------------------------------------
+
+  function isSenderAlreadyContact(fromAddress: string, txnChainId: number, ensFromName?: string): boolean {
+    return contacts.some(c =>
+      c.wallets?.some(w =>
+        w.chainId === txnChainId && (
+          w.address.toLowerCase() === fromAddress.toLowerCase() ||
+          (ensFromName ? w.address.toLowerCase() === ensFromName.toLowerCase() : false)
+        )
+      )
+    );
+  }
+
+  function handleAddContact(txnChainId: number, fromAddress: string, ensFromName?: string) {
+    const prefillAddress = ensFromName ?? fromAddress;
+    navigate("/contacts", {
+      state: {
+        prefillContact: {
+          prefillAddress,
+          chainId: txnChainId,
+        },
+      },
+    });
+  }
+
+  // --- Address display helper for history -----------------------------------
+
+  function getAddressDisplay(
+    addr: string | undefined,
+    storedEnsName: string | undefined
+  ): { primary: string; secondary?: string } {
+    if (!addr) return { primary: "Unknown" };
+    const short = `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    if (storedEnsName) return { primary: storedEnsName, secondary: short };
+    const cached = ensLookupCache[addr.toLowerCase()];
+    if (cached) return { primary: cached, secondary: short };
+    return { primary: short };
+  }
 
   if (loading) return <div className="p-4">Loading transactions…</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;
@@ -832,12 +1025,17 @@ export function Transactions() {
           </button>
           <button
             className="h-9 rounded-md border border-border bg-card px-3 text-sm"
-            onClick={refreshTxHashes}
-            disabled={isRefreshingTxHashes}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
           >
-            &nbsp;{isRefreshingTxHashes ? "Refreshing…" : "Refresh TX hashes"}&nbsp;
+            &nbsp;{isRefreshing ? "Refreshing…" : "Refresh"}&nbsp;
           </button>
         </div>
+        {refreshError && (
+          <div className="text-xs text-red-600 border border-red-200 rounded-md p-2">
+            Refresh error: {refreshError}
+          </div>
+        )}
       </div>
 
       {txns.length === 0 ? (
@@ -857,48 +1055,87 @@ export function Transactions() {
             const domain = domains.find(d => d.chainId === item.chainId);
 
             const folioName = folio?.name ?? item.folioId;
-            const coinSymbol = coin?.symbol ?? "—";
+            const coinSymbol = item.tokenSymbol ?? coin?.symbol ?? "—";
             const chainName =
               folio && CHAIN_NAMES[folio.chainId]
                 ? CHAIN_NAMES[folio.chainId]
-                : folio
-                  ? `Chain ${folio.chainId}`
-                  : "Unknown chain";
+                : CHAIN_NAMES[item.chainId]
+                  ? CHAIN_NAMES[item.chainId]
+                  : `Chain ${item.chainId}`;
 
-            const addressName = addressMap?.name ?? "";
+            const isIncoming = item.direction === "incoming";
+
+            // Directional address display
+            const fromDisplay = getAddressDisplay(item.fromAddress, item.ensFromName);
+            const toDisplay = item.toAddress
+              ? getAddressDisplay(item.toAddress, item.ensToName)
+              : { primary: addressMap?.name ?? "" };
+
+            const alreadyContact = isIncoming && item.fromAddress
+              ? isSenderAlreadyContact(item.fromAddress, item.chainId, item.ensFromName)
+              : true;
 
             return (
               <li key={item.id} className="w-full">
                 <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
                   <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[160px_90px_minmax(0,1fr)_110px] sm:items-start">
-                    {/* Col 1: Sender */}
-                    <div className="min-w-0 font-medium">Sender: {folioName}</div>
+                    {/* Col 1: Direction + folio */}
+                    <div className="min-w-0 font-medium">
+                      {isIncoming ? (
+                        <span title="Incoming">← {folioName}</span>
+                      ) : (
+                        <span title="Outgoing">→ {folioName}</span>
+                      )}
+                    </div>
 
                     {/* Col 2: Coin + Chain */}
                     <div className="min-w-0 text-xs text-muted-foreground sm:pt-1">
                       <div>{coinSymbol}</div>
+                      {item.amount && <div className="font-mono">{item.amount}</div>}
                       <div>{chainName}</div>
                     </div>
 
-                    {/* Col 3: Receiver + tx hashes */}
+                    {/* Col 3: From/To + tx hashes */}
                     <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">Receiver: {addressName}</div>
+                      {isIncoming ? (
+                        <div className="text-xs text-muted-foreground">
+                          From:{" "}
+                          <span title={item.fromAddress} className="font-mono">
+                            {fromDisplay.primary}
+                          </span>
+                          {fromDisplay.secondary && (
+                            <span className="ml-1 text-muted">({fromDisplay.secondary})</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          To:{" "}
+                          <span title={item.toAddress} className="font-mono">
+                            {toDisplay.primary}
+                          </span>
+                          {toDisplay.secondary && (
+                            <span className="ml-1 text-muted">({toDisplay.secondary})</span>
+                          )}
+                        </div>
+                      )}
                       <div
                         className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
                         title={item.transactionHash ?? ""}
                       >
                         Tx: {item.transactionHash}
                       </div>
-                      <div
-                        className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
-                        title={item.userOpHash ?? ""}
-                      >
-                        UserOp: {item.userOpHash}
-                      </div>
+                      {!isIncoming && (
+                        <div
+                          className="mt-0.5 text-xs text-muted-foreground font-mono break-words sm:truncate sm:break-normal"
+                          title={item.userOpHash ?? ""}
+                        >
+                          UserOp: {item.userOpHash}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Col 4: View on Etherscan */}
-                    <div className="justify-self-start sm:justify-self-end">
+                    {/* Col 4: Actions */}
+                    <div className="justify-self-start sm:justify-self-end flex flex-col gap-1">
                       <button
                         className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
                         disabled={!item.transactionHash || !domain?.transactionUrl}
@@ -908,6 +1145,14 @@ export function Transactions() {
                       >
                         View on Explorer
                       </button>
+                      {isIncoming && !alreadyContact && item.fromAddress && (
+                        <button
+                          className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted"
+                          onClick={() => handleAddContact(item.chainId, item.fromAddress!, item.ensFromName)}
+                        >
+                          Add Contact
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1033,8 +1278,6 @@ export function Transactions() {
                   onChange={(e) => {
                     setSelectedFnName(e.target.value);
                     setArgValues({});
-                    //setSelector(null);
-                    //setCalldata(null);
                     setReadResult(null);
                     setError(null);
                   }}
@@ -1099,6 +1342,8 @@ export function Transactions() {
                       st.mode === "folio" ? folios :
                         [];
 
+                const ensState = ensResolutionState[key];
+
                 return (
                   <div key={key} className="space-y-1">
                     <div className="min-w-0">
@@ -1118,6 +1363,11 @@ export function Transactions() {
                             ...prev,
                             [key]: { mode, manual: "", selectedIndex: null },
                           }));
+                          setEnsResolutionState(prev => {
+                            const next = { ...prev };
+                            delete next[key];
+                            return next;
+                          });
                         }}
                       >
                         <option value="manual">Manual</option>
@@ -1130,18 +1380,26 @@ export function Transactions() {
                     {/* second control */}
                     <div className="min-w-0">
                       {st.mode === "manual" ? (
-                        <input
-                          className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
-                          value={st.manual}
-                          onChange={(e) => {
-                            const manual = e.target.value;
-                            setAddressFieldState((prev) => ({
-                              ...prev,
-                              [key]: { ...st, manual },
-                            }));
-                          }}
-                          placeholder="0x…"
-                        />
+                        <>
+                          <input
+                            className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                            value={st.manual}
+                            onChange={(e) => handleManualAddressChange(key, st, e.target.value)}
+                            onBlur={(e) => handleManualAddressBlur(key, e.target.value)}
+                            placeholder="0x… or name.eth"
+                          />
+                          {ensState?.status === "resolving" && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">Resolving ENS…</div>
+                          )}
+                          {ensState?.status === "resolved" && (
+                            <div className="mt-0.5 text-xs text-green-600">
+                              Resolved: {ensState.resolvedAddress}
+                            </div>
+                          )}
+                          {ensState?.status === "not-found" && (
+                            <div className="mt-0.5 text-xs text-red-600">ENS name not found</div>
+                          )}
+                        </>
                       ) : (
                         <select
                           className="h-9 w-[180px] rounded-md border border-border bg-card px-2 text-sm text-foreground"

@@ -14,6 +14,7 @@ import { DisplayNameModal } from "../components/ui/DisplayNameModal";
 import { buildProfileShareFromFolios } from "../lib/shareBuilders";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
 import { getUUID } from "@/storage/authStore";
+import { WelcomePopup } from "../components/ui/WelcomePopup";
 
 type SubmitState =
   | { status: "idle" }
@@ -206,6 +207,7 @@ export function Folios() {
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
   const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<any>(null);
+  const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -763,6 +765,17 @@ export function Folios() {
         </div>,
         document.body
       ) : null}
+
+      {/* Welcome popup — shown once when the user has no folios yet */}
+      {!loading && !dLoading && folios.length === 0 && !welcomeDismissed && (
+        <WelcomePopup
+          onDismiss={() => setWelcomeDismissed(true)}
+          onGetStarted={() => {
+            setWelcomeDismissed(true);
+            openAddModal();
+          }}
+        />
+      )}
 
       {/* Modal */}
       {folioToDelete && (
