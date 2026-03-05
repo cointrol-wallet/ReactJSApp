@@ -58,18 +58,6 @@ The first time you sign in, the app will:
 
 ![Terms and Conditions modal](/user-guide/images/01-terms-modal.png)
 
-### Welcome guide
-
-When you first sign in with an empty portfolio, a short welcome guide will walk you through the key features:
-
-![Welcome slide](/user-guide/images/00-onboarding-welcome.png)
-
-![Create your first account slide](/user-guide/images/00-onboarding-create.png)
-
-![Name your portfolio slide](/user-guide/images/00-onboarding-name.png)
-
-![Share your profile slide](/user-guide/images/00-onboarding-share.png)
-
 ### Staying signed in
 
 The app keeps you signed in between visits. However, for your security, if you have not done anything in the app for **30 minutes**, you will be automatically signed out.  You will also be signed out if you close the tab/window.
