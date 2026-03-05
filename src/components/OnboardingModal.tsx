@@ -3,19 +3,16 @@ import { createPortal } from "react-dom";
 
 type Slide = {
   title: string;
+  image: string;
   body: React.ReactNode;
 };
 
 const SLIDES: Slide[] = [
   {
     title: "Welcome to Cointrol",
+    image: "/user-guide/images/00-onboarding-welcome.png",
     body: (
       <>
-        <img
-          src="/user-guide/images/00-onboarding-welcome.png"
-          alt="Welcome to Cointrol"
-          style={{ width: "100%", borderRadius: 8, marginBottom: 12, display: "block" }}
-        />
         <p className="text-sm text-muted-foreground leading-relaxed">
           This is a demonstration wallet running on{" "}
           <strong>Ethereum Sepolia testnet</strong>. All coins and transactions
@@ -29,53 +26,35 @@ const SLIDES: Slide[] = [
   },
   {
     title: "Create your first account",
+    image: "/user-guide/images/00-onboarding-create.png",
     body: (
-      <>
-        <img
-          src="/user-guide/images/00-onboarding-create.png"
-          alt="Create your first account"
-          style={{ width: "100%", borderRadius: 8, marginBottom: 12, display: "block" }}
-        />
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Tap the <strong>Create account</strong> button on the Portfolio screen to create your
-          first account (called a <em>folio</em>). Each folio is a smart-contract
-          wallet on the blockchain. You can give it any name you like.
-        </p>
-      </>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        Tap the <strong>Create account</strong> button on the Portfolio screen to create your
+        first account (called a <em>folio</em>). Each folio is a smart-contract
+        wallet on the blockchain. You can give it any name you like.
+      </p>
     ),
   },
   {
     title: "Name your portfolio",
+    image: "/user-guide/images/00-onboarding-name.png",
     body: (
-      <>
-        <img
-          src="/user-guide/images/00-onboarding-name.png"
-          alt="Name your portfolio"
-          style={{ width: "100%", borderRadius: 8, marginBottom: 12, display: "block" }}
-        />
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Once your account is created, tap the <strong>Set display name</strong> button. Enter your
-          preferred name to be included when you share your profile through a QR code to other wallet
-          holders.
-        </p>
-      </>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        Once your account is created, tap the <strong>Set display name</strong> button. Enter your
+        preferred name to be included when you share your profile through a QR code to other wallet
+        holders.
+      </p>
     ),
   },
   {
     title: "Share your profile",
+    image: "/user-guide/images/00-onboarding-share.png",
     body: (
-      <>
-        <img
-          src="/user-guide/images/00-onboarding-share.png"
-          alt="Share your profile"
-          style={{ width: "100%", borderRadius: 8, marginBottom: 12, display: "block" }}
-        />
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Use the <strong>Share</strong> button on your Portfolio screen to
-          generate a QR code. Others can scan it to add your address as a contact
-          instantly — no typing required.
-        </p>
-      </>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        Use the <strong>Share</strong> button on your Portfolio screen to
+        generate a QR code. Others can scan it to add your address as a contact
+        instantly — no typing required.
+      </p>
     ),
   },
 ];
@@ -137,6 +116,16 @@ export function OnboardingModal({
               }`}
             />
           ))}
+        </div>
+
+        {/* Slide image — fixed height so modal doesn't resize between slides */}
+        <div style={{ height: 200, width: "100%", marginBottom: 12 }}>
+          <img
+            src={current.image}
+            alt={current.title}
+            style={{ width: "100%", height: "100%", objectFit: "contain",
+                     borderRadius: 8, display: "block" }}
+          />
         </div>
 
         {/* Content */}
