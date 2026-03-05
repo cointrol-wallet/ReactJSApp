@@ -19,7 +19,7 @@ const SLIDES: Slide[] = [
           are for testing purposes only and have no real monetary value.
         </p>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          This guide will walk you through the key features of your wallet.
+          This guide will walk you through the key steps to get a wallet set up.
         </p>
       </>
     ),
@@ -36,7 +36,7 @@ const SLIDES: Slide[] = [
     ),
   },
   {
-    title: "Name your portfolio",
+    title: "Set your name for profile sharing",
     image: "/user-guide/images/00-onboarding-name.png",
     body: (
       <p className="text-sm text-muted-foreground leading-relaxed">
