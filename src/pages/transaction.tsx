@@ -966,8 +966,34 @@ export function Transactions() {
   ): { primary: string; secondary?: string } {
     if (!addr) return { primary: "Unknown" };
     const short = `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    const addrLower = addr.toLowerCase();
+
+    // Check contacts (match by wallet address)
+    const matchedContact = contacts.find(c =>
+      c.wallets?.some(w => w.address.toLowerCase() === addrLower)
+    );
+    if (matchedContact) {
+      const name = matchedContact.surname
+        ? `${matchedContact.name} ${matchedContact.surname}`
+        : matchedContact.name;
+      return { primary: name, secondary: short };
+    }
+
+    // Check contracts
+    const matchedContract = contracts.find(c => c.address.toLowerCase() === addrLower);
+    if (matchedContract) return { primary: matchedContract.name, secondary: short };
+
+    // Check coins
+    const matchedCoin = coins.find(c => c.address.toLowerCase() === addrLower);
+    if (matchedCoin) return { primary: matchedCoin.name, secondary: short };
+
+    // Check folios
+    const matchedFolio = folios.find(f => f.address.toLowerCase() === addrLower);
+    if (matchedFolio) return { primary: matchedFolio.name, secondary: short };
+
+    // Fall back to stored/cached ENS name, then short address
     if (storedEnsName) return { primary: storedEnsName, secondary: short };
-    const cached = ensLookupCache[addr.toLowerCase()];
+    const cached = ensLookupCache[addrLower];
     if (cached) return { primary: cached, secondary: short };
     return { primary: short };
   }
