@@ -1,10 +1,12 @@
 /**
- * Signing lifecycle tests — Phase B security fixes.
+ * Signing lifecycle tests — Phase B security fixes + Phase 3 expansions.
  *
  * Verifies that:
  *  1. createQuantumAccount (wallets.ts) terminates the worker after signing.
  *  2. createQuantumAccount zeros the SK buffer after signing.
- *  3. The submitTransaction store action terminates the worker after signing.
+ *  3. SK is zeroed and worker is terminated even when the network call fails.
+ *  4. Each createQuantumAccount call gets a fresh worker client.
+ *  5. The useTx store action terminates the worker after signing.
  *
  * All heavy I/O dependencies (Firebase, viem network calls, BundlerAPI,
  * PaymasterAPI) are mocked so only the local signing-lifecycle code runs.
@@ -13,28 +15,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
-// Shared mock: falcon worker client
+// vi.hoisted — must run before vi.mock factories and before module imports.
+// All variables used inside vi.mock factory bodies must come from here.
 // ---------------------------------------------------------------------------
 
-const mockSign = vi.fn();
-const mockTerminate = vi.fn();
-
-vi.mock("@/crypto/falconInterface", () => ({
-  createFalconWorkerClient: () => ({
-    sign: mockSign,
-    terminate: mockTerminate,
+const { mockSign, mockTerminate, mockCreateWorker, fakeSk } = vi.hoisted(() => {
+  const ms = vi.fn();
+  const mt = vi.fn();
+  const mcw = vi.fn().mockReturnValue({
+    sign: ms,
+    terminate: mt,
     init: vi.fn(),
     verify: vi.fn(),
     generateKeypair: vi.fn(),
-  }),
+  });
+  const sk = new Uint8Array([1, 2, 3, 4]); // spy-able SK buffer
+  return { mockSign: ms, mockTerminate: mt, mockCreateWorker: mcw, fakeSk: sk };
+});
+
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+
+vi.mock("@/crypto/falconInterface", () => ({
+  createFalconWorkerClient: mockCreateWorker,
 }));
-
-// ---------------------------------------------------------------------------
-// Mocks for wallets.ts dependencies
-// ---------------------------------------------------------------------------
-
-// A fake SK that we can spy on — we need to check fill(0) was called.
-const fakeSk = new Uint8Array([1, 2, 3, 4]);
 
 vi.mock("@/storage/keyStore", () => ({
   getFalconPublicKey: vi.fn().mockResolvedValue(new Uint8Array([9, 8, 7])),
@@ -51,7 +56,7 @@ vi.mock("@/lib/submitTransaction", async (importOriginal) => {
   return {
     ...mod,
     PaymasterAPI: {
-      createNewAccount: vi.fn().mockResolvedValue({ success: true }),
+      createNewAccount: vi.fn().mockResolvedValue({ success: true, result: "ok" }),
       estimateGas: vi.fn().mockResolvedValue({ result: null }),
       submit: vi.fn().mockResolvedValue({ success: true }),
       getTxReceipt: vi.fn().mockResolvedValue({ success: false }),
@@ -63,7 +68,7 @@ vi.mock("@/lib/bytesEncoder", () => ({
   createAccountToBytes: vi.fn().mockReturnValue(new Uint8Array([0xab, 0xcd])),
 }));
 
-// viem — only mock what wallets.ts actually uses at module level
+// Keep the real viem crypto utilities; only override the browser-env helpers
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
@@ -73,46 +78,100 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
+vi.mock("viem/chains", () => ({ sepolia: { id: 11155111 } }));
+
 // ---------------------------------------------------------------------------
 // Tests: wallets.ts — createQuantumAccount
 // ---------------------------------------------------------------------------
 
+const VALID_SENDER = "0x1234567890123456789012345678901234567890";
+
 describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     fakeSk.set([1, 2, 3, 4]); // reset the SK to non-zero before each test
     mockSign.mockResolvedValue(new Uint8Array([0xaa, 0xbb, 0xcc]));
+    // Restore the default success implementation after any test that overrides it
+    const { PaymasterAPI } = await import("@/lib/submitTransaction");
+    vi.mocked(PaymasterAPI.createNewAccount).mockResolvedValue({ success: true, result: "ok" });
+    // Restore worker factory return value
+    mockCreateWorker.mockReturnValue({
+      sign: mockSign,
+      terminate: mockTerminate,
+      init: vi.fn(),
+      verify: vi.fn(),
+      generateKeypair: vi.fn(),
+    });
   });
 
   it("terminates the worker after signing", async () => {
     const { createQuantumAccount } = await import("../wallets");
-
-    await createQuantumAccount({
-      sender: "0x1234567890123456789012345678901234567890",
-      domain: "test.domain",
-      salt: "test-salt",
-    });
+    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
 
     expect(mockSign).toHaveBeenCalledOnce();
     expect(mockTerminate).toHaveBeenCalledOnce();
-    // terminate must be called AFTER sign
-    const signOrder = mockSign.mock.invocationCallOrder[0];
-    const terminateOrder = mockTerminate.mock.invocationCallOrder[0];
-    expect(terminateOrder).toBeGreaterThan(signOrder);
+    // terminate must come AFTER sign
+    expect(mockTerminate.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockSign.mock.invocationCallOrder[0],
+    );
   });
 
   it("zeros the SK buffer after signing", async () => {
     const { createQuantumAccount } = await import("../wallets");
-
-    await createQuantumAccount({
-      sender: "0x1234567890123456789012345678901234567890",
-      domain: "test.domain",
-      salt: "test-salt",
-    });
+    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
 
     expect(mockSign).toHaveBeenCalledOnce();
-    // The fakeSk instance should have been zeroed via fill(0)
+    // fakeSk should have been zeroed via fill(0)
     expect(fakeSk.every((b) => b === 0)).toBe(true);
+  });
+
+  it("zeros the SK before calling PaymasterAPI (so SK is cleared even when the network fails)", async () => {
+    const { PaymasterAPI } = await import("@/lib/submitTransaction");
+    vi.mocked(PaymasterAPI.createNewAccount).mockRejectedValueOnce(new Error("network error"));
+    const { createQuantumAccount } = await import("../wallets");
+
+    await expect(
+      createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" }),
+    ).rejects.toThrow("network error");
+
+    // sign completed → sk.fill(0) ran → all bytes must be zero
+    expect(fakeSk.every((b) => b === 0)).toBe(true);
+  });
+
+  it("terminates the worker before calling PaymasterAPI (worker is cleared even when the network fails)", async () => {
+    const { PaymasterAPI } = await import("@/lib/submitTransaction");
+    vi.mocked(PaymasterAPI.createNewAccount).mockRejectedValueOnce(new Error("network error"));
+    const { createQuantumAccount } = await import("../wallets");
+
+    await expect(
+      createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" }),
+    ).rejects.toThrow("network error");
+
+    expect(mockTerminate).toHaveBeenCalledOnce();
+  });
+
+  it("returns true when PaymasterAPI reports success", async () => {
+    const { createQuantumAccount } = await import("../wallets");
+    const result = await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    expect(result).toBe(true);
+  });
+
+  it("returns false when PaymasterAPI reports failure", async () => {
+    const { PaymasterAPI } = await import("@/lib/submitTransaction");
+    vi.mocked(PaymasterAPI.createNewAccount).mockResolvedValueOnce({ success: false, result: "rejected" });
+    const { createQuantumAccount } = await import("../wallets");
+    const result = await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    expect(result).toBe(false);
+  });
+
+  it("creates a fresh worker client on each call", async () => {
+    const { createQuantumAccount } = await import("../wallets");
+
+    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+
+    // Each invocation of createQuantumAccount must spin up its own isolated worker
+    expect(mockCreateWorker).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -123,8 +182,6 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
 // The zustand store is complex; we test terminate() behaviour by checking the
 // falconInterface mock is called in the right order when the store action runs.
 // We stub out everything except the falcon client lifecycle.
-
-vi.mock("viem/chains", () => ({ sepolia: { id: 11155111 } }));
 
 describe("submitTransaction store — terminate after signing", () => {
   beforeEach(() => {

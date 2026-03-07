@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Github, Facebook, Twitter } from "lucide-react";
 import { toast } from "sonner";
 import {
   signInWithPopup,
@@ -12,11 +11,11 @@ import {
   facebookProvider,
   twitterProvider,
   githubProvider,
-  // appleProvider, // Uncomment to add Apple Sign-In (also uncomment the button below)
+  appleProvider,
+  microsoftProvider,
 } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { isFirstTimeUser, setTermsAccepted } from "../storage/authStore";
-import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import logo from "../assets/logo.png";
 import { SocialButtons } from "@/components/ui/SocialButtons";
@@ -31,6 +30,9 @@ export function LoginPage() {
   );
   const [signingIn, setSigningIn] = useState(false);
 
+  const inAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|MicroMessenger|Snapchat|WhatsApp|TikTok|WebView|wv\b/i
+    .test(navigator.userAgent);
+
   // Determine first-time vs returning on mount
   useEffect(() => {
     isFirstTimeUser().then(setFirstTime);
@@ -42,12 +44,13 @@ export function LoginPage() {
   }, [firebaseUser, navigate]);
 
   const providerMap = {
-  google: googleProvider,
-  //apple: appleProvider,
-  github: githubProvider,
-  x: twitterProvider,
-  facebook: facebookProvider,
-} as const;
+    google: googleProvider,
+    apple: appleProvider,
+    microsoft: microsoftProvider,
+    github: githubProvider,
+    x: twitterProvider,
+    facebook: facebookProvider,
+  } as const;
 
   const signIn = async (provider: AuthProvider) => {
     if (signingIn) return;
@@ -73,8 +76,44 @@ export function LoginPage() {
 
   const buttonsDisabled = signingIn || (firstTime === true && !termsChecked);
 
+  if (inAppBrowser) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="flex justify-center">
+            <img src={logo} alt="Cointrol Wallet" style={{ height: 56, width: "auto" }} />
+          </div>
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-center text-xl">Open in your browser</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-2 text-center">
+              <p className="text-sm text-muted-foreground">
+                Sign-in requires a secure browser and won't work inside this app.
+                Tap below to open Cointrol Wallet in Chrome or Safari.
+              </p>
+              <button
+                type="button"
+                onClick={() => window.open("https://wallet.cointrol.co", "_blank")}
+                className="w-full h-12 rounded-xl bg-foreground text-background text-[15px] font-medium
+                  hover:opacity-90 active:scale-[0.99] transition"
+              >
+                Open in Browser
+              </button>
+              <p className="text-xs text-muted-foreground">
+                If the button doesn't work, copy this address into your browser:
+                <br />
+                <span className="font-mono select-all">wallet.cointrol.co</span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-[100dvh] bg-background flex items-center justify-center px-4">
+    <div className="min-h-dvh bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex justify-center">
           <img src={logo} alt="Cointrol Wallet" style={{ height: 56, width: "auto" }} />

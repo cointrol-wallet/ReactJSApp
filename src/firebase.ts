@@ -6,6 +6,7 @@ import {
   FacebookAuthProvider,
   TwitterAuthProvider,
   GithubAuthProvider,
+  OAuthProvider,
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -32,7 +33,9 @@ export const facebookProvider = new FacebookAuthProvider();
 export const twitterProvider = new TwitterAuthProvider();
 export const githubProvider = new GithubAuthProvider();
 
-// Apple — uncomment to add Apple Sign-In (requires Apple Developer account configured in Firebase console)
-// export const appleProvider = new OAuthProvider('apple.com');
-// appleProvider.addScope('email');
-// appleProvider.addScope('name');
+export const appleProvider = new OAuthProvider('apple.com');
+appleProvider.addScope('email');
+appleProvider.addScope('name');
+
+export const microsoftProvider = new OAuthProvider('microsoft.com');
+microsoftProvider.addScope('email');
