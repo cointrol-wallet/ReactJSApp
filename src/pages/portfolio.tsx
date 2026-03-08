@@ -222,7 +222,7 @@ export function Folios() {
     addCoin,
     deleteCoin,
     updateCoin,
-  } = useCoinList({ query, sortMode: "nameAsc", tags, tagMode, standard: "", chainId });
+  } = useCoinList({ sortMode: "nameAsc", standard: "", chainId });
 
   const {
     folios,
@@ -323,9 +323,19 @@ export function Folios() {
     };
   }, [isModalOpen]);
 
+  const filteredPortfolio = React.useMemo(() => {
+    if (!tags || tags.length === 0) return mapPortfolio;
+    return mapPortfolio.filter(item => {
+      const coin = coins.find(c => c.id === item.coinId);
+      if (!coin) return true; // folio with no wallets yet — always show
+      if (tagMode === "any") return coin.tags?.some(t => tags.includes(t)) ?? false;
+      return tags.every(t => coin.tags?.includes(t) ?? false);
+    });
+  }, [mapPortfolio, coins, tags, tagMode]);
+
   const sortedPortfolio = React.useMemo(() => {
-    return sortPortfolio(mapPortfolio, folios, coins, primarySortMode, secondarySortMode);
-  }, [mapPortfolio, folios, coins, primarySortMode, secondarySortMode]);
+    return sortPortfolio(filteredPortfolio, folios, coins, primarySortMode, secondarySortMode);
+  }, [filteredPortfolio, folios, coins, primarySortMode, secondarySortMode]);
 
   function formatBalance(balance: bigint, decimals: number): string {
     if (decimals <= 0) return balance.toString();
