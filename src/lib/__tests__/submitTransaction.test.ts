@@ -359,7 +359,7 @@ describe("useTx store", () => {
 
   it("startFlow calls sign and terminate on the Falcon worker", async () => {
     vi.spyOn(BundlerAPI, "submit").mockResolvedValue({ success: true, signed_tx: "0x", result: "ok" });
-    vi.spyOn(BundlerAPI, "getTxReceipt").mockResolvedValue({ success: false, txHash: "0x" as `0x${string}` });
+    vi.spyOn(BundlerAPI, "getTxReceipt").mockResolvedValue({ success: true, txHash: "0xfinalized" as `0x${string}` });
 
     await useTx.getState().startFlow({
       folio: MOCK_FOLIO as any,
@@ -373,7 +373,7 @@ describe("useTx store", () => {
     expect(mockTerminate.mock.invocationCallOrder[0]).toBeGreaterThan(
       mockSign.mock.invocationCallOrder[0],
     );
-  }, 60_000); // generous timeout for the polling loop in startFlow
+  });
 
   it("startFlow terminates the worker even when BundlerAPI fails", async () => {
     vi.spyOn(BundlerAPI, "submit").mockRejectedValue(new Error("network error"));
