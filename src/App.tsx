@@ -1,5 +1,5 @@
 import React from "react";
-import { HashRouter, Routes, Route, Link, NavLink, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Link, NavLink, Navigate, useLocation } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
@@ -257,6 +257,14 @@ function NavDropItem({
 }
 
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  React.useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 // --- UI Shell & Navigation ---
 function AppShell({ children, onOpenScan }: {
   children: React.ReactNode,
@@ -437,6 +445,7 @@ function ProtectedApp() {
 export default function App() {
   return (
     <HashRouter>
+      <ScrollToTop />
       <AuthProvider>
         <FalconProvider>
           <React.Suspense fallback={
