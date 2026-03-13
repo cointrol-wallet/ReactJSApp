@@ -51,9 +51,16 @@ export function ShareQrModal({
         canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png")
       );
 
+      let wroteToClipboard = false;
       if (navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
-      } else {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+          wroteToClipboard = true;
+        } catch {
+          // image clipboard not supported (e.g. Android Chrome) — fall through to download
+        }
+      }
+      if (!wroteToClipboard) {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(pngBlob);
         a.download = "cointrol-qr.png";

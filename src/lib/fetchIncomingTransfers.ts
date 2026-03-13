@@ -35,7 +35,7 @@ export async function fetchIncomingTransfers(
   mainnetRpcUrl?: string
 ): Promise<Txn[]> {
   const ensRpc = mainnetRpcUrl ?? CLOUDFLARE_ETH_RPC;
-  const client = createPublicClient({ transport: http(rpcUrl) });
+  const client = createPublicClient({ transport: http(rpcUrl, { timeout: 30_000 }) });
 
   // Determine block range
   const latestBlock = await client.getBlockNumber();
