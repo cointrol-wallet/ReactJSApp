@@ -1,8 +1,9 @@
 import { get, set } from "idb-keyval";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const FOLIO_KEY = "cointrol:folios:v1";
+function folioKey() { return `cointrol:folios:v1:${getCurrentUser()}`; }
 const FOLIO_SCHEMA_VERSION_KEY = "cointrol:folios:schemaVersion";
 const CURRENT_FOLIO_SCHEMA_VERSION = 1;
 
@@ -74,7 +75,7 @@ async function ensureFoliosSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let folios = await get<Folio[] | undefined>(FOLIO_KEY);
+  let folios = await get<Folio[] | undefined>(folioKey());
   if (!folios) folios = [];
 
   // Example future migration (v1 → v2):
@@ -99,12 +100,12 @@ async function ensureFoliosSchemaMigrated(): Promise<void> {
 
 async function loadFoliosRaw(): Promise<Folio[]> {
   await ensureFoliosSchemaMigrated();
-  const folios = await get<Folio[] | undefined>(FOLIO_KEY);
+  const folios = await get<Folio[] | undefined>(folioKey());
   return folios ?? [];
 }
 
 async function saveFoliosRaw(folios: Folio[]): Promise<void> {
-  await set(FOLIO_KEY, folios);
+  await set(folioKey(), folios);
   notifyFoliosUpdated(folios);
 }
 

@@ -13,6 +13,7 @@ const Terms        = React.lazy(() => import("./pages/legal").then(m => ({ defau
 const Privacy      = React.lazy(() => import("./pages/legal").then(m => ({ default: m.Privacy })));
 const Transactions = React.lazy(() => import("./pages/transaction").then(m => ({ default: m.Transactions })));
 const LoginPage    = React.lazy(() => import("./pages/LoginPage").then(m => ({ default: m.LoginPage })));
+const RegisterPage = React.lazy(() => import("./pages/RegisterPage").then(m => ({ default: m.RegisterPage })));
 const UserGuide    = React.lazy(() => import("./pages/userGuide").then(m => ({ default: m.UserGuide })));
 import { initWallet } from "./lib/wallets";
 import logo from "./assets/logo.png";
@@ -456,6 +457,7 @@ export default function App() {
             <Routes>
               {/* Public routes */}
               <Route path="login" element={<LoginPage />} />
+              <Route path="register" element={<RegisterPage />} />
               <Route path="legal/terms" element={<Terms />} />
               <Route path="legal/privacy" element={<Privacy />} />
               <Route path="user-guide" element={<UserGuide />} />

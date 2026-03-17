@@ -1,8 +1,9 @@
 import { get, set } from "idb-keyval";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const ADDRESS_KEY = "cointrol:address:v1";
+function addressKey() { return `cointrol:address:v1:${getCurrentUser()}`; }
 const ADDRESS_SCHEMA_VERSION_KEY = "cointrol:address:schemaVersion";
 const CURRENT_ADDRESS_SCHEMA_VERSION = 1;
 
@@ -63,7 +64,7 @@ async function ensureAddressSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let addresss = await get<Address[] | undefined>(ADDRESS_KEY);
+  let addresss = await get<Address[] | undefined>(addressKey());
   if (!addresss) addresss = [];
 
   // Example future migration (v1 → v2):
@@ -88,12 +89,12 @@ async function ensureAddressSchemaMigrated(): Promise<void> {
 
 async function loadAddressRaw(): Promise<Address[]> {
   await ensureAddressSchemaMigrated();
-  const addresss = await get<Address[] | undefined>(ADDRESS_KEY);
+  const addresss = await get<Address[] | undefined>(addressKey());
   return addresss ?? [];
 }
 
 async function saveAddressRaw(addresss: Address[]): Promise<void> {
-  await set(ADDRESS_KEY, addresss);
+  await set(addressKey(), addresss);
   notifyAddressUpdated(addresss);
 }
 

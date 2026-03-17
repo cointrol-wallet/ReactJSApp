@@ -1,8 +1,9 @@
 import { get, set } from "idb-keyval";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const TXN_KEY = "cointrol:txns:v1";
+function txnKey() { return `cointrol:txns:v1:${getCurrentUser()}`; }
 const TXN_SCHEMA_VERSION_KEY = "cointrol:txns:schemaVersion";
 const CURRENT_TXN_SCHEMA_VERSION = 2;
 
@@ -73,7 +74,7 @@ async function ensureTxnSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let txns = await get<any[] | undefined>(TXN_KEY);
+  let txns = await get<any[] | undefined>(txnKey());
   if (!txns) txns = [];
 
   if (storedVersion < 2) {
@@ -81,7 +82,7 @@ async function ensureTxnSchemaMigrated(): Promise<void> {
       ...t,
       direction: t.direction ?? "outgoing",
     }));
-    await set(TXN_KEY, migrated);
+    await set(txnKey(), migrated);
     await setTxnSchemaVersion(2);
   }
 }
@@ -90,12 +91,12 @@ async function ensureTxnSchemaMigrated(): Promise<void> {
 
 async function loadTxnsRaw(): Promise<Txn[]> {
   await ensureTxnSchemaMigrated();
-  const txns = await get<Txn[] | undefined>(TXN_KEY);
+  const txns = await get<Txn[] | undefined>(txnKey());
   return txns ?? [];
 }
 
 async function saveTxnsRaw(txns: Txn[]): Promise<void> {
-  await set(TXN_KEY, txns);
+  await set(txnKey(), txns);
   notifyTxnsUpdated(txns);
 }
 

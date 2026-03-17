@@ -1,9 +1,10 @@
 import { get, set } from "idb-keyval";
 import { addAddress, deleteAddress, updateAddress } from "./addressStore";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const CONTRACTS_KEY = "cointrol:contracts:v1";
+function contractsKey() { return `cointrol:contracts:v1:${getCurrentUser()}`; }
 const CONTRACTS_SCHEMA_VERSION_KEY = "cointrol:contracts:schemaVersion";
 const CURRENT_CONTRACTS_SCHEMA_VERSION = 1;
 
@@ -64,7 +65,7 @@ async function ensureContractsSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let contracts = await get<Contract[] | undefined>(CONTRACTS_KEY);
+  let contracts = await get<Contract[] | undefined>(contractsKey());
   if (!contracts) contracts = [];
 
   // Example future migration (v1 → v2):
@@ -89,12 +90,12 @@ async function ensureContractsSchemaMigrated(): Promise<void> {
 
 async function loadContractsRaw(): Promise<Contract[]> {
   await ensureContractsSchemaMigrated();
-  const contracts = await get<Contract[] | undefined>(CONTRACTS_KEY);
+  const contracts = await get<Contract[] | undefined>(contractsKey());
   return contracts ?? [];
 }
 
 async function saveContractsRaw(contracts: Contract[]): Promise<void> {
-  await set(CONTRACTS_KEY, contracts);
+  await set(contractsKey(), contracts);
   notifyContractsUpdated(contracts);
 }
 

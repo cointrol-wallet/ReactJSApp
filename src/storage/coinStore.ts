@@ -1,11 +1,12 @@
 import { get, set } from "idb-keyval";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const COIN_KEY = "cointrol:coins:v1";
+function coinKey() { return `cointrol:coins:v1:${getCurrentUser()}`; }
 const COIN_SCHEMA_VERSION_KEY = "cointrol:coins:schemaVersion";
 const CURRENT_COIN_SCHEMA_VERSION = 1;
-const BUILTIN_COIN_TAGS_KEY = "cointrol:builtin-coin-tags:v1";
+function builtinCoinTagsKey() { return `cointrol:builtin-coin-tags:v1:${getCurrentUser()}`; }
 
 // Contact schema v1
 export type Coin = {
@@ -87,7 +88,7 @@ export function subscribeToCoins(listener: coinListener): () => void {
 }
 
 async function getBuiltinCoinTags(): Promise<Record<string, string[]>> {
-  return (await get<Record<string, string[]> | undefined>(BUILTIN_COIN_TAGS_KEY)) ?? {};
+  return (await get<Record<string, string[]> | undefined>(builtinCoinTagsKey())) ?? {};
 }
 
 // --- Schema migration scaffolding -------------------------------------------
@@ -115,7 +116,7 @@ async function ensureCoinsSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let coins = await get<Coin[] | undefined>(COIN_KEY);
+  let coins = await get<Coin[] | undefined>(coinKey());
   if (!coins) coins = [];
 
   // Example future migration (v1 → v2):
@@ -140,12 +141,12 @@ async function ensureCoinsSchemaMigrated(): Promise<void> {
 
 async function loadCoinsRaw(): Promise<Coin[]> {
   await ensureCoinsSchemaMigrated();
-  const coins = await get<Coin[] | undefined>(COIN_KEY);
+  const coins = await get<Coin[] | undefined>(coinKey());
   return coins ?? [];
 }
 
 async function saveCoinsRaw(coins: Coin[]): Promise<void> {
-  await set(COIN_KEY, coins);
+  await set(coinKey(), coins);
   await notifyCoinsUpdated(coins);
 }
 
@@ -199,7 +200,7 @@ export async function updateCoin(
     if (patch.tags !== undefined) {
       const builtinTags = await getBuiltinCoinTags();
       builtinTags[id] = patch.tags;
-      await set(BUILTIN_COIN_TAGS_KEY, builtinTags);
+      await set(builtinCoinTagsKey(), builtinTags);
       const userCoins = await loadCoinsRaw();
       await notifyCoinsUpdated(userCoins);
     }

@@ -9,12 +9,13 @@ import { get, set } from "idb-keyval";
 import { type Txn } from "@/storage/transactionStore";
 import { getAllCoins, type Coin } from "@/storage/coinStore";
 import { resolveEnsAddress } from "./ens";
+import { getCurrentUser } from "@/storage/currentUser";
 
 const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 const CLOUDFLARE_ETH_RPC = "https://cloudflare-eth.com";
 
 function lastFetchedBlockKey(chainId: number): string {
-  return `cointrol:txns:lastFetchedBlock:${chainId}`;
+  return `cointrol:txns:lastFetchedBlock:${getCurrentUser()}:${chainId}`;
 }
 
 /**

@@ -5,49 +5,13 @@ import {
   setPersistence, signOut as firebaseSignOut
 } from "firebase/auth";
 import { auth } from "../firebase";
-import { getUUID, setUUID, setTermsAccepted } from "../storage/authStore";
+import {
+  isRegistered,
+  getRegisteredUser,
+  migrateIfNeeded,
+} from "../storage/authStore";
 import { initKeyStore, clearKeyStore } from "../storage/keyStore";
-import { bytesToHex } from "viem";
-
-async function ensureDeviceUuid(): Promise<string> {
-  const existing = await getUUID();
-  if (existing) return existing;
-  if (!auth.currentUser) {
-    throw new Error("User not authenticated");
-  }
-  const salt = await deriveUserSalt(auth.currentUser!.uid);
-
-  const newUuid = bytesToHex(salt);
-
-  await setUUID(newUuid);
-  return newUuid;
-}
-
-async function deriveUserSalt(uid: string): Promise<Uint8Array> {
-  const enc = new TextEncoder();
-
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(uid),
-    "HKDF",
-    false,
-    ["deriveBits"]
-  );
-
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: enc.encode("Cointrol QuantumAccount v1"),
-      info: enc.encode("Account Generation Salt"),
-    },
-    keyMaterial,
-    256
-  );
-
-  return new Uint8Array(bits);
-}
-
+import { setCurrentUser } from "../storage/currentUser";
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -55,8 +19,10 @@ type AuthContextValue = {
   firebaseUser: User | null;
   uuid: string | null;
   loading: boolean;
+  authError: string | null;
   signOut: () => Promise<void>;
-  completeFirstLogin: () => Promise<string>;
+  completeRegistration: (user: User, uuid: string) => void;
+  clearAuthError: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -65,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [uuid, setUuidState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,15 +39,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (cancelled) return;
       console.log("[Auth] state changed:", user?.uid ?? null);
-      setFirebaseUser(user);
+
       if (user) {
+        // Run one-time migration for existing single-user installs
+        await migrateIfNeeded(user.uid);
+
+        const registered = await isRegistered(user.uid);
+
+        if (!registered) {
+          // Check whether RegisterPage is currently handling a new registration.
+          // If so, skip the sign-out — RegisterPage will call completeRegistration().
+          const registering = sessionStorage.getItem("cointrol:registering") === "1";
+          if (registering) {
+            // Registration in progress — do nothing here; RegisterPage drives this.
+            setLoading(false);
+            return;
+          }
+          // Unregistered user tried to sign in via LoginPage — reject.
+          setCurrentUser(null);
+          setAuthError("unregistered");
+          await firebaseSignOut(auth);
+          setLoading(false);
+          return;
+        }
+
+        // Registered user — set up everything
+        setCurrentUser(user.uid);
         await initKeyStore(user.uid);
-        const id = await ensureDeviceUuid();
-        setUuidState(id);
+        const registeredUser = await getRegisteredUser(user.uid);
+        setUuidState(registeredUser!.uuid);
+        setFirebaseUser(user);
+        setAuthError(null);
       } else {
+        // Signed out
+        setCurrentUser(null);
         clearKeyStore();
         setUuidState(null);
+        setFirebaseUser(null);
+        // Do NOT clear authError here — if the rejection path above set it to
+        // "unregistered", the subsequent firebaseSignOut triggers this else branch
+        // and would erase the error before the user can see it.
+        // Intentional sign-out via signOut() clears authError explicitly.
       }
+
       setLoading(false);
     });
     return () => {
@@ -113,34 +114,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       stopped = true;
       console.log("[Auth] idle timeout — signing out");
       clearKeyStore();
+      setCurrentUser(null);
       try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { }
       await firebaseSignOut(auth);
     };
 
-    // Events that count as activity
     const EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"] as const;
     const onActivity = () => touch();
-
-    // Also update on focus/visibility changes (common “I came back” signal)
     const onFocus = () => touch();
     const onVis = () => {
       if (document.visibilityState === "visible") touch();
     };
 
-    // Start
     touch();
     EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVis);
 
-    // Periodic check (don’t rely on one giant timeout)
     const interval = window.setInterval(() => {
       if (shouldSignOut()) {
         void signOutNow();
       }
-    }, 60_000); // check every 60s
+    }, 60_000);
 
-    // If we *already* exceeded idle (e.g., reload), sign out immediately
     if (shouldSignOut()) {
       void signOutNow();
     }
@@ -155,22 +151,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [firebaseUser]);
 
   const signOut = async () => {
+    setCurrentUser(null);
     clearKeyStore();
     await firebaseSignOut(auth);
     setFirebaseUser(null);
     setUuidState(null);
+    setAuthError(null);
   };
 
-  const completeFirstLogin = async (): Promise<string> => {
-    const id = await ensureDeviceUuid();
-    // mark terms accepted (safe to call repeatedly)
-    await setTermsAccepted();
-    setUuidState(id);
-    return id;
+  // Called by RegisterPage after it completes the full registration flow.
+  const completeRegistration = (user: User, newUuid: string) => {
+    setCurrentUser(user.uid);
+    setFirebaseUser(user);
+    setUuidState(newUuid);
+    setAuthError(null);
   };
+
+  const clearAuthError = () => setAuthError(null);
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, uuid, loading, signOut, completeFirstLogin }}>
+    <AuthContext.Provider value={{
+      firebaseUser, uuid, loading, authError,
+      signOut, completeRegistration, clearAuthError,
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,9 +1,10 @@
 import { get, set } from "idb-keyval";
 import { addAddress, deleteAddress, updateAddress } from "./addressStore";
+import { getCurrentUser } from "./currentUser";
 
 // --- Schema versioning -------------------------------------------------------
 
-const CONTACTS_KEY = "cointrol:contacts:v1";
+function contactsKey() { return `cointrol:contacts:v1:${getCurrentUser()}`; }
 const CONTACTS_SCHEMA_VERSION_KEY = "cointrol:contacts:schemaVersion";
 const CURRENT_CONTACTS_SCHEMA_VERSION = 1;
 
@@ -68,7 +69,7 @@ async function ensureContactsSchemaMigrated(): Promise<void> {
     return;
   }
 
-  let contacts = await get<Contact[] | undefined>(CONTACTS_KEY);
+  let contacts = await get<Contact[] | undefined>(contactsKey());
   if (!contacts) contacts = [];
 
   // Example future migration (v1 → v2):
@@ -78,7 +79,7 @@ async function ensureContactsSchemaMigrated(): Promise<void> {
   //     ...c,
   //     tags: [], // new field with default
   //   }));
-  //   await set(CONTACTS_KEY, migrated);
+  //   await set(contactsKey(), migrated);
   //   await setContactsSchemaVersion(2);
   // }
   //
@@ -93,12 +94,12 @@ async function ensureContactsSchemaMigrated(): Promise<void> {
 
 async function loadContactsRaw(): Promise<Contact[]> {
   await ensureContactsSchemaMigrated();
-  const contacts = await get<Contact[] | undefined>(CONTACTS_KEY);
+  const contacts = await get<Contact[] | undefined>(contactsKey());
   return contacts ?? [];
 }
 
 async function saveContactsRaw(contacts: Contact[]): Promise<void> {
-  await set(CONTACTS_KEY, contacts);
+  await set(contactsKey(), contacts);
   notifyContactsUpdated(contacts);
 }
 

@@ -461,7 +461,7 @@ export function Folios() {
           setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." });
           return;
         }
-        const sender = await getAddress(salt, 512);
+        const sender = await getAddress(salt, 512, selectDomain);
         if (!sender) {
           setSubmitState({ status: "error", message: "No sender address available for new account." });
           return;

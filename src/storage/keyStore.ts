@@ -28,6 +28,9 @@ let _uid: string | null = null;
  * Wipes legacy stored wrapping key and re-derived all Falcon keys on first call.
  */
 export async function initKeyStore(uid: string): Promise<void> {
+  // Set _uid first so keyId() works inside the cleanup blocks below.
+  _uid = uid;
+
   // One-time migration: if the insecure stored wrapping key exists, wipe everything
   // and let the normal keypair-generation flow start fresh.
   const legacy = await get(LEGACY_WRAPPING_KEY_ID);
@@ -40,7 +43,20 @@ export async function initKeyStore(uid: string): Promise<void> {
       del(keyId(1024, "sk")),
     ]);
   }
-  _uid = uid;
+
+  // One-time migration: wipe old non-namespaced Falcon keypair keys (stored before
+  // user-namespacing was introduced). They cannot be decrypted by any user since the
+  // wrapping key is UID-derived, so deleting them is always safe.
+  const OLD_PK_512 = "cointrol:falcon:512:pk:v1";
+  const oldPk = await get(OLD_PK_512);
+  if (oldPk !== undefined) {
+    await Promise.all([
+      del(OLD_PK_512),
+      del("cointrol:falcon:512:sk:v1"),
+      del("cointrol:falcon:1024:pk:v1"),
+      del("cointrol:falcon:1024:sk:v1"),
+    ]);
+  }
 }
 
 /** Call on sign-out to prevent key access after the session ends. */
@@ -57,17 +73,26 @@ type CipherRecord = {
 };
 
 function keyId(level: FalconLevel, kind: "pk" | "sk") {
-  return `cointrol:falcon:${level}:${kind}:v1`;
+  if (!_uid) throw new Error("keyStore not initialised — call initKeyStore(uid) first");
+  return `cointrol:falcon:${level}:${kind}:v1:${_uid}`;
 }
 
 async function loadOrCreateWrappingKey(): Promise<CryptoKey> {
   if (!_uid) throw new Error("keyStore not initialised — call initKeyStore(uid) first");
 
-  // Load or create a persistent random salt (not secret; protects against cross-user reuse)
-  let salt = await get<ArrayBuffer>(WRAPPING_SALT_ID);
-  if (!salt) {
-    salt = crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer;
+  // Load or create a persistent random salt (not secret; protects against cross-user reuse).
+  // Stored as Uint8Array; older installs may have stored a raw ArrayBuffer — normalise on read.
+  // Use .slice() / new Uint8Array(buf) to guarantee Uint8Array<ArrayBuffer> (not ArrayBufferLike)
+  // so that crypto.subtle.deriveKey accepts it without a TypeScript error.
+  const saltRaw = await get<ArrayBuffer | Uint8Array>(WRAPPING_SALT_ID);
+  let salt: Uint8Array<ArrayBuffer>;
+  if (!saltRaw || (saltRaw as { byteLength: number }).byteLength === 0) {
+    salt = crypto.getRandomValues(new Uint8Array(32));
     await set(WRAPPING_SALT_ID, salt);
+  } else if (saltRaw instanceof Uint8Array) {
+    salt = saltRaw.slice(); // .slice() → Uint8Array<ArrayBuffer>
+  } else {
+    salt = new Uint8Array(saltRaw as ArrayBuffer);
   }
 
   const keyMaterial = await crypto.subtle.importKey(
@@ -217,18 +242,19 @@ export async function getSecretKey(level: FalconLevel): Promise<Uint8Array> {
 }
 
 
-export async function getAddress(salt: string, level: FalconLevel): Promise<string> {
+export async function getAddress(
+  salt: string,
+  level: FalconLevel,
+  domain: { entryPoint: string; factory: string; falcon: string }
+): Promise<string> {
   const pk = await getFalconPublicKey(level);
   if (!pk) {
     throw new Error("Falcon public key not found");
   }
-  const entryPointAddress = `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`; // need to replace with domain look up
-  const factoryAddress = `0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6`; // need to replace with domain look up
-  const falconAddress = `0x01A272c06df74c3331f1E56f357D7A38f28B7346`; // need to replace with domain look up
   const address = predictQuantumAccountAddress({
-    entryPoint: entryPointAddress,
-    factory: factoryAddress,
-    falcon: falconAddress,
+    entryPoint: domain.entryPoint as Hex,
+    factory:    domain.factory as Hex,
+    falcon:     domain.falcon as Hex,
     publicKeyBytes: bytesToHex(pk),
     salt: salt.startsWith("0x") ? salt as Hex : stringToHex(salt),
   });

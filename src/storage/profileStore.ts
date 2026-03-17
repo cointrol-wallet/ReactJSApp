@@ -1,6 +1,7 @@
 import { get, set } from "idb-keyval";
+import { getCurrentUser } from "./currentUser";
 
-const DISPLAY_NAME_KEY = "cointrol:profile:displayName:v1";
+function displayNameKey() { return `cointrol:profile:displayName:v1:${getCurrentUser()}`; }
 
 type DisplayNameListener = (name: string) => void;
 const listeners = new Set<DisplayNameListener>();
@@ -17,12 +18,12 @@ export function subscribeToDisplayName(listener: DisplayNameListener): () => voi
 }
 
 export async function getDisplayName(): Promise<string> {
-  const v = await get<string | undefined>(DISPLAY_NAME_KEY);
+  const v = await get<string | undefined>(displayNameKey());
   return (v ?? "").trim();
 }
 
 export async function setDisplayName(name: string): Promise<void> {
   const trimmed = name.trim();
-  await set(DISPLAY_NAME_KEY, trimmed);
+  await set(displayNameKey(), trimmed);
   notify(trimmed);
 }

@@ -4,6 +4,7 @@ import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { createAccountToBytes } from "./bytesEncoder";
 import { bytesToHex, Address } from "viem";
 import { FalconLevel, ensureFalconKeypair } from "../storage/keyStore";
+import { getAllDomains } from "../storage/domainStore";
 
 export async function initWallet(): Promise<string> {
 
@@ -18,7 +19,12 @@ export async function initWallet(): Promise<string> {
     console.error("[Wallet] ensureFalconKeypair failed", e?.name, e?.message, e);
     throw e;
   }
-  const addr = await getAddress(`default`, falconLevel); 
+
+  const domains = await getAllDomains();
+  if (!domains.length) throw new Error("No domains available");
+  const domain = domains[0];
+
+  const addr = await getAddress(`default`, falconLevel, domain);
 
   if (!addr) {
     throw new Error("Public key not available after ensureFalconKeypair");
