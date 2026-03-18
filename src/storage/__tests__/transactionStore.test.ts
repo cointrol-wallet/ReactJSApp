@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setCurrentUser } from "../currentUser";
 
 // ---------------------------------------------------------------------------
 // In-memory idb-keyval mock
@@ -34,6 +35,11 @@ const BASE_TXN = {
 
 beforeEach(() => {
   idbStore.clear();
+  setCurrentUser("test-uid");
+});
+
+afterEach(() => {
+  setCurrentUser(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -49,7 +55,7 @@ describe("v1 → v2 migration", () => {
     // Simulate a v1 install: schema version key absent (will be assumed v1),
     // with pre-existing txns that lack a direction field
     const legacyTxn = { id: "txn:legacy", userOpHash: "0xabc", direction: undefined };
-    idbStore.set("cointrol:txns:v1", [legacyTxn]);
+    idbStore.set("cointrol:txns:v1:test-uid", [legacyTxn]);
     // No schema version key → getTxnSchemaVersion() returns 1
 
     const txns = await getAllTxns();
@@ -60,7 +66,7 @@ describe("v1 → v2 migration", () => {
 
   it("skips migration when already at v2", async () => {
     idbStore.set("cointrol:txns:schemaVersion", 2);
-    idbStore.set("cointrol:txns:v1", [{ id: "txn:1", direction: "incoming" }]);
+    idbStore.set("cointrol:txns:v1:test-uid", [{ id: "txn:1", direction: "incoming" }]);
 
     const txns = await getAllTxns();
 

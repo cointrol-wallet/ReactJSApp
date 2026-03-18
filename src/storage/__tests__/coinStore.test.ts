@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setCurrentUser } from "../currentUser";
 
 // ---------------------------------------------------------------------------
 // In-memory idb-keyval mock
@@ -25,6 +26,11 @@ const BUILTIN_IDS = ["builtin:eth-sepolia", "builtin:eth-mainnet", "builtin:fake
 
 beforeEach(() => {
   idbStore.clear();
+  setCurrentUser("test-uid");
+});
+
+afterEach(() => {
+  setCurrentUser(null);
 });
 
 // ---------------------------------------------------------------------------

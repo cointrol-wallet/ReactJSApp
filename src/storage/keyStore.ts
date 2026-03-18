@@ -1,52 +1,81 @@
 import { get, set, del } from "idb-keyval";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { predictQuantumAccountAddress } from "@/lib/predictQuantumAccountAddress";
-import { stringToHex, bytesToHex, Hex } from "viem";
+import { bytesToHex, Hex } from "viem";
 
-export type FalconLevel = 512 | 1024;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export type FalconKeypair = {
+export type FalconLevel = 512 | 1024 | "ECC";
+
+/** Public metadata for a keypair — safe to expose to the UI. */
+export type KeypairMeta = {
+  id: string;           // crypto.randomUUID()
   level: FalconLevel;
-  pk: Uint8Array;
-  sk: Uint8Array;
+  label?: string;
+  createdAt: number;
 };
 
-// --- Key Storage ---
+type CipherRecord = {
+  alg: "falcon";
+  level: FalconLevel;
+  cipherText: ArrayBuffer;
+  iv: ArrayBuffer;      // 12 bytes for AES-GCM
+  createdAt: number;
+};
 
-// Legacy key — stored raw AES bytes (insecure). Kept as a string literal for
-// migration detection only; no longer read or written for crypto purposes.
+/** Full stored record (never exposed; only pk/sk CipherRecords are decrypted). */
+type StoredKeypair = KeypairMeta & {
+  pk: CipherRecord;
+  sk: CipherRecord;
+};
+
+// ---------------------------------------------------------------------------
+// IDB keys
+// ---------------------------------------------------------------------------
+
 const LEGACY_WRAPPING_KEY_ID = "cointrol:wrappingKey:v1";
+const WRAPPING_SALT_ID       = "cointrol:wrappingSalt:v2";
 
-// v2: PBKDF2-derived wrapping key (never stored). Only the salt is persisted.
-const WRAPPING_SALT_ID = "cointrol:wrappingSalt:v2";
+function keypoolKey(uid: string) {
+  return `cointrol:keypairs:v1:${uid}`;
+}
 
-// Firebase UID set by initKeyStore — required before any crypto operation.
+// ---------------------------------------------------------------------------
+// Module state
+// ---------------------------------------------------------------------------
+
 let _uid: string | null = null;
+
+export function isKeyStoreInitialised(): boolean {
+  return _uid !== null;
+}
+
+// ---------------------------------------------------------------------------
+// Init / teardown
+// ---------------------------------------------------------------------------
 
 /**
  * Must be called once when the user logs in (from AuthContext.onAuthStateChanged).
- * Wipes legacy stored wrapping key and re-derived all Falcon keys on first call.
+ * Runs legacy key migrations and sets the active UID.
  */
 export async function initKeyStore(uid: string): Promise<void> {
-  // Set _uid first so keyId() works inside the cleanup blocks below.
   _uid = uid;
 
-  // One-time migration: if the insecure stored wrapping key exists, wipe everything
-  // and let the normal keypair-generation flow start fresh.
+  // Migration 1: insecure stored raw wrapping key → wipe all old individual key records
   const legacy = await get(LEGACY_WRAPPING_KEY_ID);
   if (legacy !== undefined) {
     await Promise.all([
       del(LEGACY_WRAPPING_KEY_ID),
-      del(keyId(512, "pk")),
-      del(keyId(512, "sk")),
-      del(keyId(1024, "pk")),
-      del(keyId(1024, "sk")),
+      del("cointrol:falcon:512:pk:v1"),
+      del("cointrol:falcon:512:sk:v1"),
+      del("cointrol:falcon:1024:pk:v1"),
+      del("cointrol:falcon:1024:sk:v1"),
     ]);
   }
 
-  // One-time migration: wipe old non-namespaced Falcon keypair keys (stored before
-  // user-namespacing was introduced). They cannot be decrypted by any user since the
-  // wrapping key is UID-derived, so deleting them is always safe.
+  // Migration 2: old non-namespaced keys (before UID namespacing)
   const OLD_PK_512 = "cointrol:falcon:512:pk:v1";
   const oldPk = await get(OLD_PK_512);
   if (oldPk !== undefined) {
@@ -57,6 +86,10 @@ export async function initKeyStore(uid: string): Promise<void> {
       del("cointrol:falcon:1024:sk:v1"),
     ]);
   }
+
+  // Migration 3: old UID-namespaced individual keys → no-op, they'll just be
+  // orphaned (pool is the source of truth). Nothing to delete since the new
+  // pool key `keypoolKey(uid)` is entirely separate.
 }
 
 /** Call on sign-out to prevent key access after the session ends. */
@@ -64,40 +97,32 @@ export function clearKeyStore(): void {
   _uid = null;
 }
 
-type CipherRecord = {
-  alg: "falcon";
-  level: FalconLevel;
-  cipherText: ArrayBuffer;
-  iv: ArrayBuffer;        // 12 bytes for AES-GCM
-  createdAt: number;
-};
+// ---------------------------------------------------------------------------
+// Wrapping key (AES-GCM derived from uid via PBKDF2)
+// ---------------------------------------------------------------------------
 
-function keyId(level: FalconLevel, kind: "pk" | "sk") {
+function requireUid(): string {
   if (!_uid) throw new Error("keyStore not initialised — call initKeyStore(uid) first");
-  return `cointrol:falcon:${level}:${kind}:v1:${_uid}`;
+  return _uid;
 }
 
 async function loadOrCreateWrappingKey(): Promise<CryptoKey> {
-  if (!_uid) throw new Error("keyStore not initialised — call initKeyStore(uid) first");
+  const uid = requireUid();
 
-  // Load or create a persistent random salt (not secret; protects against cross-user reuse).
-  // Stored as Uint8Array; older installs may have stored a raw ArrayBuffer — normalise on read.
-  // Use .slice() / new Uint8Array(buf) to guarantee Uint8Array<ArrayBuffer> (not ArrayBufferLike)
-  // so that crypto.subtle.deriveKey accepts it without a TypeScript error.
   const saltRaw = await get<ArrayBuffer | Uint8Array>(WRAPPING_SALT_ID);
   let salt: Uint8Array<ArrayBuffer>;
   if (!saltRaw || (saltRaw as { byteLength: number }).byteLength === 0) {
     salt = crypto.getRandomValues(new Uint8Array(32));
     await set(WRAPPING_SALT_ID, salt);
   } else if (saltRaw instanceof Uint8Array) {
-    salt = saltRaw.slice(); // .slice() → Uint8Array<ArrayBuffer>
+    salt = saltRaw.slice();
   } else {
     salt = new Uint8Array(saltRaw as ArrayBuffer);
   }
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(_uid),
+    new TextEncoder().encode(uid),
     "PBKDF2",
     false,
     ["deriveKey"]
@@ -107,19 +132,19 @@ async function loadOrCreateWrappingKey(): Promise<CryptoKey> {
     { name: "PBKDF2", hash: "SHA-256", salt, iterations: 300_000 },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
-    false, // non-extractable — key bytes can never leave the browser crypto engine
+    false,
     ["encrypt", "decrypt"]
   );
 }
+
+// ---------------------------------------------------------------------------
+// Encrypt / decrypt helpers
+// ---------------------------------------------------------------------------
 
 function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
   const buf = new ArrayBuffer(u8.byteLength);
   new Uint8Array(buf).set(u8);
   return buf;
-}
-
-function fromArrayBuffer(buf: ArrayBuffer): Uint8Array {
-  return new Uint8Array(buf);
 }
 
 async function encryptBytes(level: FalconLevel, bytes: Uint8Array): Promise<CipherRecord> {
@@ -132,13 +157,7 @@ async function encryptBytes(level: FalconLevel, bytes: Uint8Array): Promise<Ciph
     toArrayBuffer(bytes)
   );
 
-  return {
-    alg: "falcon",
-    level,
-    cipherText,
-    iv: toArrayBuffer(iv),
-    createdAt: Date.now(),
-  };
+  return { alg: "falcon", level, cipherText, iv: toArrayBuffer(iv), createdAt: Date.now() };
 }
 
 async function decryptBytes(rec: CipherRecord): Promise<Uint8Array> {
@@ -148,115 +167,101 @@ async function decryptBytes(rec: CipherRecord): Promise<Uint8Array> {
     wrappingKey,
     rec.cipherText
   );
-  return fromArrayBuffer(plain);
+  return new Uint8Array(plain);
 }
 
-export async function getFalconPublicKey(level: FalconLevel): Promise<Uint8Array | null> {
-  const rec = await get<CipherRecord>(keyId(level, "pk"));
-  if (!rec) return null;
-  return decryptBytes(rec);
+// ---------------------------------------------------------------------------
+// Pool read / write helpers
+// ---------------------------------------------------------------------------
+
+async function loadPool(): Promise<StoredKeypair[]> {
+  const uid = requireUid();
+  return (await get<StoredKeypair[]>(keypoolKey(uid))) ?? [];
 }
 
-export async function getFalconSecretKey(level: FalconLevel): Promise<Uint8Array | null> {
-  const rec = await get<CipherRecord>(keyId(level, "sk"));
-  if (!rec) return null;
-  return decryptBytes(rec);
+async function savePool(pool: StoredKeypair[]): Promise<void> {
+  const uid = requireUid();
+  await set(keypoolKey(uid), pool);
 }
 
-export async function falconKeypairExists(level: FalconLevel): Promise<boolean> {
-  const [pkRec, skRec] = await Promise.all([
-    get<CipherRecord>(keyId(level, "pk")),
-    get<CipherRecord>(keyId(level, "sk")),
-  ]);
-  return !!pkRec && !!skRec;
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/** Return metadata for all keypairs (no decryption). */
+export async function listKeypairs(): Promise<KeypairMeta[]> {
+  const pool = await loadPool();
+  return pool.map(({ id, level, label, createdAt }) => ({ id, level, label, createdAt }));
 }
 
 /**
- * Generate a fresh Falcon private key with ntruGen(1024),
- * encrypt it, store it, and return it.
- * also store public key
+ * Generate a new Falcon keypair, encrypt it, append to the pool, and return
+ * its metadata. Throws if level is "ECC" (not yet implemented).
  */
-export async function generateAndStoreFalconKeypair(level: FalconLevel): Promise<{ pk: Uint8Array; sk: Uint8Array }> {
+export async function generateAndStoreKeypair(level: FalconLevel, label?: string): Promise<KeypairMeta> {
+  if (level === "ECC") throw new Error("ECC keys not yet implemented");
+
   const falcon = createFalconWorkerClient();
-
-  // Generate using liboqs inside the worker
+  // generateKeypair in the worker now returns raw uint16 format (packedToRaw applied)
   const { pk, sk } = await falcon.generateKeypair(level);
+  falcon.terminate();
 
-  // Encrypt sequentially so the first call creates the salt before the second
-  // reads it. Parallel calls race on first-ever keygen: both see no salt, both
-  // generate a different salt, and only one survives — causing a decrypt failure.
+  // Encrypt sequentially so the first call creates the salt before the second reads it
   const pkRec = await encryptBytes(level, pk);
   const skRec = await encryptBytes(level, sk);
 
-  await Promise.all([
-    set(keyId(level, "pk"), pkRec),
-    set(keyId(level, "sk"), skRec),
-  ]);
-  falcon.terminate();
+  const meta: KeypairMeta = {
+    id: crypto.randomUUID(),
+    level,
+    label,
+    createdAt: Date.now(),
+  };
 
-  return { pk, sk };
+  const pool = await loadPool();
+  pool.push({ ...meta, pk: pkRec, sk: skRec });
+  await savePool(pool);
+
+  return meta;
 }
 
-const ensureInFlight = new Map<FalconLevel, Promise<boolean>>();
-
-export async function ensureFalconKeypair(level: FalconLevel): Promise<boolean> {
-  const existing = ensureInFlight.get(level);
-  if (existing) return existing;
-
-  const p = (async () => {
-    // Fast path
-    if (await falconKeypairExists(level)) return true;
-
-    // Generate/store
-    const { pk, sk } = await generateAndStoreFalconKeypair(level);
-
-    // Defensive: verify persisted state (not just returned buffers)
-    const ok = pk.length > 0 && sk.length > 0;
-    if (!ok) return false;
-
-    // Re-check storage to confirm it stuck (helps if store partially failed)
-    return await falconKeypairExists(level);
-  })().catch((e) => {
-    // allow retry after real failure
-    ensureInFlight.delete(level);
-    throw e;
-  });
-
-  ensureInFlight.set(level, p);
-  return p.finally(() => {
-    // Once complete, remove lock so future calls can just fast-path on exists()
-    ensureInFlight.delete(level);
-  });
+/** Delete a keypair from the pool by id. */
+export async function deleteKeypair(id: string): Promise<void> {
+  const pool = await loadPool();
+  await savePool(pool.filter(kp => kp.id !== id));
 }
 
+/** Decrypt and return the public key bytes for a keypair, or null if not found. */
+export async function getPublicKey(keypairId: string): Promise<Uint8Array | null> {
+  const pool = await loadPool();
+  const kp = pool.find(k => k.id === keypairId);
+  if (!kp) return null;
+  return decryptBytes(kp.pk);
+}
 
+/** Decrypt and return the secret key bytes for a keypair, or null if not found. */
+export async function getSecretKey(keypairId: string): Promise<Uint8Array | null> {
+  const pool = await loadPool();
+  const kp = pool.find(k => k.id === keypairId);
+  if (!kp) return null;
+  return decryptBytes(kp.sk);
+}
 
 /**
- * 
- * @returns the Falcon private key for signing
+ * Predict the QuantumAccount address for a given keypair + salt + domain
+ * (no IDB write).
  */
-export async function getSecretKey(level: FalconLevel): Promise<Uint8Array> {
-  const sk = await getFalconSecretKey(level);
-  if (!sk) throw new Error(`Falcon-${level} secret key not found`);
-  return sk;
-}
-
-
-export async function getAddress(
-  salt: string,
-  level: FalconLevel,
+export async function predictAddressFromKeypair(
+  keypairId: string,
+  salt: Hex,
   domain: { entryPoint: string; factory: string; falcon: string }
 ): Promise<string> {
-  const pk = await getFalconPublicKey(level);
-  if (!pk) {
-    throw new Error("Falcon public key not found");
-  }
-  const address = predictQuantumAccountAddress({
+  const pk = await getPublicKey(keypairId);
+  if (!pk) throw new Error(`Keypair ${keypairId} not found`);
+  return predictQuantumAccountAddress({
     entryPoint: domain.entryPoint as Hex,
     factory:    domain.factory as Hex,
     falcon:     domain.falcon as Hex,
     publicKeyBytes: bytesToHex(pk),
-    salt: salt.startsWith("0x") ? salt as Hex : stringToHex(salt),
+    salt,
   });
-  return address;
 }

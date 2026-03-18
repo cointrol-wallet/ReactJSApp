@@ -42,11 +42,10 @@ vi.mock("@/crypto/falconInterface", () => ({
 }));
 
 vi.mock("@/storage/keyStore", () => ({
-  getFalconPublicKey: vi.fn().mockResolvedValue(new Uint8Array([9, 8, 7])),
+  getPublicKey: vi.fn().mockResolvedValue(new Uint8Array([9, 8, 7])),
   getSecretKey: vi.fn().mockResolvedValue(fakeSk),
-  getFalconSecretKey: vi.fn().mockResolvedValue(new Uint8Array([5, 6, 7, 8])),
-  ensureFalconKeypair: vi.fn().mockResolvedValue(true),
-  getAddress: vi.fn().mockResolvedValue("0xdeadbeef"),
+  listKeypairs: vi.fn().mockResolvedValue([{ id: "key-1", level: 512, createdAt: 0 }]),
+  isKeyStoreInitialised: vi.fn().mockReturnValue(true),
   initKeyStore: vi.fn(),
   clearKeyStore: vi.fn(),
 }));
@@ -86,6 +85,21 @@ vi.mock("viem/chains", () => ({ sepolia: { id: 11155111 } }));
 
 const VALID_SENDER = "0x1234567890123456789012345678901234567890";
 
+const MOCK_DOMAIN = {
+  name: "test.domain",
+  chainId: 11155111,
+  entryPoint: "0x0000000000000000000000000000000000000001",
+  factory: "0x0000000000000000000000000000000000000002",
+  falcon: "0x0000000000000000000000000000000000000003",
+  falconLevel: 512,
+  paymaster: "0x0000000000000000000000000000000000000004",
+  bundler: "0x0000000000000000000000000000000000000005",
+  rpcUrl: "http://localhost:8545",
+  transactionUrl: "http://localhost/tx/",
+  createdAt: 0,
+  updatedAt: 0,
+};
+
 describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -106,7 +120,7 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
 
   it("terminates the worker after signing", async () => {
     const { createQuantumAccount } = await import("../wallets");
-    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
 
     expect(mockSign).toHaveBeenCalledOnce();
     expect(mockTerminate).toHaveBeenCalledOnce();
@@ -118,7 +132,7 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
 
   it("zeros the SK buffer after signing", async () => {
     const { createQuantumAccount } = await import("../wallets");
-    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
 
     expect(mockSign).toHaveBeenCalledOnce();
     // fakeSk should have been zeroed via fill(0)
@@ -131,7 +145,7 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
     const { createQuantumAccount } = await import("../wallets");
 
     await expect(
-      createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" }),
+      createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" }),
     ).rejects.toThrow("network error");
 
     // sign completed → sk.fill(0) ran → all bytes must be zero
@@ -144,7 +158,7 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
     const { createQuantumAccount } = await import("../wallets");
 
     await expect(
-      createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" }),
+      createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" }),
     ).rejects.toThrow("network error");
 
     expect(mockTerminate).toHaveBeenCalledOnce();
@@ -152,7 +166,7 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
 
   it("returns true when PaymasterAPI reports success", async () => {
     const { createQuantumAccount } = await import("../wallets");
-    const result = await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    const result = await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
     expect(result).toBe(true);
   });
 
@@ -160,15 +174,15 @@ describe("wallets.ts — createQuantumAccount signing lifecycle", () => {
     const { PaymasterAPI } = await import("@/lib/submitTransaction");
     vi.mocked(PaymasterAPI.createNewAccount).mockResolvedValueOnce({ success: false, result: "rejected" });
     const { createQuantumAccount } = await import("../wallets");
-    const result = await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    const result = await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
     expect(result).toBe(false);
   });
 
   it("creates a fresh worker client on each call", async () => {
     const { createQuantumAccount } = await import("../wallets");
 
-    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
-    await createQuantumAccount({ sender: VALID_SENDER, domain: "test.domain", salt: "test-salt" });
+    await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
+    await createQuantumAccount({ sender: VALID_SENDER as any, domain: MOCK_DOMAIN as any, salt: "0xdeadbeef" as any, keypairId: "key-1" });
 
     // Each invocation of createQuantumAccount must spin up its own isolated worker
     expect(mockCreateWorker).toHaveBeenCalledTimes(2);

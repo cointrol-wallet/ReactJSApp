@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setCurrentUser } from "@/storage/currentUser";
 
 // ---------------------------------------------------------------------------
 // idb-keyval in-memory mock (same pattern as storage tests)
@@ -20,6 +21,11 @@ import type { SharePayload } from "../sharePayload";
 
 beforeEach(() => {
   idbStore.clear();
+  setCurrentUser("test-uid");
+});
+
+afterEach(() => {
+  setCurrentUser(null);
 });
 
 const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as `0x${string}`;

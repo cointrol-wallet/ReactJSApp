@@ -19,6 +19,27 @@ type Res =
 let falcon512: Falcon512Api | null = null;
 let falcon1024: Falcon1024Api | null = null;
 
+/** Convert liboqs 14-bit packed public key to raw big-endian uint16 format. */
+function packedToRaw(packed: Uint8Array, level: 512 | 1024): Uint8Array {
+  const n = level;
+  const start = packed.length === (n * 14 / 8) + 1 ? 1 : 0;
+  const coeffs = new Uint16Array(n);
+  let idx = start, acc = 0, accBits = 0;
+  for (let i = 0; i < n; i++) {
+    while (accBits < 14) { acc |= packed[idx++] << accBits; accBits += 8; }
+    coeffs[i] = acc & 0x3FFF;
+    acc >>>= 14; accBits -= 14;
+  }
+  const typeHdr = level === 512 ? 0x09 : 0x0A;
+  const out = new Uint8Array(2 + n * 2);
+  out[0] = typeHdr; out[1] = 0x01;
+  for (let i = 0; i < n; i++) {
+    out[2 + 2 * i] = (coeffs[i] >> 8) & 0xFF;
+    out[2 + 2 * i + 1] = coeffs[i] & 0xFF;
+  }
+  return out;
+}
+
 async function ensureInit() {
   if (!falcon512) falcon512 = await Promise.resolve(createFalcon512());
   if (!falcon1024) falcon1024 = await Promise.resolve(createFalcon1024());
@@ -49,7 +70,8 @@ function apiFor(level: FalconLevel) {
     if (req.action === "generateKeypair") {
       const api = apiFor(req.level);
       const { publicKey, secretKey } = api.generateKeyPair();
-      (self as any).postMessage({ id: req.id, ok: true, value: { pk: publicKey, sk: secretKey } } satisfies Res);
+      const rawPK = packedToRaw(publicKey, req.level);
+      (self as any).postMessage({ id: req.id, ok: true, value: { pk: rawPK, sk: secretKey } } satisfies Res);
       return;
     }
 

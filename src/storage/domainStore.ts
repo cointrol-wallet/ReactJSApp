@@ -1,23 +1,22 @@
 import { get, set } from "idb-keyval";
 import { getCurrentUser } from "./currentUser";
+import { FalconLevel } from "./keyStore";
 
 // --- Schema versioning -------------------------------------------------------
 
 function domainKey() { return `cointrol:domains:v1:${getCurrentUser()}`; }
 function domainSchemaVersionKey() { return `cointrol:domains:schemaVersion:${getCurrentUser()}`; }
-const CURRENT_DOMAIN_SCHEMA_VERSION = 2;
+const CURRENT_DOMAIN_SCHEMA_VERSION = 3;
 
-// Domain schema v2
-
-export type AccountType = "falcon512" | "falcon1024" | "ecc";
+// Domain schema v3
 
 export type Domain = {
   name: string;           // label for the domain
   chainId: number;        // blockchain network ID
   entryPoint: string;     // entrypoint contract address
   factory: string;        // QuantumAccountFactory contract address
-  falcon: string;         // Falcon verifier contract address (empty string for ecc)
-  accountType: AccountType; // cryptographic scheme used by accounts on this domain
+  falcon: string;         // Falcon verifier contract address (empty string for ECC)
+  falconLevel: FalconLevel; // cryptographic scheme used by accounts on this domain
   paymaster: string;      // paymaster address
   bundler: string;        // bundler address
   rpcUrl: string;         // rpc url used locally by app
@@ -32,7 +31,7 @@ const BUILTIN_DOMAINS: Domain[] = [{
   entryPoint:   "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
   factory:      "0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6",
   falcon:       "0x01A272c06df74c3331f1E56f357D7A38f28B7346",
-  accountType:  "falcon512",
+  falconLevel:  512,
   paymaster:    "0x018D7d0526c366678976927EA2E9Fb65f8512115",
   bundler:      "0xD50a29DB30231F9D3cD42a6162329D1f4EEfeFED",
   rpcUrl:       "https://ethereum-sepolia-rpc.publicnode.com",
@@ -75,7 +74,7 @@ async function setDomainsSchemaVersion(v: number): Promise<void> {
 }
 
 async function ensureDomainSchemaMigrated(): Promise<void> {
-  const storedVersion = await getDomainsSchemaVersion();
+  let storedVersion = await getDomainsSchemaVersion();
 
   if (storedVersion === CURRENT_DOMAIN_SCHEMA_VERSION) {
     return;
@@ -86,17 +85,25 @@ async function ensureDomainSchemaMigrated(): Promise<void> {
 
   if (storedVersion < 2) {
     // v1 → v2: add factory, falcon, accountType fields to existing user-added domains.
-    // factory and falcon default to "" (unknown — must be set via updateDomain before
-    // account creation can proceed on those domains). accountType defaults to "falcon512"
-    // since that is the only scheme deployed prior to this migration.
     const migrated = domains.map((d: any) => ({
       ...d,
-      factory:     d.factory     ?? "",
-      falcon:      d.falcon      ?? "",
-      accountType: d.accountType ?? "falcon512" as AccountType,
+      factory: d.factory ?? "",
+      falcon:  d.falcon  ?? "",
+      accountType: d.accountType ?? "falcon512",
     }));
     await set(domainKey(), migrated);
-    await setDomainsSchemaVersion(2);
+    storedVersion = 2;
+  }
+
+  if (storedVersion < 3) {
+    // v2 → v3: replace accountType string with falconLevel number.
+    const migrated = domains.map((d: any) => {
+      const { accountType, ...rest } = d;
+      const falconLevel: FalconLevel = accountType === "falcon1024" ? 1024 : 512;
+      return { ...rest, falconLevel };
+    });
+    await set(domainKey(), migrated);
+    await setDomainsSchemaVersion(3);
   }
 }
 
@@ -125,8 +132,8 @@ export async function addDomain(input: {
   chainId: number;
   entryPoint: string;
   factory: string;          // required — account creation cannot proceed without it
-  falcon?: string;          // optional — defaults to "" (e.g. for ecc domains)
-  accountType: AccountType;
+  falcon?: string;          // optional — defaults to "" (e.g. for ECC domains)
+  falconLevel: FalconLevel;
   paymaster: string;
   bundler: string;
   rpcUrl: string;
@@ -141,7 +148,7 @@ export async function addDomain(input: {
     entryPoint:   input.entryPoint,
     factory:      input.factory,
     falcon:       input.falcon ?? "",
-    accountType:  input.accountType,
+    falconLevel:  input.falconLevel,
     paymaster:    input.paymaster,
     bundler:      input.bundler,
     rpcUrl:       input.rpcUrl,

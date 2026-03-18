@@ -15,11 +15,10 @@ vi.mock("@/crypto/falconInterface", () => ({
 }));
 
 vi.mock("@/storage/keyStore", () => ({
-  getFalconPublicKey: vi.fn().mockResolvedValue(new Uint8Array([0x01, 0x02])),
+  isKeyStoreInitialised: vi.fn().mockReturnValue(true),
+  getPublicKey: vi.fn().mockResolvedValue(new Uint8Array([0x01, 0x02])),
   getSecretKey: vi.fn().mockResolvedValue(new Uint8Array([0x05, 0x06])),
-  getFalconSecretKey: vi.fn().mockResolvedValue(new Uint8Array([0x05, 0x06])),
-  ensureFalconKeypair: vi.fn().mockResolvedValue(true),
-  getAddress: vi.fn().mockResolvedValue("0xabcdef1234567890abcdef1234567890abcdef12"),
+  listKeypairs: vi.fn().mockResolvedValue([{ id: "key-1", level: 512, createdAt: 0 }]),
   initKeyStore: vi.fn(),
   clearKeyStore: vi.fn(),
 }));
@@ -38,6 +37,20 @@ vi.mock("@/lib/bytesEncoder", () => ({
   createAccountToBytes: vi.fn().mockReturnValue(new Uint8Array([0xab, 0xcd])),
 }));
 
+vi.mock("@/storage/domainStore", () => ({
+  getAllDomains: vi.fn().mockResolvedValue([{
+    name: "ETHEREUM SEPOLIA",
+    chainId: 11155111,
+    entryPoint: "0xentrypoint",
+    paymaster: "0xpaymaster",
+    bundler: "0xbundler",
+    rpcUrl: "http://localhost:8545",
+    transactionUrl: "http://localhost/tx/",
+    createdAt: 0,
+    updatedAt: 0,
+  }]),
+}));
+
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {
@@ -47,53 +60,25 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-import { ensureFalconKeypair, getAddress } from "@/storage/keyStore";
+import { isKeyStoreInitialised } from "@/storage/keyStore";
 import { initWallet } from "../wallets";
 
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(ensureFalconKeypair).mockResolvedValue(true);
-  vi.mocked(getAddress).mockResolvedValue("0xabcdef1234567890abcdef1234567890abcdef12");
+  vi.mocked(isKeyStoreInitialised).mockReturnValue(true);
 });
 
 // ---------------------------------------------------------------------------
 
 describe("initWallet", () => {
-  it("returns a string (the quantum account address)", async () => {
-    const addr = await initWallet();
-    expect(typeof addr).toBe("string");
+  it("resolves without throwing when keyStore is initialised", async () => {
+    await expect(initWallet()).resolves.toBeUndefined();
   });
 
-  it("returns the address provided by getAddress", async () => {
-    const expected = "0x1111111111111111111111111111111111111111";
-    vi.mocked(getAddress).mockResolvedValue(expected);
-    const addr = await initWallet();
-    expect(addr).toBe(expected);
-  });
-
-  it("calls ensureFalconKeypair before deriving the address", async () => {
-    await initWallet();
-    expect(ensureFalconKeypair).toHaveBeenCalledOnce();
-    // getAddress must be called after ensureFalconKeypair succeeds
-    const ensureOrder = vi.mocked(ensureFalconKeypair).mock.invocationCallOrder[0];
-    const addressOrder = vi.mocked(getAddress).mock.invocationCallOrder[0];
-    expect(addressOrder).toBeGreaterThan(ensureOrder);
-  });
-
-  it("throws when ensureFalconKeypair returns false", async () => {
-    vi.mocked(ensureFalconKeypair).mockResolvedValue(false);
-    await expect(initWallet()).rejects.toThrow();
-  });
-
-  it("propagates errors thrown by ensureFalconKeypair", async () => {
-    vi.mocked(ensureFalconKeypair).mockRejectedValue(new Error("WASM init failed"));
-    await expect(initWallet()).rejects.toThrow("WASM init failed");
-  });
-
-  it("throws when getAddress returns a falsy value", async () => {
-    vi.mocked(getAddress).mockResolvedValue("");
-    await expect(initWallet()).rejects.toThrow();
+  it("throws when keyStore is not initialised", async () => {
+    vi.mocked(isKeyStoreInitialised).mockReturnValue(false);
+    await expect(initWallet()).rejects.toThrow(/not initialised/i);
   });
 });

@@ -9,6 +9,7 @@ const Contracts    = React.lazy(() => import("./pages/contracts").then(m => ({ d
 const Contacts     = React.lazy(() => import("./pages/contacts").then(m => ({ default: m.Contacts })));
 const Coins        = React.lazy(() => import("./pages/coinManagement").then(m => ({ default: m.Coins })));
 const Folios       = React.lazy(() => import("./pages/portfolio").then(m => ({ default: m.Folios })));
+const Keys         = React.lazy(() => import("./pages/key").then(m => ({ default: m.Keys })));
 const Terms        = React.lazy(() => import("./pages/legal").then(m => ({ default: m.Terms })));
 const Privacy      = React.lazy(() => import("./pages/legal").then(m => ({ default: m.Privacy })));
 const Transactions = React.lazy(() => import("./pages/transaction").then(m => ({ default: m.Transactions })));
@@ -206,6 +207,7 @@ function NavDropdown() {
               onClick={(e) => e.stopPropagation()}
             >
               <NavDropItem to="/dashboard" label="Home" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/keys" label="Keys" onSelect={() => setOpen(false)} />
               <NavDropItem to="/transactions" label="Transactions" onSelect={() => setOpen(false)} />
               <NavDropItem to="/addressbook" label="Address Book" onSelect={() => setOpen(false)} />
               <NavDropItem to="/contacts" label="Contacts" onSelect={() => setOpen(false)} />
@@ -308,7 +310,6 @@ function AppShell({ children, onOpenScan }: {
 }
 
 function AppContainer() {
-  const [address, setAddress] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [scanOpen, setScanOpen] = React.useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = React.useState(
@@ -319,38 +320,25 @@ function AppContainer() {
 
   const handleDecoded = React.useCallback(async (qrText: string) => {
     try {
-      const payload = decodeSharePayload(qrText); // -> SharePayload
+      const payload = decodeSharePayload(qrText);
       const result = await importSharePayload(payload, { folios, updateFolio });
       console.log("[QR] import result:", result);
     } catch (e) {
       console.error("[QR] import failed:", e);
-      // optionally show a toast
     }
   }, [folios, updateFolio]);
 
-
   React.useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
-        console.log("[Wallet] Initialising…");
-        const addr = await initWallet();
-        console.log("[Wallet] Ready with address:", addr);
-        if (!cancelled) {
-          setAddress(addr);
-        }
+        await initWallet();
       } catch (e: any) {
         console.error("[Wallet] Init failed:", e);
-        if (!cancelled) {
-          setError(e?.message ?? "Unknown wallet init error");
-        }
+        if (!cancelled) setError(e?.message ?? "Unknown wallet init error");
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   function handleOnboardingDismiss() {
@@ -381,12 +369,11 @@ function AppContainer() {
             <p className="mb-2">{error}</p>
             <p className="text-sm text-neutral-600">Check the console for details.</p>
           </div>
-        ) : !address ? (
-          <div className="p-6">Initialising QuantumAccount wallet…</div>
         ) : (
           <Routes>
             <Route index element={<Folios />} />
             <Route path="dashboard" element={<Folios />} />
+            <Route path="keys" element={<Keys />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="contacts" element={<Contacts />} />
             <Route path="contracts" element={<Contracts />} />

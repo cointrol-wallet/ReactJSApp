@@ -52,11 +52,9 @@ vi.mock("@/crypto/falconInterface", () => ({
 }));
 
 vi.mock("@/storage/keyStore", () => ({
-  getFalconSecretKey: vi.fn().mockResolvedValue(new Uint8Array([0x01, 0x02, 0x03, 0x04])),
-  getFalconPublicKey: vi.fn().mockResolvedValue(new Uint8Array([0x05, 0x06])),
-  ensureFalconKeypair: vi.fn().mockResolvedValue(true),
-  getAddress: vi.fn().mockResolvedValue("0x0000000000000000000000000000000000000001"),
-  getSecretKey: vi.fn().mockResolvedValue(new Uint8Array([0x01, 0x02])),
+  getSecretKey: vi.fn().mockResolvedValue(new Uint8Array([0x01, 0x02, 0x03, 0x04])),
+  listKeypairs: vi.fn().mockResolvedValue([{ id: "key-1", level: 512, createdAt: 0 }]),
+  isKeyStoreInitialised: vi.fn().mockReturnValue(true),
   initKeyStore: vi.fn(),
   clearKeyStore: vi.fn(),
 }));
@@ -276,6 +274,7 @@ const MOCK_FOLIO = {
   paymaster: "0x0000000000000000000000000000000000000003",
   type: 0,
   bundler: "0x0000000000000000000000000000000000000004",
+  keypairId: "key-1",
   createdAt: 0,
   updatedAt: 0,
 };

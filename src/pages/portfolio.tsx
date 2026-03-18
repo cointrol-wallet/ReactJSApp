@@ -4,7 +4,8 @@ import { PortfolioStore, Folio, Wallet } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
-import { getAddress } from "@/storage/keyStore";
+import { listKeypairs, generateAndStoreKeypair, predictAddressFromKeypair, KeypairMeta } from "@/storage/keyStore";
+import { deriveFolioSalt } from "@/lib/salt";
 import { Address } from "viem";
 import { useDomains } from "@/hooks/useDomains";
 import { createPortal } from "react-dom";
@@ -13,7 +14,7 @@ import { useDisplayName } from "../hooks/useDisplayName";
 import { DisplayNameModal } from "../components/ui/DisplayNameModal";
 import { buildProfileShareFromFolios } from "../lib/shareBuilders";
 import { ShareQrModal } from "../components/ui/ShareQrModal";
-import { getUUID } from "@/storage/authStore";
+import { useAuth } from "@/context/AuthContext";
 
 type SubmitState =
   | { status: "idle" }
@@ -201,6 +202,8 @@ export function Folios() {
   const [tagSearch, setTagSearch] = React.useState<string>("");
   const [chainId, setChainId] = React.useState<number>(11155111);
 
+  const { uuid } = useAuth();
+
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
@@ -209,6 +212,8 @@ export function Folios() {
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
+  const [formKeypairId, setFormKeypairId] = React.useState<string>("");
+  const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
 
   const CHAIN_NAMES: Record<number, string> = {
     1: "Ethereum",
@@ -309,7 +314,7 @@ export function Folios() {
   }, []);
 
   React.useEffect(() => {
-    if (folioToDelete !=null) {
+    if (folioToDelete != null) {
       setFolioNameToDelete(folios.find(f => f.id === folioToDelete)?.name || null);
     }
   }, [folioToDelete, folios]);
@@ -405,16 +410,17 @@ export function Folios() {
 
   function resetForm() {
     setFormName("");
+    setFormKeypairId("");
   }
 
   function openAddModal() {
-
     if (!selectDomain) return;
     resetForm();
     const chainFolios = folios.filter((f) => f.chainId === selectDomain.chainId);
     if (chainFolios.length === 0) {
+      listKeypairs().then(setKeypairs);
       setIsModalOpen(true);
-    }  // this if statement will need to be replaced once more than one domain is supported and is just to limit each user to one account for now
+    }  // limit each user to one account per chain until multi-domain support is added
   }
 
   function openEditModal(folio: Folio) {
@@ -441,11 +447,7 @@ export function Folios() {
     e.preventDefault();
 
     const trimmedName = formName.trim();
-    if (!trimmedName) return; 
-
-    const payload: any = {
-      name: trimmedName,
-    };
+    if (!trimmedName) return;
 
     try {
       setSubmitState({
@@ -454,63 +456,68 @@ export function Folios() {
       });
 
       if (editingFolio) {
-        await updateFolio(editingFolio.id, payload);
+        await updateFolio(editingFolio.id, { name: trimmedName });
       } else {
-        const salt = await getUUID();
-        if (!salt) {
+        if (!uuid) {
           setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." });
           return;
         }
-        const sender = await getAddress(salt, 512, selectDomain);
-        if (!sender) {
-          setSubmitState({ status: "error", message: "No sender address available for new account." });
+
+        // Enforce unique folio name (salt depends on it)
+        if (folios.some(f => f.name === trimmedName)) {
+          setSubmitState({ status: "error", message: "An account with this name already exists. Choose a unique name." });
           return;
         }
 
+        // Resolve or generate keypair
+        let keypairId = formKeypairId;
+        if (!keypairId) {
+          setSubmitState({ status: "pending", message: "Generating Falcon-512 keypair…" });
+          const meta = await generateAndStoreKeypair(512);
+          keypairId = meta.id;
+          setFormKeypairId(keypairId);
+          setKeypairs(await listKeypairs());
+        }
+
+        const salt = deriveFolioSalt(uuid, trimmedName);
+        const sender = await predictAddressFromKeypair(keypairId, salt, selectDomain);
+
         setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
 
-        const newWallet = await createQuantumAccount({
+        const ok = await createQuantumAccount({
           sender: sender as Address,
-          domain: selectDomain.name,
-          salt: salt,
+          domain: selectDomain,
+          salt,
+          keypairId,
         });
 
-        if (!newWallet) {
-          setSubmitState({
-            status: "error",
-            message: "Account creation failed (no wallet returned).",
-          });
+        if (!ok) {
+          setSubmitState({ status: "error", message: "Account creation failed." });
           return;
         }
 
         setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
 
         const chainCoins = coins.filter((c) => c.chainId === selectDomain.chainId);
+        const wallet: Wallet[] = chainCoins.map((c) => ({ coin: c.id, balance: 0n }));
 
-        const wallet: Wallet[] = chainCoins.map((c) => ({
-          coin: c.id,
-          balance: 0n,
-        }));
-
-        const domainDetails = {
+        await addFolio({
+          name: trimmedName,
           address: sender,
           chainId: selectDomain.chainId,
           paymaster: selectDomain.paymaster,
-          type: 0, // not currently used
+          type: 0,
           bundler: selectDomain.bundler,
-          wallet: wallet,
-        }
-
-        await addFolio({ ...payload, ...domainDetails });
-
+          keypairId,
+          wallet,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
       }
 
       closeModal();
     } catch (err: any) {
-      const msg =
-        typeof err?.message === "string"
-          ? err.message
-          : "Something went wrong while creating the account.";
+      const msg = typeof err?.message === "string" ? err.message : "Something went wrong while creating the account.";
       setSubmitState({ status: "error", message: msg });
     }
   }
@@ -620,6 +627,7 @@ export function Folios() {
 
             const folioName = folio?.name ?? item.folioId;
             const coinSymbol = coin?.symbol ?? "—";
+            const coinName = coin?.name ?? "Unknown coin";
             const chainName =
               folio && CHAIN_NAMES[folio.chainId]
                 ? CHAIN_NAMES[folio.chainId]
@@ -635,23 +643,28 @@ export function Folios() {
             return (
               <li key={`${item.folioId}-${item.coinId}-${item.walletId}`} className="w-full">
                 <div className="w-full rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="grid gap-3 sm:gap-x-6 sm:gap-y-2 sm:grid-cols-[160px_90px_minmax(0,1fr)_110px] sm:items-start">
-                    {/* Col 1: Name */}
-                    <div className="min-w-0 font-medium">{folioName}</div>
-
-                    {/* Col 2: Coin symbol */}
-                    <div className="min-w-0 text-xs text-muted-foreground sm:pt-1">
-                      {coin?.name} --- {chainName}
-                    </div>
-
-                    {/* Col 3: Chain + balance */}
+                  <div className="grid gap-3 sm:gap-x-6 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                    {/* Col 1: Large balance */}
                     <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">
-                        Balance: {balanceStr} {coinSymbol}
+                      <div className="truncate text-3xl font-semibold leading-none sm:text-5xl">
+                        {balanceStr} <span className="text-xl sm:text-3xl">{coinSymbol}</span>
                       </div>
                     </div>
 
-                    {/* Col 4: Actions */}
+                    {/* Col 2: Name + chain */}
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-medium sm:text-lg">
+                        {folioName}
+                      </div>
+                      <div className="truncate text-sm text-muted-foreground sm:text-base">
+                        {coinName}
+                      </div>
+                      <div className="truncate text-sm text-muted-foreground sm:text-base">
+                        {chainName}
+                      </div>
+                    </div>
+
+                    {/* Col 3: Actions */}
                     <div className="justify-self-start sm:justify-self-end">
                       <details className="relative inline-block">
                         <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs">
@@ -765,6 +778,25 @@ export function Folios() {
                   disabled={isPending}
                 />
               </div>
+
+              {!editingFolio && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Keypair</label>
+                  <select
+                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    value={formKeypairId}
+                    onChange={e => setFormKeypairId(e.target.value)}
+                    disabled={isPending}
+                  >
+                    <option value="">Generate new Falcon-512 keypair</option>
+                    {keypairs.map(k => (
+                      <option key={k.id} value={k.id}>
+                        Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

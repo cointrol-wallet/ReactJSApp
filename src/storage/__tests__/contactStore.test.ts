@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setCurrentUser } from "../currentUser";
 
 // ---------------------------------------------------------------------------
 // In-memory idb-keyval mock (shared by contactStore + addressStore)
@@ -23,6 +24,11 @@ import { getAllAddress } from "../addressStore";
 
 beforeEach(() => {
   idbStore.clear();
+  setCurrentUser("test-uid");
+});
+
+afterEach(() => {
+  setCurrentUser(null);
 });
 
 // ---------------------------------------------------------------------------

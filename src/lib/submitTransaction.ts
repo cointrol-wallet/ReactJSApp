@@ -13,7 +13,7 @@ import {
   hashTypedData 
 } from "viem";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
-import { getFalconSecretKey, FalconLevel } from "@/storage/keyStore";
+import { getSecretKey, listKeypairs } from "@/storage/keyStore";
 import { Folio } from "@/storage/folioStore";
 import { Domain } from "@/storage/domainStore";
 import { entryPointAbi } from "./abiTypes";
@@ -299,18 +299,18 @@ export const useTx = create<TxStore>((set, get) => ({
         : "0x",
     } as any;
 
-    // 3) Sign userOp (placeholder; integrate Falcon-1024 or EOA for demo)
-
     const userOpHash: `0x${string}` = calculateUserOpHash(userOpBase, domain.entryPoint as `0x${string}`, folio.chainId);
 
-    const falcon = createFalconWorkerClient();
-    const falconLevel: FalconLevel = 512; // example for now, will replace with user choice later
-
-    const sk = await getFalconSecretKey(falconLevel);
-    if (!sk) throw new Error("Falcon secret key not available");
+    const keypairs = await listKeypairs();
+    const meta = keypairs.find(k => k.id === folio.keypairId);
+    if (!meta || meta.level === "ECC") throw new Error("No valid Falcon keypair assigned to this account");
     if (userOpHash.length !== 66) throw new Error(`Invalid userOpHash length`);
 
-    const signature = await falcon.sign(falconLevel, hexToBytes(userOpHash), sk); // example for now, will replace with user choice later
+    const falcon = createFalconWorkerClient();
+    const sk = await getSecretKey(folio.keypairId);
+    if (!sk) throw new Error("Falcon secret key not available");
+
+    const signature = await falcon.sign(meta.level, hexToBytes(userOpHash), sk);
 
     const userOp: PackedUserOperation = { ...userOpBase, signature: bytesToHex(signature) } as PackedUserOperation;
 

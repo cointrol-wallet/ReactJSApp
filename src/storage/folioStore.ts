@@ -5,7 +5,7 @@ import { getCurrentUser } from "./currentUser";
 
 function folioKey() { return `cointrol:folios:v1:${getCurrentUser()}`; }
 const FOLIO_SCHEMA_VERSION_KEY = "cointrol:folios:schemaVersion";
-const CURRENT_FOLIO_SCHEMA_VERSION = 1;
+const CURRENT_FOLIO_SCHEMA_VERSION = 2;
 
 // Contact schema v1
 export type Wallet = {
@@ -14,16 +14,17 @@ export type Wallet = {
 };
 
 export type Folio = {
-  id: string;  // unique identifier
-  address: string;  // wallet address
-  name: string;  // label for the folio
-  chainId: number;  // blockchain network ID
+  id: string;        // unique identifier
+  address: string;   // wallet address
+  name: string;      // label for the folio
+  chainId: number;   // blockchain network ID
   paymaster: string; // paymaster address
-  type: number; // small number for bitchecking
-  bundler: string; // bundler address
-  wallet?: Wallet[];  // optional list of associated wallets
-  createdAt: number;       // ms since epoch
-  updatedAt: number;       // ms since epoch
+  type: number;      // small number for bitchecking
+  bundler: string;   // bundler address
+  keypairId: string; // ID of the keypair in the key pool assigned to this account
+  wallet?: Wallet[]; // optional list of associated wallets
+  createdAt: number; // ms since epoch
+  updatedAt: number; // ms since epoch
 }
 
 export type PortfolioStore = {
@@ -78,21 +79,14 @@ async function ensureFoliosSchemaMigrated(): Promise<void> {
   let folios = await get<Folio[] | undefined>(folioKey());
   if (!folios) folios = [];
 
-  // Example future migration (v1 → v2):
-  //
-  // if (storedVersion < 2) {
-  //   const migrated = contacts.map(c => ({
-  //     ...c,
-  //     tags: [], // new field with default
-  //   }));
-  //   await set(CONTACTS_KEY, migrated);
-  //   await setContactsSchemaVersion(2);
-  // }
-  //
-  // For now we just bump the version if needed.
-
-  if (storedVersion < CURRENT_FOLIO_SCHEMA_VERSION) {
-    await setFoliosSchemaVersion(CURRENT_FOLIO_SCHEMA_VERSION);
+  if (storedVersion < 2) {
+    // v1 → v2: add keypairId field (default to empty string for existing folios).
+    const migrated = folios.map((f: any) => ({
+      ...f,
+      keypairId: f.keypairId ?? "",
+    }));
+    await set(folioKey(), migrated);
+    await setFoliosSchemaVersion(2);
   }
 }
 
@@ -116,15 +110,16 @@ export async function getAllFolios(): Promise<Folio[]> {
 }
 
 export async function addFolio(input: {
-  address: string;  // wallet address
-  chainId: number;  // blockchain network ID
-  name: string;  // label for the folio
+  address: string;   // wallet address
+  chainId: number;   // blockchain network ID
+  name: string;      // label for the folio
   paymaster: string; // paymaster address
-  type: number; // small number for bitchecking
-  bundler: string; // bundler address
-  wallet?: Wallet[];  // optional list of associated wallets
-  createdAt: number;       // ms since epoch
-  updatedAt: number;       // ms since epoch
+  type: number;      // small number for bitchecking
+  bundler: string;   // bundler address
+  keypairId: string; // ID of the keypair assigned to this account
+  wallet?: Wallet[]; // optional list of associated wallets
+  createdAt: number; // ms since epoch
+  updatedAt: number; // ms since epoch
 }): Promise<Folio[]> {
   const now = Date.now();
   const folios = await loadFoliosRaw();
@@ -137,6 +132,7 @@ export async function addFolio(input: {
     paymaster: input.paymaster,
     type: input.type,
     bundler: input.bundler,
+    keypairId: input.keypairId,
     wallet: input.wallet || undefined,
     createdAt: now,
     updatedAt: now,
