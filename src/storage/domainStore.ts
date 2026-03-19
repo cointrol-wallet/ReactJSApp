@@ -1,6 +1,8 @@
 import { get, set } from "idb-keyval";
 import { getCurrentUser } from "./currentUser";
 import { FalconLevel } from "./keyStore";
+import { Paymaster } from "./folioStore";
+import { BundlerAPI, BundlerDomain } from "@/lib/submitTransaction";
 
 // --- Schema versioning -------------------------------------------------------
 
@@ -14,10 +16,8 @@ export type Domain = {
   name: string;           // label for the domain
   chainId: number;        // blockchain network ID
   entryPoint: string;     // entrypoint contract address
-  factory: string;        // QuantumAccountFactory contract address
-  falcon: string;         // Falcon verifier contract address (empty string for ECC)
-  falconLevel: FalconLevel; // cryptographic scheme used by accounts on this domain
-  paymaster: string;      // paymaster address
+  falconDomain: FalconDomain[]; // falcon domain parameters
+  paymaster?: Paymaster[];      // paymasters
   bundler: string;        // bundler address
   rpcUrl: string;         // rpc url used locally by app
   transactionUrl: string; // etherscan url for tx (or equivalent)
@@ -25,20 +25,31 @@ export type Domain = {
   updatedAt: number;      // ms since epoch
 }
 
+export type FalconDomain = {
+  factory: string;
+  falcon: string;
+  falconLevel: FalconLevel;
+}
+
+const BUILTIN_FALCON_DOMAINS: FalconDomain[] = [{
+  factory:      "0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6",
+  falcon:       "0x01A272c06df74c3331f1E56f357D7A38f28B7346",
+  falconLevel:  512,
+}]
+
 const BUILTIN_DOMAINS: Domain[] = [{
   name: "ETHEREUM SEPOLIA",
   chainId: 11155111,
   entryPoint:   "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
-  factory:      "0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6",
-  falcon:       "0x01A272c06df74c3331f1E56f357D7A38f28B7346",
-  falconLevel:  512,
-  paymaster:    "0x018D7d0526c366678976927EA2E9Fb65f8512115",
+  falconDomain: BUILTIN_FALCON_DOMAINS,  
   bundler:      "0xD50a29DB30231F9D3cD42a6162329D1f4EEfeFED",
   rpcUrl:       "https://ethereum-sepolia-rpc.publicnode.com",
   transactionUrl: "https://sepolia.etherscan.io/tx/",
   createdAt: 0,
   updatedAt: 0,
 }];
+
+
 
 // --- In-memory subscribers for live updates ---------------------------------
 
@@ -131,10 +142,8 @@ export async function addDomain(input: {
   name: string;
   chainId: number;
   entryPoint: string;
-  factory: string;          // required — account creation cannot proceed without it
-  falcon?: string;          // optional — defaults to "" (e.g. for ECC domains)
-  falconLevel: FalconLevel;
-  paymaster: string;
+  falconDomain: FalconDomain[];
+  paymaster?: Paymaster[];
   bundler: string;
   rpcUrl: string;
   transactionUrl: string;
@@ -146,9 +155,7 @@ export async function addDomain(input: {
     chainId:      input.chainId,
     name:         input.name,
     entryPoint:   input.entryPoint,
-    factory:      input.factory,
-    falcon:       input.falcon ?? "",
-    falconLevel:  input.falconLevel,
+    falconDomain:    input.falconDomain,
     paymaster:    input.paymaster,
     bundler:      input.bundler,
     rpcUrl:       input.rpcUrl,
@@ -191,4 +198,66 @@ export async function deleteDomain(name: string): Promise<Domain[]> {
 
 export async function clearDomains(): Promise<void> {
   await saveDomainsRaw([]);
+}
+
+// --- Bundler sync ------------------------------------------------------------
+
+function bundlerDomainToLocal(bd: BundlerDomain): Domain {
+  return {
+    name: bd.name,
+    chainId: bd.chainId,
+    entryPoint: bd.entryPoint,
+    falconDomain: bd.falconDomain.map(fd => ({
+      factory: fd.factory,
+      falcon: fd.falcon,
+      falconLevel: Number(fd.falconLevel) as FalconLevel,
+    })),
+    paymaster: bd.paymaster.map(p => ({
+      address: p.address,
+      name: p.name,
+      chainId: p.chainId,
+      type: p.type,
+      bundler: p.bundler,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    })),
+    bundler: bd.bundler,
+    rpcUrl: bd.rpcUrl,
+    transactionUrl: bd.transactionUrl,
+    createdAt: bd.createdAt,
+    updatedAt: bd.updatedAt,
+  };
+}
+
+/**
+ * Fetch all domains from the bundler and merge into local storage.
+ * Existing local domains matched by name are updated; new ones are added.
+ * Local-only domains (not on the server) are preserved.
+ * Errors are caught silently — BUILTIN_DOMAINS serve as fallback.
+ */
+export async function syncDomainsFromBundler(): Promise<void> {
+  try {
+    const resp = await BundlerAPI.getAllDomains();
+    if (!resp.success || !resp.data) return;
+
+    const remoteDomains = resp.data.map(bundlerDomainToLocal);
+    const locals = await loadDomainsRaw();
+
+    const merged: Domain[] = [...locals];
+    for (const remote of remoteDomains) {
+      // Skip domains that match a builtin — builtins are always appended separately
+      if (BUILTIN_DOMAINS.some(b => b.name === remote.name)) continue;
+
+      const idx = merged.findIndex(l => l.name === remote.name);
+      if (idx >= 0) {
+        merged[idx] = { ...merged[idx], ...remote };
+      } else {
+        merged.push(remote);
+      }
+    }
+
+    await saveDomainsRaw(merged);
+  } catch (err) {
+    console.warn("[Domains] Bundler sync failed, using local/builtin domains:", err);
+  }
 }

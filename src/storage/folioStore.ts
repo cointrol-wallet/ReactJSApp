@@ -27,6 +27,16 @@ export type Folio = {
   updatedAt: number; // ms since epoch
 }
 
+export type Paymaster = {
+  address: string;   // paymaster address
+  name: string;      // label for the paymaster
+  chainId: number;   // blockchain network ID
+  type: number;      // small number for bitchecking
+  bundler: string;   // bundler address
+  createdAt: number; // ms since epoch
+  updatedAt: number; // ms since epoch
+}
+
 export type PortfolioStore = {
   folioId: string; // folio id
   coinId: string; // coin id from coin listener

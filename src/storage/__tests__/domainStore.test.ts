@@ -27,7 +27,7 @@ const BASE_DOMAIN = {
   name: "MY TESTNET",
   chainId: 31337,
   entryPoint: "0xentrypoint",
-  paymaster: "0xpaymaster",
+  falconDomain: [{ factory: "0xfactory", falcon: "0xfalcon", falconLevel: 512 as const }],
   bundler: "0xbundler",
   rpcUrl: "http://localhost:8545",
   transactionUrl: "http://localhost/tx/",

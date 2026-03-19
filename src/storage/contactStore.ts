@@ -22,6 +22,7 @@ export type Contact = {
 export type Wallet = {
   chainId: number;
   address: string;
+  name?: string;
 }
 
 // v2 will include

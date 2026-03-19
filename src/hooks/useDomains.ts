@@ -8,6 +8,7 @@ import {
   deleteDomain as storeDeleteDomain,
   clearDomains as storeClearDomain,
   subscribeToDomains,
+  syncDomainsFromBundler,
 } from "../storage/domainStore";
 
 type UseDomainsResult = {
@@ -35,6 +36,9 @@ export function useDomains(): UseDomainsResult {
           setDomains(initial);
           setLoading(false);
         }
+        // Fire-and-forget: sync from bundler in background.
+        // Updates arrive via the subscriber when saveDomainsRaw is called.
+        syncDomainsFromBundler();
       } catch (e: any) {
         console.error("[Domains] Failed to load:", e);
         if (!cancelled) {

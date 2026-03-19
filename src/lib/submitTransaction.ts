@@ -38,9 +38,16 @@ export interface UpdatePublicKey { sender: `0x${string}`; domain: string; oldKey
 export interface GenericResponse { success: boolean; result: string }
 export interface TxHashRequest { sender: `0x${string}`; userOpHash: `0x${string}` }
 export interface TxReceipt { success: boolean; txHash: `0x${string}` }
-export interface DomainRow { name: string }
-export interface GetAllDomainsResponse { success: boolean; data: DomainRow[] }
-export interface DomainDetailsResponse { success: boolean; data: { name: string; isTest: number; entryPoint: `0x${string}`; falcon: `0x${string}`; chainId: number; rpcUrl: string; created_at: string; updated_at: string } }
+export interface BundlerFalconDomain { factory: string; falcon: string; falconLevel: string }
+export interface BundlerPaymaster { address: string; name: string; chainId: number; type: number; bundler: string; createdAt: number; updatedAt: number }
+export interface BundlerDomain {
+  name: string; chainId: number; entryPoint: string; isTest: number;
+  falconDomain: BundlerFalconDomain[]; paymaster: BundlerPaymaster[];
+  bundler: string; rpcUrl: string; transactionUrl: string;
+  createdAt: number; updatedAt: number;
+}
+export interface GetAllDomainsResponse { success: boolean; data: BundlerDomain[] }
+export interface DomainDetailsResponse { success: boolean; data: BundlerDomain }
 export interface PaymasterRequest { paymaster: `0x${string}`; domain: string; sender: `0x${string}`; flag: number; signature: `0x${string}` }
 export interface CreateFreeAccountRequest { sender: `0x${string}`; domain: string; publicKey: `0x${string}`; salt: `0x${string}`; signature: `0x${string}` }
 
