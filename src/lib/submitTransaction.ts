@@ -17,6 +17,7 @@ import { getSecretKey, listKeypairs } from "@/storage/keyStore";
 import { Folio } from "@/storage/folioStore";
 import { Domain } from "@/storage/domainStore";
 import { entryPointAbi } from "./abiTypes";
+import { getGasProfile } from "./gasConfig";
 
 export interface TxStatus { phase: "idle" | "preparing" | "simulated" | "submitted" | "finalized" | "failed"; hash?: string; userOpHash?: string; message?: string }
 
@@ -228,7 +229,7 @@ export const calculateUserOpHash = (
   });
 };
 
-function defaultAccountGasLimits(accountGasLimit = 8_500_000n, callGasLimit = 200_000n): `0x${string}` {
+export function defaultAccountGasLimits(accountGasLimit: bigint, callGasLimit: bigint): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
   const v = accountGasLimit;
   const c = callGasLimit;
@@ -266,7 +267,7 @@ export const useTx = create<TxStore>((set, get) => ({
     const publicClient = createPublicClient({
           transport: http(domain.rpcUrl), 
         });
-    const [nonce, feeData, estimatedCallGas] = await Promise.all([
+    const [nonce, feeData, estimatedCallGas, keypairs] = await Promise.all([
       publicClient.readContract({
         address: domain.entryPoint as `0x${string}`,
         abi: entryPointAbi,
@@ -280,12 +281,18 @@ export const useTx = create<TxStore>((set, get) => ({
         to: folio.address as `0x${string}`,
         data: encoded as `0x${string}`,
       }).catch(() => null),
+      listKeypairs(),
     ]);
+
+    const meta = keypairs.find(k => k.id === folio.keypairId);
+    if (!meta || meta.level === "ECC") throw new Error("No valid Falcon keypair assigned to this account");
+    const gasProfile = getGasProfile(meta.level);
+
     // Apply 20% buffer to live network fees to avoid being priced out of the next block
     const maxFeePerGas = (feeData?.maxFeePerGas ?? 4_000_000_000n) * 12n / 10n;
     const maxPriorityFeePerGas = (feeData?.maxPriorityFeePerGas ?? 2_000_000n) * 12n / 10n;
-    // Apply 50% buffer to call gas estimate; fall back to 500k if estimation fails
-    const callGasLimit = estimatedCallGas ? (estimatedCallGas * 15n / 10n) : 500_000n;
+    // Apply 50% buffer to call gas estimate; fall back to level-appropriate default if estimation fails
+    const callGasLimit = estimatedCallGas ? (estimatedCallGas * 15n / 10n) : gasProfile.defaultCallGasFallback;
     const paymaster =
       (folio.paymaster?.startsWith("0x") ? folio.paymaster : undefined) as `0x${string}` | undefined;
     const userOpBase: Omit<PackedUserOperation, "signature"> = {
@@ -293,7 +300,7 @@ export const useTx = create<TxStore>((set, get) => ({
       nonce: toHex(nonce),
       initCode: emptyHex(),
       callData: encoded,
-      accountGasLimits: defaultAccountGasLimits(8_500_000n, callGasLimit),
+      accountGasLimits: defaultAccountGasLimits(gasProfile.verificationGasLimit, callGasLimit),
       preVerificationGas: hexlify(200_000), // will come from bundler api?
       gasFees: packGasFees(maxPriorityFeePerGas, maxFeePerGas),
       paymasterAndData: paymaster
@@ -308,9 +315,6 @@ export const useTx = create<TxStore>((set, get) => ({
 
     const userOpHash: `0x${string}` = calculateUserOpHash(userOpBase, domain.entryPoint as `0x${string}`, folio.chainId);
 
-    const keypairs = await listKeypairs();
-    const meta = keypairs.find(k => k.id === folio.keypairId);
-    if (!meta || meta.level === "ECC") throw new Error("No valid Falcon keypair assigned to this account");
     if (userOpHash.length !== 66) throw new Error(`Invalid userOpHash length`);
 
     const falcon = createFalconWorkerClient();

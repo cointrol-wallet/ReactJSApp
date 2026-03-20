@@ -1,4 +1,5 @@
-import { PaymasterAPI, BundlerAPI, GenericResponse, PackedUserOperation, calculateUserOpHash } from "./submitTransaction";
+import { PaymasterAPI, BundlerAPI, GenericResponse, PackedUserOperation, calculateUserOpHash, defaultAccountGasLimits } from "./submitTransaction";
+import { getGasProfile } from "./gasConfig";
 import { isKeyStoreInitialised, getPublicKey, getSecretKey, listKeypairs } from "../storage/keyStore";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { createAccountToBytes } from "./bytesEncoder";
@@ -87,6 +88,7 @@ export async function updatePublicKeyOnChain({
   const oldMeta = keypairs.find(k => k.id === folio.keypairId);
   if (!oldMeta) throw new Error(`Current keypair ${folio.keypairId} not found`);
   if (oldMeta.level === "ECC") throw new Error("ECC keys not yet implemented");
+  const gasProfile = getGasProfile(oldMeta.level);
 
   const oldSK = await getSecretKey(folio.keypairId);
   if (!oldSK) throw new Error("Old secret key not available");
@@ -117,11 +119,10 @@ export async function updatePublicKeyOnChain({
   const maxFeePerGas = (feeData?.maxFeePerGas ?? 4_000_000_000n) * 12n / 10n;
   const maxPriorityFeePerGas = (feeData?.maxPriorityFeePerGas ?? 2_000_000n) * 12n / 10n;
 
-  const accountGasLimits = (() => {
-    const v = 8_500_000n;
-    const c = 200_000n;
-    return `0x${((v << 128n) | c).toString(16).padStart(64, "0")}` as `0x${string}`;
-  })();
+  const accountGasLimits = defaultAccountGasLimits(
+    gasProfile.verificationGasLimit,
+    gasProfile.keyRotationCallGasLimit,
+  );
   const gasFees = (() => {
     const packed = (maxPriorityFeePerGas << 128n) | maxFeePerGas;
     return `0x${packed.toString(16).padStart(64, "0")}` as `0x${string}`;
