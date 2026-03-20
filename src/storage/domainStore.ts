@@ -3,12 +3,13 @@ import { getCurrentUser } from "./currentUser";
 import { FalconLevel } from "./keyStore";
 import { Paymaster } from "./folioStore";
 import { BundlerAPI, BundlerDomain } from "@/lib/submitTransaction";
+import { QUANTUM_ACCOUNT_512_CREATION_CODE } from "@/lib/creationCodes";
 
 // --- Schema versioning -------------------------------------------------------
 
 function domainKey() { return `cointrol:domains:v1:${getCurrentUser()}`; }
 function domainSchemaVersionKey() { return `cointrol:domains:schemaVersion:${getCurrentUser()}`; }
-const CURRENT_DOMAIN_SCHEMA_VERSION = 3;
+const CURRENT_DOMAIN_SCHEMA_VERSION = 4;
 
 // Domain schema v3
 
@@ -29,12 +30,14 @@ export type FalconDomain = {
   factory: string;
   falcon: string;
   falconLevel: FalconLevel;
+  creationCode: string;
 }
 
 const BUILTIN_FALCON_DOMAINS: FalconDomain[] = [{
   factory:      "0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6",
   falcon:       "0x01A272c06df74c3331f1E56f357D7A38f28B7346",
   falconLevel:  512,
+  creationCode: QUANTUM_ACCOUNT_512_CREATION_CODE,
 }]
 
 const BUILTIN_DOMAINS: Domain[] = [{
@@ -114,7 +117,20 @@ async function ensureDomainSchemaMigrated(): Promise<void> {
       return { ...rest, falconLevel };
     });
     await set(domainKey(), migrated);
-    await setDomainsSchemaVersion(3);
+    storedVersion = 3;
+  }
+
+  if (storedVersion < 4) {
+    // v3 → v4: add creationCode to each FalconDomain entry.
+    const migrated = domains.map((d: any) => ({
+      ...d,
+      falconDomain: (d.falconDomain ?? []).map((fd: any) => ({
+        ...fd,
+        creationCode: fd.creationCode ?? "",
+      })),
+    }));
+    await set(domainKey(), migrated);
+    await setDomainsSchemaVersion(4);
   }
 }
 
@@ -211,6 +227,7 @@ function bundlerDomainToLocal(bd: BundlerDomain): Domain {
       factory: fd.factory,
       falcon: fd.falcon,
       falconLevel: Number(fd.falconLevel) as FalconLevel,
+      creationCode: fd.creationCode,
     })),
     paymaster: bd.paymaster.map(p => ({
       address: p.address,

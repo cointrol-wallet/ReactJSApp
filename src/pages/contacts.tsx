@@ -201,6 +201,8 @@ export function Contacts() {
       if (field === "chainId") {
         const n = typeof value === "number" ? value : Number(value);
         if (Number.isFinite(n)) w.chainId = n;
+      } else if (field === "name") {
+        w.name = String(value);
       } else {
         w.address = String(value);
       }
@@ -539,6 +541,14 @@ export function Contacts() {
                         placeholder="0x..."
                         value={w.address}
                         onChange={(e) => handleWalletChange(idx, "address", e.target.value)}
+                      />
+
+                      {/* Row 3: name (optional) */}
+                      <input
+                        className="w-full rounded-md border px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs"
+                        placeholder="Label (optional)"
+                        value={w.name ?? ""}
+                        onChange={(e) => handleWalletChange(idx, "name", e.target.value)}
                       />
                     </div>
                   ))}

@@ -43,7 +43,7 @@ async function upsertContactByName(
 
   const mergedWallets = [...(existing.wallets ?? []), ...wallets];
 
-  const uniq = new Map<string, { chainId: number; address: string }>();
+  const uniq = new Map<string, { chainId: number; address: string; name?: string }>();
   for (const w of mergedWallets) {
     uniq.set(`${w.chainId}:${normAddr(w.address)}`, w);
   }

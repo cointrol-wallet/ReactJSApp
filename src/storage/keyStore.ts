@@ -1,7 +1,7 @@
 import { get, set, del } from "idb-keyval";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { predictQuantumAccountAddress } from "@/lib/predictQuantumAccountAddress";
-import { bytesToHex, Hex } from "viem";
+import { Hex } from "viem";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -253,15 +253,13 @@ export async function getSecretKey(keypairId: string): Promise<Uint8Array | null
 export async function predictAddressFromKeypair(
   keypairId: string,
   salt: Hex,
-  domain: { entryPoint: string; factory: string; falcon: string }
+  domain: { factory: string; creationCode: string }
 ): Promise<string> {
   const pk = await getPublicKey(keypairId);
   if (!pk) throw new Error(`Keypair ${keypairId} not found`);
   return predictQuantumAccountAddress({
-    entryPoint: domain.entryPoint as Hex,
-    factory:    domain.factory as Hex,
-    falcon:     domain.falcon as Hex,
-    publicKeyBytes: bytesToHex(pk),
+    factory:      domain.factory as Hex,
     salt,
+    creationCode: domain.creationCode as Hex,
   });
 }

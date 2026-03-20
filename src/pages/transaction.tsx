@@ -76,6 +76,8 @@ export function Transactions() {
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
   const [payableValue, setPayableValue] = React.useState<string>("");
+  const [requiresApproval, setRequiresApproval] = React.useState(false);
+  const [approvalCoin, setApprovalCoin] = React.useState<Coin | null>(null);
 
   const [readResult, setReadResult] = React.useState<string | null>(null);
   const [formError, setError] = React.useState<string | null>(null);
@@ -638,6 +640,11 @@ export function Transactions() {
     [functions]
   );
 
+  const erc20Coins = React.useMemo(
+    () => coins.filter((c) => c.type === "ERC20"),
+    [coins]
+  );
+
   React.useEffect(() => {
     if (!selectDomain && domains.length) setSelectDomain(domains[0]);
   }, [selectDomain, domains]);
@@ -649,6 +656,8 @@ export function Transactions() {
     setPayableValue("");
     setReadResult(null);
     setError(null);
+    setRequiresApproval(false);
+    setApprovalCoin(null);
   }, [abi]);
 
   React.useEffect(() => {
@@ -682,6 +691,8 @@ export function Transactions() {
     }
     setReadResult(null);
     setError(null);
+    setRequiresApproval(false);
+    setApprovalCoin(null);
   }, [selectedFnName]);
 
   const selectedFn: AbiFunctionFragment | undefined = React.useMemo(
@@ -744,6 +755,11 @@ export function Transactions() {
 
     if (!selectedFn) {
       setError("No function selected");
+      return;
+    }
+
+    if (requiresApproval && !approvalCoin) {
+      setError("Select a token for ERC-20 approval");
       return;
     }
 
@@ -834,6 +850,44 @@ export function Transactions() {
       if (!dest) {
         setError("Could not resolve destination address");
         return;
+      }
+
+      // ERC-20 approval step (if requested)
+      if (requiresApproval && approvalCoin) {
+        const approvalAmountRaw = argValues["value"];
+        if (!approvalAmountRaw || !approvalAmountRaw.trim()) {
+          setError("No value found in form inputs for approval amount");
+          return;
+        }
+
+        const parsedApprovalAmount = BigInt(approvalAmountRaw.trim());
+
+        const approveInnerData = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [dest, parsedApprovalAmount],
+        }) as Hex;
+
+        const approveWrapped = encodeFunctionData({
+          abi: quantumAccountAbi,
+          functionName: "execute",
+          args: [approvalCoin.address as `0x${string}`, 0n, approveInnerData],
+        }) as `0x${string}`;
+
+        const _folio = selectFolio as Folio;
+        const _domain = selectDomain as Domain;
+
+        await startFlow({
+          folio: _folio,
+          encoded: approveWrapped,
+          domain: _domain,
+        });
+
+        const approvalStatus = useTx.getState().status;
+        if (approvalStatus.phase === "failed") {
+          setError("ERC-20 approval failed: " + (approvalStatus.message ?? "Unknown error"));
+          return;
+        }
       }
 
       // Wrap into QuantumAccount.execute(dest,value,innerData)
@@ -1403,6 +1457,43 @@ export function Transactions() {
                   either an array or an object with an <code>abi</code> field.
                 </p>
               )
+            )}
+
+            {/* ERC-20 approval checkbox */}
+            {!transferOrTransaction && selectedFn && !isReadOnly && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1 text-xs font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={requiresApproval}
+                      onChange={(e) => {
+                        setRequiresApproval(e.target.checked);
+                        if (!e.target.checked) setApprovalCoin(null);
+                      }}
+                    />
+                    Requires ERC-20 approval
+                  </label>
+                  {requiresApproval && (
+                    <select
+                      className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                      value={approvalCoin?.id ?? ""}
+                      onChange={(e) =>
+                        setApprovalCoin(
+                          erc20Coins.find((c) => String(c.id) === e.target.value) ?? null
+                        )
+                      }
+                    >
+                      <option value="">Select token</option>
+                      {erc20Coins.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
             )}
 
             {!transferOrTransaction && isPayable && (

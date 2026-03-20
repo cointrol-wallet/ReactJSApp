@@ -25,8 +25,6 @@ export type Wallet = {
   name?: string;
 }
 
-// v2 will include
-// name or label in Wallet
 // --- In-memory subscribers for live updates ---------------------------------
 
 type ContactsListener = (contacts: Contact[]) => void;

@@ -315,8 +315,11 @@ function AppContainer() {
   const [onboardingDismissed, setOnboardingDismissed] = React.useState(
     () => localStorage.getItem("cointrol_onboarding_seen") === "1"
   );
+  const [migrationDone, setMigrationDone] = React.useState(
+    () => localStorage.getItem("cointrol_migration_v2_done") === "1"
+  );
 
-  const { folios, loading: foliosLoading, updateFolio } = useFolios();
+  const { folios, loading: foliosLoading, updateFolio, clearFolios } = useFolios();
 
   const handleDecoded = React.useCallback(async (qrText: string) => {
     try {
@@ -346,13 +349,72 @@ function AppContainer() {
     setOnboardingDismissed(true);
   }
 
+  async function handleMigrationAcknowledge() {
+    await clearFolios();
+    localStorage.setItem("cointrol_migration_v2_done", "1");
+    setMigrationDone(true);
+  }
+
+  const showMigration =
+    !migrationDone &&
+    !foliosLoading &&
+    folios.length > 0;
+
   const showOnboarding =
+    !showMigration &&
     !onboardingDismissed &&
     !foliosLoading &&
     folios.length === 0;
 
   return (
     <>
+      {showMigration && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 400,
+              borderRadius: 12,
+              padding: 24,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            }}
+            className="bg-background text-foreground"
+          >
+            <h2 className="text-lg font-semibold mb-3">Important: Wallet Migration</h2>
+            <p className="text-sm mb-3">
+              The system has been upgraded. Your existing wallets are no longer
+              supported by the new infrastructure and will be removed.
+            </p>
+            <p className="text-sm mb-4">
+              You will need to create a new wallet after this step. No funds on
+              the blockchain are affected — only the local wallet data is being
+              cleared.
+            </p>
+            <button
+              type="button"
+              onClick={handleMigrationAcknowledge}
+              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              I understand
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
       <QrScanModal
         open={scanOpen}
         onClose={() => setScanOpen(false)}

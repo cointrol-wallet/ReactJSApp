@@ -10,6 +10,7 @@ const zHexAddress = z
 const zWallet = z.object({
   chainId: z.number().int().positive(),
   address: zHexAddress,
+  name: z.string().optional(),
 });
 
 const zShareMeta = z

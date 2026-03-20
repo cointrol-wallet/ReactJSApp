@@ -178,8 +178,18 @@ export async function notifyBundlerPublicKeyUpdate({
   const oldSK = await getSecretKey(folio.keypairId);
   if (!oldSK) throw new Error("Old secret key not available");
 
+  // Build the same canonical message the bundler will verify against:
+  // concat(senderBytes, domainBytes, oldKeyBytes, newKeyBytes)
+  const encoder = new TextEncoder();
+  const verifyMsg = new Uint8Array([
+    ...hexToBytes(folio.address as `0x${string}`),
+    ...encoder.encode(domain.name),
+    ...oldPK,
+    ...newPK,
+  ]);
+
   const falcon = createFalconWorkerClient();
-  const signature = await falcon.sign(oldMeta.level, newPK, oldSK);
+  const signature = await falcon.sign(oldMeta.level, verifyMsg, oldSK);
   oldSK.fill(0);
   falcon.terminate();
 

@@ -480,7 +480,7 @@ export function Folios() {
         }
 
         const salt = deriveFolioSalt(uuid, trimmedName);
-        const sender = await predictAddressFromKeypair(keypairId, salt, selectDomain);
+        const sender = await predictAddressFromKeypair(keypairId, salt, selectDomain.falconDomain[0]);
 
         setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
 
@@ -778,6 +778,25 @@ export function Folios() {
                   disabled={isPending}
                 />
               </div>
+
+              {!editingFolio && domains.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Domain</label>
+                  <select
+                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    value={selectDomain?.name ?? ""}
+                    onChange={e => {
+                      const d = domains.find(d => d.name === e.target.value);
+                      if (d) setSelectDomain(d);
+                    }}
+                    disabled={isPending}
+                  >
+                    {domains.map(d => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {!editingFolio && (
                 <div className="space-y-1">

@@ -5,11 +5,11 @@ import type { Coin } from "@/storage/coinStore";
 import type { SharePayload } from "./sharePayload";
 import { encodeSharePayload } from "./sharePayload";
 
-function uniqWallets(wallets: { chainId: number; address: string }[]) {
-  const m = new Map<string, { chainId: number; address: string }>();
+function uniqWallets(wallets: { chainId: number; address: string; name?: string }[]) {
+  const m = new Map<string, { chainId: number; address: string; name?: string }>();
   for (const w of wallets) {
     const key = `${w.chainId}:${w.address.toLowerCase()}`;
-    if (!m.has(key)) m.set(key, { chainId: w.chainId, address: w.address });
+    if (!m.has(key)) m.set(key, { chainId: w.chainId, address: w.address, name: w.name });
   }
   return [...m.values()];
 }
@@ -98,7 +98,7 @@ export function buildProfileShareFromFolios(
   tags?: string[]
 ): SharePayload {
   const wallets = uniqWallets(
-    folios.map(f => ({ chainId: f.chainId, address: f.address }))
+    folios.map(f => ({ chainId: f.chainId, address: f.address, name: f.name }))
   );
 
   return {
