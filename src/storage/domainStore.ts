@@ -3,15 +3,11 @@ import { getCurrentUser } from "./currentUser";
 import { FalconLevel } from "./keyStore";
 import { Paymaster } from "./folioStore";
 import { BundlerAPI, BundlerDomain } from "@/lib/submitTransaction";
-import { QUANTUM_ACCOUNT_512_CREATION_CODE } from "@/lib/creationCodes";
-
 // --- Schema versioning -------------------------------------------------------
 
 function domainKey() { return `cointrol:domains:v1:${getCurrentUser()}`; }
 function domainSchemaVersionKey() { return `cointrol:domains:schemaVersion:${getCurrentUser()}`; }
 const CURRENT_DOMAIN_SCHEMA_VERSION = 4;
-
-// Domain schema v3
 
 export type Domain = {
   name: string;           // label for the domain
@@ -33,25 +29,6 @@ export type FalconDomain = {
   creationCode: string;
 }
 
-const BUILTIN_FALCON_DOMAINS: FalconDomain[] = [{
-  factory:      "0xb0b80A0B15b5fD7b3895b5B5A66aFD5529DfdAE6",
-  falcon:       "0x01A272c06df74c3331f1E56f357D7A38f28B7346",
-  falconLevel:  512,
-  creationCode: QUANTUM_ACCOUNT_512_CREATION_CODE,
-}]
-
-const BUILTIN_DOMAINS: Domain[] = [{
-  name: "ETHEREUM SEPOLIA",
-  chainId: 11155111,
-  entryPoint:   "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
-  falconDomain: BUILTIN_FALCON_DOMAINS,  
-  bundler:      "0xD50a29DB30231F9D3cD42a6162329D1f4EEfeFED",
-  rpcUrl:       "https://ethereum-sepolia-rpc.publicnode.com",
-  transactionUrl: "https://sepolia.etherscan.io/tx/",
-  createdAt: 0,
-  updatedAt: 0,
-}];
-
 
 
 // --- In-memory subscribers for live updates ---------------------------------
@@ -60,7 +37,7 @@ type domainListener = (domain: Domain[]) => void;
 const listeners = new Set<domainListener>();
 
 function notifyDomainsUpdated(domain: Domain[]) {
-  const allDomains = [...domain, ...BUILTIN_DOMAINS];
+  const allDomains = [...domain];
   for (const listener of listeners) {
     listener(allDomains);
   }
@@ -151,7 +128,7 @@ async function saveDomainsRaw(domains: Domain[]): Promise<void> {
 
 export async function getAllDomains(): Promise<Domain[]> {
   const domains = await loadDomainsRaw();
-  return [...domains, ...BUILTIN_DOMAINS];
+  return [...domains];
 }
 
 export async function addDomain(input: {
@@ -262,9 +239,6 @@ export async function syncDomainsFromBundler(): Promise<void> {
 
     const merged: Domain[] = [...locals];
     for (const remote of remoteDomains) {
-      // Skip domains that match a builtin — builtins are always appended separately
-      if (BUILTIN_DOMAINS.some(b => b.name === remote.name)) continue;
-
       const idx = merged.findIndex(l => l.name === remote.name);
       if (idx >= 0) {
         merged[idx] = { ...merged[idx], ...remote };
