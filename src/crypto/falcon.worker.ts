@@ -26,9 +26,10 @@ function packedToRaw(packed: Uint8Array, level: 512 | 1024): Uint8Array {
   const coeffs = new Uint16Array(n);
   let idx = start, acc = 0, accBits = 0;
   for (let i = 0; i < n; i++) {
-    while (accBits < 14) { acc |= packed[idx++] << accBits; accBits += 8; }
-    coeffs[i] = acc & 0x3FFF;
-    acc >>>= 14; accBits -= 14;
+    while (accBits < 14) { acc = (acc << 8) | packed[idx++]; accBits += 8; }
+    coeffs[i] = (acc >> (accBits - 14)) & 0x3FFF;
+    accBits -= 14;
+    acc &= (1 << accBits) - 1;
   }
   const typeHdr = level === 512 ? 0x09 : 0x0A;
   const out = new Uint8Array(2 + n * 2);
