@@ -44,9 +44,9 @@ export function DisplayNameModal({
         aria-modal="true"
         className="
     rounded-2xl
-    border border-neutral-200
-    bg-[#fffdf7]        /* soft ivory */
-    text-neutral-900
+    border border-border
+    bg-background
+    text-foreground
     shadow-2xl
     backdrop-blur-none
   "
@@ -62,7 +62,7 @@ export function DisplayNameModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-lg font-semibold">Set display name</div>
-        <div className="mt-1 text-sm text-neutral-600">
+        <div className="mt-1 text-sm text-muted">
           Set the name used for profile sharing
         </div>
 

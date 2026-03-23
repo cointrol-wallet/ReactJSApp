@@ -28,7 +28,7 @@ export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
         onClick={() => onSignIn("google")}
         className={[
           base,
-          "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50",
+          "bg-card text-foreground border border-border hover:bg-background",
           "focus-visible:ring-zinc-300",
         ].join(" ")}
         aria-label="Continue with Google"
@@ -60,7 +60,7 @@ export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
         onClick={() => onSignIn("microsoft")}
         className={[
           base,
-          "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50",
+          "bg-card text-foreground border border-border hover:bg-background",
           "focus-visible:ring-zinc-300",
         ].join(" ")}
         aria-label="Continue with Microsoft"

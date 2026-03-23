@@ -94,7 +94,7 @@ export function QrScanner({
       {mode === "camera" && (
         <>
           <video ref={videoRef} className="w-full rounded-lg" />
-          <div className="text-xs text-neutral-500">Point your camera at a QR code.</div>
+          <div className="text-xs text-muted">Point your camera at a QR code.</div>
         </>
       )}
 

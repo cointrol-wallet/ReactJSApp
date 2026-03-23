@@ -505,7 +505,7 @@ export function Folios() {
           name: trimmedName,
           address: sender,
           chainId: selectDomain.chainId,
-          paymaster: selectDomain.paymaster,
+          paymaster: selectDomain.paymaster?.[0]?.address ?? "",
           type: 0,
           bundler: selectDomain.bundler,
           keypairId,

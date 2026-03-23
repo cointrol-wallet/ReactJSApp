@@ -6,7 +6,7 @@ export function Sheet({ open, onOpenChange, children }: { open: boolean; onOpenC
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={() => onOpenChange(false)} />
-      <div className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl rounded-t-2xl bg-white p-4 shadow-2xl">
+      <div className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl rounded-t-2xl bg-card p-4 shadow-2xl">
         {children}
       </div>
     </div>

@@ -24,6 +24,7 @@ import { decodeSharePayload } from "./lib/sharePayload";
 import { importSharePayload } from "./lib/shareImporters";
 import { useFolios } from "./hooks/useFolios";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { OnboardingModal } from "./components/OnboardingModal";
 
 function QrScanModal({
@@ -100,6 +101,18 @@ function QrScanModal({
       </div>
     </>,
     document.body
+  );
+}
+
+function ThemeToggle() {
+  const { resolved, setTheme } = useTheme();
+  return (
+    <button
+      className="block w-full rounded-lg px-3 py-3 sm:py-2 text-left text-sm hover:bg-card"
+      onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+    >
+      {resolved === "dark" ? "Light mode" : "Dark mode"}
+    </button>
   );
 }
 
@@ -217,8 +230,10 @@ function NavDropdown() {
               <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
               <NavDropItem to="/user-guide" label="User Guide" onSelect={() => setOpen(false)} />
               <div className="my-1 border-t border-border" />
+              <ThemeToggle />
+              <div className="my-1 border-t border-border" />
               <button
-                className="block w-full rounded-lg px-3 py-3 sm:py-2 text-left text-sm text-red-600 hover:bg-neutral-100"
+                className="block w-full rounded-lg px-3 py-3 sm:py-2 text-left text-sm text-red-600 hover:bg-card"
                 onClick={() => {
                   setOpen(false);
                   signOut();
@@ -249,8 +264,8 @@ function NavDropItem({
       onClick={onSelect}
       className={({ isActive }) =>
         `block rounded-lg px-3 py-3 sm:py-2 text-sm ${isActive
-          ? "bg-neutral-900 text-white"
-          : "hover:bg-neutral-100"
+          ? "bg-primary text-primary-foreground"
+          : "hover:bg-card"
         }`
       }
     >
@@ -429,7 +444,7 @@ function AppContainer() {
           <div className="p-6 text-red-700">
             <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
             <p className="mb-2">{error}</p>
-            <p className="text-sm text-neutral-600">Check the console for details.</p>
+            <p className="text-sm text-muted">Check the console for details.</p>
           </div>
         ) : (
           <Routes>
@@ -494,6 +509,7 @@ function ProtectedApp() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <HashRouter>
       <ScrollToTop />
       <AuthProvider>
@@ -518,5 +534,6 @@ export default function App() {
         </FalconProvider>
       </AuthProvider>
     </HashRouter>
+    </ThemeProvider>
   );
 }

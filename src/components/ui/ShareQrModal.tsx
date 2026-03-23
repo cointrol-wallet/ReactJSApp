@@ -98,9 +98,9 @@ export function ShareQrModal({
         aria-modal="true"
         className="
           rounded-2xl
-          border border-neutral-200
-          bg-[#fffdf7]
-          text-neutral-900
+          border border-border
+          bg-background
+          text-foreground
           shadow-2xl
         "
         style={{
@@ -125,7 +125,7 @@ export function ShareQrModal({
           ) : (
             <div
               ref={qrWrapperRef}
-              className="bg-white p-3 rounded-lg border shadow-sm"
+              className="bg-white p-3 rounded-lg border border-border shadow-sm"
               style={{ position: "relative", display: "inline-block" }}
             >
               <QRCode value={value} size={QR_SIZE} level="H" />
@@ -153,7 +153,7 @@ export function ShareQrModal({
         <div className="mt-4 flex justify-between items-center">
           <button
             type="button"
-            className="rounded bg-neutral-100 border border-neutral-300 px-3 py-2 text-sm text-neutral-800 disabled:opacity-50"
+            className="rounded bg-card border border-border px-3 py-2 text-sm text-foreground disabled:opacity-50"
             onClick={handleCopyQr}
             disabled={tooLarge || copyState !== "idle"}
           >
@@ -162,7 +162,7 @@ export function ShareQrModal({
 
           <button
             type="button"
-            className="rounded bg-black px-3 py-2 text-white"
+            className="rounded bg-primary px-3 py-2 text-primary-foreground"
             onClick={onClose}
           >
             Close

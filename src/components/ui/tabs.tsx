@@ -52,7 +52,7 @@ export function TabsTrigger({
       aria-selected={active}
       className={cn(
         "rounded-sm px-3 py-1 text-sm",
-        active ? "bg-neutral-900 text-white" : "hover:bg-neutral-100",
+        active ? "bg-primary text-primary-foreground" : "hover:bg-card",
         className
       )}
       {...props}
