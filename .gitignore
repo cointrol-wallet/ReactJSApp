@@ -33,5 +33,7 @@ user_guide_project_plan.md
 
 dist-web/
 
+dist/
+
 # Videos for user guide — large binaries, placed manually in each environment
 public/user-guide/videos/*.mp4
