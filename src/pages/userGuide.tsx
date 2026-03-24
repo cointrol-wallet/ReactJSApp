@@ -38,7 +38,7 @@ export function UserGuide() {
           </Link>
         </div>
 
-        <article className="prose prose-neutral dark:prose-invert max-w-none">
+        <article className="prose dark:prose-invert max-w-none">
           <ReactMarkdown
             rehypePlugins={[
               rehypeRaw,

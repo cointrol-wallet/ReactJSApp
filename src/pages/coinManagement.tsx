@@ -245,7 +245,7 @@ export function Coins() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground material-charcoal-text material-gold-text">
         Coins
       </h1>
 
@@ -457,7 +457,7 @@ export function Coins() {
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             }}
           >
-            <h2 className="mb-3 text-base font-semibold">
+            <h2 className="mb-3 text-base font-semibold material-gold-text">
               {editingCoin ? (isBuiltin ? "Edit coin tags" : "Edit coin") : "Add coin"}
             </h2>
             {isBuiltin && (
@@ -545,7 +545,7 @@ export function Coins() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Name</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-100 disabled:bg-primary/80 disabled:text-primary-foreground disabled:border-primary/60 disabled:cursor-not-allowed"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   disabled={!editingCoin || isBuiltin}
@@ -556,7 +556,7 @@ export function Coins() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Symbol</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-100 disabled:bg-primary/80 disabled:text-primary-foreground disabled:border-primary/60 disabled:cursor-not-allowed"
                   value={formSymbol}
                   onChange={e => setFormSymbol(e.target.value)}
                   disabled={!editingCoin || isBuiltin}
@@ -567,7 +567,7 @@ export function Coins() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Decimals</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-60 disabled:bg-muted"
+                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-100 disabled:bg-primary/80 disabled:text-primary-foreground disabled:border-primary/60 disabled:cursor-not-allowed"
                   value={formDecimals}
                   onChange={e => setFormDecimals(Number(e.target.value))}
                   disabled={!editingCoin || isBuiltin}
@@ -683,7 +683,7 @@ export function Coins() {
               overflowY: "auto",
             }}
           >
-            <h2 className="text-base font-semibold">Delete coin?</h2>
+            <h2 className="text-base font-semibold material-gold-text">Delete coin?</h2>
             <p className="mt-2 text-sm text-muted">
               This will remove the coin from all pages. This action cannot be undone.
             </p>

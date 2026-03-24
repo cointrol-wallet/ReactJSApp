@@ -107,7 +107,7 @@ function PortfolioFiltersDropdown({
             style={{ position: "fixed", zIndex: 9999, top: pos.top, left: pos.left, width: pos.width, padding: 12 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-2 text-sm font-semibold">Sort</div>
+            <div className="mb-2 text-sm font-semibold material-gold-text">Sort</div>
             <select
               className="h-11 sm:h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
               value={primarySortMode}
@@ -123,7 +123,7 @@ function PortfolioFiltersDropdown({
               <option value="createdAsc">Oldest first</option>
             </select>
 
-            <div className="mb-2 text-sm font-semibold">Sort</div>
+            <div className="mb-2 text-sm font-semibold material-gold-text">Sort</div>
             <select
               className="h-11 sm:h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
               value={secondarySortMode}
@@ -141,7 +141,7 @@ function PortfolioFiltersDropdown({
 
             <div className="my-3 border-t border-border" />
 
-            <div className="mb-2 text-sm font-semibold">Filter by tags</div>
+            <div className="mb-2 text-sm font-semibold material-gold-text">Filter by tags</div>
             <input
               className="h-11 sm:h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted"
               placeholder="Tags separated by space or comma…"
@@ -527,7 +527,7 @@ export function Folios() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground material-charcoal-text material-gold-text">
         Portfolio
       </h1>
 
@@ -646,7 +646,7 @@ export function Folios() {
                   <div className="grid gap-3 sm:gap-x-6 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
                     {/* Col 1: Large balance */}
                     <div className="min-w-0">
-                      <div className="truncate text-3xl font-semibold leading-none sm:text-5xl">
+                      <div className="truncate text-3xl font-semibold leading-none sm:text-5xl material-gold-text">
                         {balanceStr} <span className="text-xl sm:text-3xl">{coinSymbol}</span>
                       </div>
                     </div>
@@ -747,7 +747,7 @@ export function Folios() {
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             }}
           >
-            <h2 className="mb-3 text-base font-semibold">
+            <h2 className="mb-3 text-base font-semibold material-gold-text">
               {editingFolio ? "Change Label" : "Create Account"}
             </h2>
 
@@ -886,7 +886,7 @@ export function Folios() {
               overflowY: "auto",
             }}
           >
-            <h2 className="text-base font-semibold">Delete account?</h2>
+            <h2 className="text-base font-semibold material-gold-text">Delete account?</h2>
             <p className="mt-2 text-sm text-muted">
               This will remove the entire portfolio account <strong>{folioNameToDelete || "unnamed"}</strong> and its balances from your list.
               This action cannot be undone and you could lose access to your assets.

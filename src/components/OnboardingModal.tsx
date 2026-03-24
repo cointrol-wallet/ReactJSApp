@@ -129,7 +129,7 @@ export function OnboardingModal({
         </div>
 
         {/* Content */}
-        <h2 className="text-lg font-semibold text-foreground mb-3">
+        <h2 className="text-lg font-semibold text-foreground material-gold-text mb-3">
           {current.title}
         </h2>
         <div className="mb-6">{current.body}</div>

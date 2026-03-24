@@ -112,7 +112,7 @@ export function FiltersDropdown({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mb-2 text-sm font-semibold">Sort</div>
+              <div className="mb-2 text-sm font-semibold material-gold-text">Sort</div>
               <select
                 className="h-11 sm:h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
                 value={sortMode}
@@ -127,7 +127,7 @@ export function FiltersDropdown({
 
               <div className="my-3 border-t border-border" />
 
-              <div className="mb-2 text-sm font-semibold">Filter by tags</div>
+              <div className="mb-2 text-sm font-semibold material-gold-text">Filter by tags</div>
               <input
                 className="h-11 sm:h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted"
                 placeholder="Tags separated by space or comma…"

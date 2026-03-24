@@ -12,9 +12,9 @@ export const Button = React.forwardRef<HTMLButtonElement, Props>(
       "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none";
     const variants = {
       default: "bg-primary text-primary-foreground hover:bg-primary/90",
-      outline: "border border-border hover:bg-card",
-      secondary: "bg-card text-foreground hover:bg-muted/20",
-      ghost: "hover:bg-card",
+      outline: "border border-border hover:border-primary transition-colors",
+      secondary: "bg-card text-foreground border border-transparent hover:border-primary transition-colors",
+      ghost: "border border-transparent hover:border-primary transition-colors",
     } as const;
     const sizes = {
       sm: "h-11 sm:h-8 px-3",

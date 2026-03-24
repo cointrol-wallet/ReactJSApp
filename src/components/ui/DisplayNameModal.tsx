@@ -61,7 +61,7 @@ export function DisplayNameModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-lg font-semibold">Set display name</div>
+        <div className="text-lg font-semibold material-gold-text">Set display name</div>
         <div className="mt-1 text-sm text-muted">
           Set the name used for profile sharing
         </div>

@@ -202,7 +202,7 @@ export function Contracts() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground material-charcoal-text material-gold-text">
         Smart Contracts
       </h1>
       <div className="flex flex-col gap-2">
@@ -366,7 +366,7 @@ export function Contracts() {
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             }}
           >
-            <h2 className="mb-3 text-base font-semibold">
+            <h2 className="mb-3 text-base font-semibold material-gold-text">
               {editingContract ? "Edit contract" : "Add contract"}
             </h2>
 
@@ -553,7 +553,7 @@ export function Contracts() {
               overflowY: "auto",
             }}
           >
-            <h2 className="text-base font-semibold">Delete contract?</h2>
+            <h2 className="text-base font-semibold material-gold-text">Delete contract?</h2>
             <p className="mt-2 text-sm text-muted">
               This will delete the contract and remove it from your address book. This action cannot be undone.
             </p>

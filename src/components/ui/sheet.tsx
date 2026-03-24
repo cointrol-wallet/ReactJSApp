@@ -18,7 +18,7 @@ export function SheetHeader({ children }: { children: React.ReactNode }) {
 }
 
 export function SheetTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-lg font-semibold">{children}</div>
+  return <div className="text-lg font-semibold material-gold-text">{children}</div>
 }
 
 export function SheetContent({ children }: { children: React.ReactNode }) {

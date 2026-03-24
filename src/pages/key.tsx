@@ -47,7 +47,7 @@ function GenerateKeyModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="bg-background rounded-xl border border-border shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <h2 className="text-base font-semibold mb-4">Generate New Keypair</h2>
+        <h2 className="text-base font-semibold mb-4 material-gold-text">Generate New Keypair</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs font-medium">Level</label>
@@ -119,7 +119,7 @@ function RotateKeyModal({
       onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
     >
       <div className="bg-background rounded-xl border border-border shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <h2 className="text-base font-semibold mb-1">Rotate Key</h2>
+        <h2 className="text-base font-semibold mb-1 material-gold-text">Rotate Key</h2>
         <p className="text-xs text-muted-foreground mb-4">Account: <span className="font-mono">{folio.address.slice(0, 10)}…</span></p>
 
         <div className="space-y-1 mb-4">
@@ -222,7 +222,7 @@ export function Keys() {
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold leading-tight">Key Management</h1>
+        <h1 className="text-2xl font-semibold leading-tight material-charcoal-text material-gold-text">Key Management</h1>
         <button
           className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium"
           onClick={() => setShowGenerate(true)}

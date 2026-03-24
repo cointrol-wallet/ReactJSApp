@@ -1090,7 +1090,7 @@ export function Transactions() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground material-charcoal-text material-gold-text">
         Transactions
       </h1>
 
@@ -1341,10 +1341,10 @@ export function Transactions() {
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
             }}
           >
-            <h2 className="mb-3 text-base font-semibold">
+            <h2 className="mb-3 text-base font-semibold material-gold-text">
               {cardTitle}
             </h2>
-            <h3 className="mb-4 text-xs font-semibold">
+            <h3 className="mb-4 text-xs font-semibold material-gold-text">
               {cardDescription}
             </h3>
             <div className="space-y-1">

@@ -70,7 +70,7 @@ export function AddressBook() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground">
+      <h1 className="shrink-0 text-2xl leading-tight font-semibold text-foreground material-charcoal-text material-gold-text">
         Address Book
       </h1>
 

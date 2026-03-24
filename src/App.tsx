@@ -17,7 +17,6 @@ const LoginPage    = React.lazy(() => import("./pages/LoginPage").then(m => ({ d
 const RegisterPage = React.lazy(() => import("./pages/RegisterPage").then(m => ({ default: m.RegisterPage })));
 const UserGuide    = React.lazy(() => import("./pages/userGuide").then(m => ({ default: m.UserGuide })));
 import { initWallet } from "./lib/wallets";
-import logo from "./assets/logo.png";
 import { FalconProvider } from "./crypto/falconProvider";
 import { QrScanner } from "./components/ui/QrScanner";
 import { decodeSharePayload } from "./lib/sharePayload";
@@ -26,6 +25,7 @@ import { useFolios } from "./hooks/useFolios";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { CointrolLogo } from "./components/CointrolLogo";
 
 function QrScanModal({
   open,
@@ -82,7 +82,7 @@ function QrScanModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div className="text-sm font-semibold">Scan QR code</div>
+            <div className="text-sm font-semibold material-gold-text">Scan QR code</div>
             <Button size="sm" variant="outline" onClick={onClose}>
               Close
             </Button>
@@ -104,14 +104,23 @@ function QrScanModal({
   );
 }
 
-function ThemeToggle() {
+function ThemeToggleIcon() {
   const { resolved, setTheme } = useTheme();
   return (
     <button
-      className="block w-full rounded-lg px-3 py-3 sm:py-2 text-left text-sm hover:bg-card"
+      className="inline-flex h-11 sm:h-8 w-11 sm:w-8 items-center justify-center rounded-md border border-border hover:border-primary transition-colors"
       onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+      aria-label={resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {resolved === "dark" ? "Light mode" : "Dark mode"}
+      {resolved === "dark" ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      )}
     </button>
   );
 }
@@ -230,8 +239,6 @@ function NavDropdown() {
               <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
               <NavDropItem to="/user-guide" label="User Guide" onSelect={() => setOpen(false)} />
               <div className="my-1 border-t border-border" />
-              <ThemeToggle />
-              <div className="my-1 border-t border-border" />
               <button
                 className="block w-full rounded-lg px-3 py-3 sm:py-2 text-left text-sm text-red-600 hover:bg-card"
                 onClick={() => {
@@ -293,16 +300,13 @@ function AppShell({ children, onOpenScan }: {
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/dashboard" className="flex items-center gap-2">
-            <img
-              src={logo}
-              alt="QuantumAccount"
-              style={{ height: 32, width: "auto" }}
-            />
+            <CointrolLogo className="h-16 w-16" />
           </Link>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={onOpenScan}>
               Scan
             </Button>&nbsp;
+            <ThemeToggleIcon />
             <NavDropdown />&nbsp;
             <Link
               to="/user-guide"
@@ -409,7 +413,7 @@ function AppContainer() {
             }}
             className="bg-background text-foreground"
           >
-            <h2 className="text-lg font-semibold mb-3">Important: Wallet Migration</h2>
+            <h2 className="text-lg font-semibold mb-3 material-gold-text">Important: Wallet Migration</h2>
             <p className="text-sm mb-3">
               The system has been upgraded. Your existing wallets are no longer
               supported by the new infrastructure and will be removed.
@@ -442,7 +446,7 @@ function AppContainer() {
       <AppShell onOpenScan={() => setScanOpen(true)}>
         {error ? (
           <div className="p-6 text-red-700">
-            <h1 className="text-lg font-semibold mb-2">Wallet initialisation failed</h1>
+            <h1 className="text-lg font-semibold mb-2 material-gold-text">Wallet initialisation failed</h1>
             <p className="mb-2">{error}</p>
             <p className="text-sm text-muted">Check the console for details.</p>
           </div>
