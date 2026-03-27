@@ -200,7 +200,7 @@ export function Folios() {
   const [tags, setTags] = React.useState<string[]>([]);
   const [tagMode, setTagSearchMode] = React.useState("any");
   const [tagSearch, setTagSearch] = React.useState<string>("");
-  const [chainId, setChainId] = React.useState<number>(11155111);
+  const [chainId, setChainId] = React.useState<number>(0);
 
   const { uuid } = useAuth();
 
@@ -215,10 +215,6 @@ export function Folios() {
   const [formKeypairId, setFormKeypairId] = React.useState<string>("");
   const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
 
-  const CHAIN_NAMES: Record<number, string> = {
-    1: "Ethereum",
-    11155111: "Sepolia",
-  };
 
   const {
     coins,
@@ -247,6 +243,16 @@ export function Folios() {
     deleteDomain,
     clearDomain,
   } = useDomains();
+
+  const chainMap = React.useMemo(() => {
+    const map = new Map<number, string>();
+    for (const d of domains) {
+      if (!map.has(d.chainId)) {
+        map.set(d.chainId, d.name);
+      }
+    }
+    return map;
+  }, [domains]);
 
   // Display name logic for sharing profile
 
@@ -537,7 +543,8 @@ export function Folios() {
           value={chainId}
           onChange={e => setChainId(Number(e.target.value))}
         >
-          {Object.entries(CHAIN_NAMES).map(([id, label]) => (
+          <option value={0}>Show all</option>
+          {[...chainMap.entries()].map(([id, label]) => (
             <option key={id} value={id}>
               {label}
             </option>
@@ -629,8 +636,8 @@ export function Folios() {
             const coinSymbol = coin?.symbol ?? "—";
             const coinName = coin?.name ?? "Unknown coin";
             const chainName =
-              folio && CHAIN_NAMES[folio.chainId]
-                ? CHAIN_NAMES[folio.chainId]
+              folio && chainMap.get(folio.chainId)
+                ? chainMap.get(folio.chainId)!
                 : folio
                   ? `Chain ${folio.chainId}`
                   : "Unknown chain";
