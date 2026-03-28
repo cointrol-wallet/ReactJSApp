@@ -75,6 +75,7 @@ export function RegisterPage() {
       await registerUser(user.uid, uuid);
       setCurrentUser(user.uid);
       await initKeyStore(user.uid);
+      localStorage.setItem("cointrol_migration_v2_done", "1");
 
       sessionStorage.removeItem("cointrol:registering");
       completeRegistration(user, uuid);

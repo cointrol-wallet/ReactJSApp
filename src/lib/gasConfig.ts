@@ -8,7 +8,7 @@ export type GasProfile = {
 
 const GAS_BY_LEVEL: Record<512 | 1024, GasProfile> = {
   512: {
-    verificationGasLimit:    4_800_000n,
+    verificationGasLimit:    5_000_000n,
     keyRotationCallGasLimit: 1_200_000n,
     defaultCallGasFallback:  500_000n,
   },
