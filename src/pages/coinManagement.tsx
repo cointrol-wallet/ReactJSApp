@@ -40,11 +40,6 @@ export function Coins() {
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 
-  const CHAIN_NAMES: Record<number, string> = {
-    1: "Ethereum",
-    11155111: "Sepolia",
-  };
-
   const EVM_STANDARDS = ["NATIVE", "ERC20", "ERC721", "ERC1155", "ERC3643", "ERC7943"];
 
   const {
@@ -58,6 +53,8 @@ export function Coins() {
 
   const { folios: allFolios, updateFolio } = useFolios();
   const { domains } = useDomains();
+
+  const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
 
   const [lookupLoading, setLookupLoading] = React.useState(false);
   const [lookupError, setLookupError] = React.useState<string | null>(null);

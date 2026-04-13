@@ -97,11 +97,6 @@ export function Transactions() {
   const pendingAddressFieldRef = React.useRef<Record<string, AddressFieldState> | null>(null);
 
 
-  const CHAIN_NAMES: Record<number, string> = {
-    1: "Ethereum",
-    11155111: "Sepolia",
-  };
-
   const {
     txns,
     loading: loading,
@@ -146,6 +141,8 @@ export function Transactions() {
     deleteDomain,
     updateDomain,
   } = useDomains();
+
+  const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
 
   const {
     contracts,

@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { ShareQrModal } from "@/components/ui/ShareQrModal";
 import { buildContractShare } from "@/lib/shareBuilders";
 import { FiltersDropdown } from "@/components/ui/FiltersDropdown";
+import { useDomains } from "@/hooks/useDomains";
 
 export function Contracts() {
   const [query, setQuery] = React.useState("");
@@ -34,10 +35,9 @@ export function Contracts() {
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 
-  const CHAIN_NAMES: Record<number, string> = {
-    1: "Ethereum",
-    11155111: "Sepolia",
-  };
+  const { domains } = useDomains();
+
+  const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
 
   const {
     address,
