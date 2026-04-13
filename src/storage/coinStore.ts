@@ -77,7 +77,7 @@ const BUILTIN_COINS: Coin[] = [
     symbol: "FAKE",
     decimals: 2,
     chainId: 80002,
-    address: "0xf5C72f6038803925B1ADB9BA8Dcb17F54Bc0f518",  
+    address: "0x597D0ae21E30049c93EA7852CC03C2559AE11EAb",  
     type: "ERC20",        
     tags: [],
     createdAt: 0,
