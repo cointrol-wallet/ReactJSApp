@@ -71,7 +71,6 @@ export function Transactions() {
   const [selectContact, setSelectContact] = React.useState<Contact | null>(null);
   const [selectContract, setSelectContract] = React.useState<Contract | null>(null);
   const [selectFolio, setSelectFolio] = React.useState<Folio | null>(null);
-  const [selectDomain, setSelectDomain] = React.useState<Domain | null>(null);
 
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
@@ -143,6 +142,11 @@ export function Transactions() {
   } = useDomains();
 
   const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
+
+  const selectDomain = React.useMemo(
+    () => domains.find(d => d.chainId === selectFolio?.chainId) ?? null,
+    [domains, selectFolio]
+  );
 
   const {
     contracts,
@@ -642,9 +646,7 @@ export function Transactions() {
     [coins]
   );
 
-  React.useEffect(() => {
-    if (!selectDomain && domains.length) setSelectDomain(domains[0]);
-  }, [selectDomain, domains]);
+
 
   React.useEffect(() => {
     // Whenever contract changes, reset function selection
@@ -1104,6 +1106,7 @@ export function Transactions() {
             value={chainId}
             onChange={e => setChainId(Number(e.target.value))}
           >
+            <option value={0}>Show all</option>
             {Object.entries(CHAIN_NAMES).map(([id, label]) => (
               <option key={id} value={id}>
                 {label}
@@ -1356,7 +1359,7 @@ export function Transactions() {
                 <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
                 {folios.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.address})
+                    {c.name} ({c.address}) — {CHAIN_NAMES[c.chainId] ?? c.chainId}
                   </option>
                 ))}
               </select>
@@ -1375,7 +1378,7 @@ export function Transactions() {
                 onChange={(e) => setSelectContract(contracts.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
-                {contracts.map((c) => (
+                {contracts.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.address})
                   </option>
@@ -1395,7 +1398,7 @@ export function Transactions() {
                 onChange={(e) => setSelectCoin(coins.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
-                {coins.map((c) => (
+                {coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.symbol})
                   </option>
@@ -1482,7 +1485,7 @@ export function Transactions() {
                       }
                     >
                       <option value="">Select token</option>
-                      {erc20Coins.map((c) => (
+                      {erc20Coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} ({c.symbol})
                         </option>
@@ -1524,8 +1527,8 @@ export function Transactions() {
 
                 const list =
                   st.mode === "address" ? address :
-                    st.mode === "coin" ? coins :
-                      st.mode === "folio" ? folios :
+                    st.mode === "coin" ? coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId) :
+                      st.mode === "folio" ? folios.filter(f => !selectFolio || f.chainId === selectFolio.chainId) :
                         [];
 
                 const ensState = ensResolutionState[key];

@@ -21,13 +21,11 @@ import {
   clearDomains,
 } from "../domainStore";
 
-const BUILTIN_NAME = "ETHEREUM SEPOLIA";
-
 const BASE_DOMAIN = {
   name: "MY TESTNET",
   chainId: 31337,
   entryPoint: "0xentrypoint",
-  falconDomain: [{ factory: "0xfactory", falcon: "0xfalcon", falconLevel: 512 as const }],
+  falconDomain: [{ factory: "0xfactory", falcon: "0xfalcon", falconLevel: 512 as const, creationCode: "" }],
   bundler: "0xbundler",
   rpcUrl: "http://localhost:8545",
   transactionUrl: "http://localhost/tx/",
@@ -47,19 +45,23 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("getAllDomains", () => {
-  it("includes the builtin Sepolia domain when user store is empty", async () => {
+  it("returns an empty array when no domains are stored", async () => {
     const domains = await getAllDomains();
-    expect(domains.some(d => d.name === BUILTIN_NAME)).toBe(true);
+    expect(domains).toHaveLength(0);
+  });
+
+  it("returns stored domains", async () => {
+    await addDomain(BASE_DOMAIN);
+    const domains = await getAllDomains();
+    expect(domains.some(d => d.name === "MY TESTNET")).toBe(true);
   });
 });
 
 describe("addDomain", () => {
-  it("creates a user domain; getAllDomains includes builtins + new domain", async () => {
+  it("creates a user domain with correct fields", async () => {
     await addDomain(BASE_DOMAIN);
 
-    // addDomain returns user domains only; getAllDomains merges in builtins
     const all = await getAllDomains();
-    expect(all.some(d => d.name === BUILTIN_NAME)).toBe(true);
     const mine = all.find(d => d.name === "MY TESTNET")!;
     expect(mine).toBeDefined();
     expect(mine.chainId).toBe(31337);
@@ -76,8 +78,7 @@ describe("addDomain", () => {
   it("appends a second domain without removing the first", async () => {
     await addDomain(BASE_DOMAIN);
     const result = await addDomain({ ...BASE_DOMAIN, name: "SECOND NET", chainId: 99 });
-    const userDomains = result.filter(d => d.name !== BUILTIN_NAME);
-    expect(userDomains).toHaveLength(2);
+    expect(result).toHaveLength(2);
   });
 });
 
@@ -111,20 +112,28 @@ describe("deleteDomain", () => {
     expect(result.some(d => d.name === "MY TESTNET")).toBe(false);
   });
 
-  it("builtin domain cannot be removed via deleteDomain", async () => {
-    await deleteDomain(BUILTIN_NAME);
-    const domains = await getAllDomains();
-    expect(domains.some(d => d.name === BUILTIN_NAME)).toBe(true);
+  it("leaves other domains intact when deleting one", async () => {
+    await addDomain(BASE_DOMAIN);
+    await addDomain({ ...BASE_DOMAIN, name: "SECOND NET", chainId: 99 });
+    const result = await deleteDomain("MY TESTNET");
+    expect(result.some(d => d.name === "SECOND NET")).toBe(true);
+    expect(result).toHaveLength(1);
+  });
+
+  it("is a no-op when the named domain does not exist", async () => {
+    await addDomain(BASE_DOMAIN);
+    const result = await deleteDomain("NONEXISTENT");
+    expect(result).toHaveLength(1);
+    expect(result.some(d => d.name === "MY TESTNET")).toBe(true);
   });
 });
 
 describe("clearDomains", () => {
-  it("removes user domains; builtin remains", async () => {
+  it("removes all user domains", async () => {
     await addDomain(BASE_DOMAIN);
     await clearDomains();
 
     const domains = await getAllDomains();
-    expect(domains.every(d => d.name !== "MY TESTNET")).toBe(true);
-    expect(domains.some(d => d.name === BUILTIN_NAME)).toBe(true);
+    expect(domains).toHaveLength(0);
   });
 });

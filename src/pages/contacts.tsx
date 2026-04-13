@@ -212,7 +212,10 @@ export function Contacts() {
   }
 
   function handleAddWalletRow() {
-    setFormWallets(prev => [...prev, { chainId: 1, address: "" }]);
+    const defaultChainId = Object.keys(CHAIN_NAMES).length > 0
+      ? Number(Object.keys(CHAIN_NAMES)[0])
+      : 1;
+    setFormWallets(prev => [...prev, { chainId: defaultChainId, address: "" }]);
   }
 
   function handleRemoveWalletRow(index: number) {
