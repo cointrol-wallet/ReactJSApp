@@ -59,6 +59,30 @@ const BUILTIN_COINS: Coin[] = [
     createdAt: 0,
     updatedAt: 0,
   },
+  {
+    id: "builtin:pol-amoy",
+    name: "Polygon Amoy",
+    symbol: "POL",
+    decimals: 18,
+    chainId: 80001,
+    address: "0x0",   
+    type: "NATIVE",        
+    tags: [],
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: "builtin:fakecoin-amoy",
+    name: "Fake Coin",
+    symbol: "FAKE",
+    decimals: 2,
+    chainId: 80002,
+    address: "0xf5C72f6038803925B1ADB9BA8Dcb17F54Bc0f518",  
+    type: "ERC20",        
+    tags: [],
+    createdAt: 0,
+    updatedAt: 0,
+  },
 ];
 
 
