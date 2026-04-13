@@ -468,9 +468,9 @@ export function Folios() {
           return;
         }
 
-        // Enforce unique folio name (salt depends on it)
-        if (folios.some(f => f.name === trimmedName)) {
-          setSubmitState({ status: "error", message: "An account with this name already exists. Choose a unique name." });
+        // Enforce unique folio name per chain (salt depends on it; same name on different chains is intentional)
+        if (folios.some(f => f.name === trimmedName && f.chainId === selectDomain?.chainId)) {
+          setSubmitState({ status: "error", message: "An account with this name already exists on this network. Choose a unique name." });
           return;
         }
 
