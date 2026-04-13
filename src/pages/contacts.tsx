@@ -9,6 +9,7 @@ import { ShareQrModal } from "../components/ui/ShareQrModal";
 import { buildContactShare } from "@/lib/shareBuilders";
 import { FiltersDropdown } from "@/components/ui/FiltersDropdown";
 import { useLocation } from "react-router-dom";
+import { useDomains } from "@/hooks/useDomains";
 
 export function Contacts() {
   const [query, setQuery] = React.useState("");
@@ -36,10 +37,9 @@ export function Contacts() {
   const EVM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
   const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 
-  const CHAIN_NAMES: Record<number, string> = {
-    1: "Ethereum",
-    11155111: "Sepolia",
-  };
+  const { domains } = useDomains();
+
+  const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
 
   const {
     address,
