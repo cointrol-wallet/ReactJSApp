@@ -29,7 +29,24 @@ export type FalconDomain = {
   creationCode: string;
 }
 
-
+// Builtin domains — always present regardless of user store contents.
+// syncDomainsFromBundler() merges live values on top of these when reachable.
+export const BUILTIN_DOMAINS: Domain[] = [
+  {
+    name: "ETHEREUM SEPOLIA",
+    chainId: 11155111,
+    entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
+    falconDomain: [
+      { factory: "", falcon: "", falconLevel: 512,  creationCode: "" },
+      { factory: "", falcon: "", falconLevel: 1024, creationCode: "" },
+    ],
+    bundler: "",
+    rpcUrl: "https://rpc.sepolia.org",
+    transactionUrl: "https://sepolia.etherscan.io/tx/",
+    createdAt: 0,
+    updatedAt: 0,
+  },
+];
 
 // --- In-memory subscribers for live updates ---------------------------------
 
@@ -127,8 +144,18 @@ async function saveDomainsRaw(domains: Domain[]): Promise<void> {
 // --- Public API --------------------------------------------------------------
 
 export async function getAllDomains(): Promise<Domain[]> {
-  const domains = await loadDomainsRaw();
-  return [...domains];
+  const userDomains = await loadDomainsRaw();
+  // Start from builtins; user domains with the same name override the builtin.
+  const merged: Domain[] = [...BUILTIN_DOMAINS];
+  for (const ud of userDomains) {
+    const idx = merged.findIndex(d => d.name === ud.name);
+    if (idx >= 0) {
+      merged[idx] = ud;
+    } else {
+      merged.push(ud);
+    }
+  }
+  return merged;
 }
 
 export async function addDomain(input: {
@@ -183,10 +210,13 @@ export async function updateDomain(
 }
 
 export async function deleteDomain(name: string): Promise<Domain[]> {
+  if (BUILTIN_DOMAINS.some(d => d.name === name)) {
+    return getAllDomains();
+  }
   const folios = await loadDomainsRaw();
   const updated = folios.filter(c => c.name !== name);
   await saveDomainsRaw(updated);
-  return updated;
+  return getAllDomains();
 }
 
 export async function clearDomains(): Promise<void> {

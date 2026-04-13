@@ -390,7 +390,7 @@ describe("useTx store", () => {
     }
   });
 
-  it("startFlow uses Falcon-512 verification gas (4.5M) for level-512 accounts", async () => {
+  it("startFlow uses Falcon-512 verification gas (5M) for level-512 accounts", async () => {
     const submitSpy = vi.spyOn(BundlerAPI, "submit").mockResolvedValue({ success: true, signed_tx: "0x", result: "ok" });
     vi.spyOn(BundlerAPI, "getTxReceipt").mockResolvedValue({ success: true, txHash: "0xfinalized" as `0x${string}` });
 
@@ -403,10 +403,10 @@ describe("useTx store", () => {
     const submittedOp = submitSpy.mock.calls[0][0] as PackedUserOperation;
     const packed = BigInt(submittedOp.accountGasLimits);
     const verificationGas = packed >> 128n;
-    expect(verificationGas).toBe(4_500_000n);
+    expect(verificationGas).toBe(5_000_000n);
   });
 
-  it("startFlow uses Falcon-1024 verification gas (9.5M) for level-1024 accounts", async () => {
+  it("startFlow uses Falcon-1024 verification gas (9.9M) for level-1024 accounts", async () => {
     vi.mocked(listKeypairs).mockResolvedValueOnce([{ id: "key-1", level: 1024, createdAt: 0 }] as any);
     const submitSpy = vi.spyOn(BundlerAPI, "submit").mockResolvedValue({ success: true, signed_tx: "0x", result: "ok" });
     vi.spyOn(BundlerAPI, "getTxReceipt").mockResolvedValue({ success: true, txHash: "0xfinalized" as `0x${string}` });
@@ -420,6 +420,6 @@ describe("useTx store", () => {
     const submittedOp = submitSpy.mock.calls[0][0] as PackedUserOperation;
     const packed = BigInt(submittedOp.accountGasLimits);
     const verificationGas = packed >> 128n;
-    expect(verificationGas).toBe(9_500_000n);
+    expect(verificationGas).toBe(9_900_000n);
   });
 });

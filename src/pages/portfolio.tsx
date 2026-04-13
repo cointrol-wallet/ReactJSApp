@@ -213,6 +213,7 @@ export function Folios() {
   // Form state for modal
   const [formName, setFormName] = React.useState("");
   const [formKeypairId, setFormKeypairId] = React.useState<string>("");
+  const [formFalconLevel, setFormFalconLevel] = React.useState<number | string>(512);
   const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
 
 
@@ -417,16 +418,14 @@ export function Folios() {
   function resetForm() {
     setFormName("");
     setFormKeypairId("");
+    setFormFalconLevel(selectDomain?.falconDomain?.[0]?.falconLevel ?? 512);
   }
 
   function openAddModal() {
     if (!selectDomain) return;
     resetForm();
-    const chainFolios = folios.filter((f) => f.chainId === selectDomain.chainId);
-    if (chainFolios.length === 0) {
-      listKeypairs().then(setKeypairs);
-      setIsModalOpen(true);
-    }  // limit each user to one account per chain until multi-domain support is added
+    listKeypairs().then(setKeypairs);
+    setIsModalOpen(true);
   }
 
   function openEditModal(folio: Folio) {
@@ -475,18 +474,33 @@ export function Folios() {
           return;
         }
 
+        // ECC accounts are not yet supported
+        if (formFalconLevel === "ECC") {
+          setSubmitState({ status: "error", message: "ECC accounts are coming soon and are not yet supported." });
+          return;
+        }
+
+        // Resolve the falcon domain entry matching the selected level
+        const falconDomainForLevel = selectDomain.falconDomain?.find(
+          (fd: any) => String(fd.falconLevel) === String(formFalconLevel)
+        );
+        if (!falconDomainForLevel) {
+          setSubmitState({ status: "error", message: `No falcon domain configured for level ${formFalconLevel}.` });
+          return;
+        }
+
         // Resolve or generate keypair
         let keypairId = formKeypairId;
         if (!keypairId) {
-          setSubmitState({ status: "pending", message: "Generating Falcon-512 keypair…" });
-          const meta = await generateAndStoreKeypair(512);
+          setSubmitState({ status: "pending", message: `Generating Falcon-${formFalconLevel} keypair…` });
+          const meta = await generateAndStoreKeypair(formFalconLevel as 512 | 1024);
           keypairId = meta.id;
           setFormKeypairId(keypairId);
           setKeypairs(await listKeypairs());
         }
 
         const salt = deriveFolioSalt(uuid, trimmedName);
-        const sender = await predictAddressFromKeypair(keypairId, salt, selectDomain.falconDomain[0]);
+        const sender = await predictAddressFromKeypair(keypairId, salt, falconDomainForLevel);
 
         setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
 
@@ -794,12 +808,37 @@ export function Folios() {
                     value={selectDomain?.name ?? ""}
                     onChange={e => {
                       const d = domains.find(d => d.name === e.target.value);
-                      if (d) setSelectDomain(d);
+                      if (d) {
+                        setSelectDomain(d);
+                        setFormFalconLevel(d.falconDomain?.[0]?.falconLevel ?? 512);
+                        setFormKeypairId("");
+                      }
                     }}
                     disabled={isPending}
                   >
                     {domains.map(d => (
                       <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {!editingFolio && selectDomain?.falconDomain?.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Account type</label>
+                  <select
+                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    value={String(formFalconLevel)}
+                    onChange={e => {
+                      setFormFalconLevel(e.target.value === "ECC" ? "ECC" : Number(e.target.value));
+                      setFormKeypairId("");
+                    }}
+                    disabled={isPending}
+                  >
+                    {selectDomain.falconDomain.map((fd: any) => (
+                      <option key={String(fd.falconLevel)} value={String(fd.falconLevel)}>
+                        {fd.falconLevel === "ECC" ? "ECC" : `Falcon-${fd.falconLevel}`}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -814,12 +853,18 @@ export function Folios() {
                     onChange={e => setFormKeypairId(e.target.value)}
                     disabled={isPending}
                   >
-                    <option value="">Generate new Falcon-512 keypair</option>
-                    {keypairs.map(k => (
-                      <option key={k.id} value={k.id}>
-                        Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
-                      </option>
-                    ))}
+                    <option value="">
+                      {formFalconLevel === "ECC"
+                        ? "Generate new ECC keypair"
+                        : `Generate new Falcon-${formFalconLevel} keypair`}
+                    </option>
+                    {keypairs
+                      .filter(k => String(k.level) === String(formFalconLevel))
+                      .map(k => (
+                        <option key={k.id} value={k.id}>
+                          Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                        </option>
+                      ))}
                   </select>
                 </div>
               )}
