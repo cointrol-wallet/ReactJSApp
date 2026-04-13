@@ -64,7 +64,7 @@ const BUILTIN_COINS: Coin[] = [
     name: "Polygon Amoy",
     symbol: "POL",
     decimals: 18,
-    chainId: 80001,
+    chainId: 80002,
     address: "0x0",   
     type: "NATIVE",        
     tags: [],

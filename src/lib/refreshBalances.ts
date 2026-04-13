@@ -59,9 +59,8 @@ export async function refreshBalancesForFolios(opts: RefreshBalancesOpts): Promi
     for (const folio of chainFolios) {
       const addr = normalizeAddress(folio.address);
 
-      let targets: Coin[];
-      const existingIds = new Set((folio.wallet ?? []).map(w => w.coin));
-      targets = chainCoins.filter(c => existingIds.has(c.id));
+      const existingWallet = new Map((folio.wallet ?? []).map(w => [w.coin, w]));
+      const targets: Coin[] = chainCoins;
      
       if (targets.length === 0) continue;
 
@@ -83,12 +82,12 @@ export async function refreshBalancesForFolios(opts: RefreshBalancesOpts): Promi
           } else {
             // ERC1155 etc. — depends on tokenId; you don't have tokenId in Coin,
             // so skip for now.
-            const existing = (folio.wallet ?? []).find(w => w.coin === coin.id);
+            const existing = existingWallet.get(coin.id);
             if (existing) newWallets.push(existing);
           }
         } catch {
           // Keep previous balance if the RPC call fails
-          const existing = (folio.wallet ?? []).find(w => w.coin === coin.id);
+          const existing = existingWallet.get(coin.id);
           if (existing) newWallets.push(existing);
         }
       }

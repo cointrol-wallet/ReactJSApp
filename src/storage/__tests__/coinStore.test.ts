@@ -22,7 +22,13 @@ import {
 } from "../coinStore";
 
 // Builtin coin IDs defined in coinStore.ts
-const BUILTIN_IDS = ["builtin:eth-sepolia", "builtin:eth-mainnet", "builtin:fakecoin"];
+const BUILTIN_IDS = [
+  "builtin:eth-sepolia",
+  "builtin:eth-mainnet",
+  "builtin:fakecoin",
+  "builtin:pol-amoy",
+  "builtin:fakecoin-amoy",
+];
 
 beforeEach(() => {
   idbStore.clear();
@@ -36,9 +42,9 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("getAllCoins", () => {
-  it("returns the three builtin coins even when user store is empty", async () => {
+  it("returns all builtin coins even when user store is empty", async () => {
     const coins = await getAllCoins();
-    expect(coins.length).toBeGreaterThanOrEqual(3);
+    expect(coins.length).toBeGreaterThanOrEqual(5);
     for (const id of BUILTIN_IDS) {
       expect(coins.some(c => c.id === id)).toBe(true);
     }
