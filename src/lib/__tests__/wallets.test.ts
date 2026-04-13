@@ -60,8 +60,10 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-import { isKeyStoreInitialised } from "@/storage/keyStore";
-import { initWallet } from "../wallets";
+import { isKeyStoreInitialised, getPublicKey, getSecretKey, listKeypairs } from "@/storage/keyStore";
+import { PaymasterAPI } from "@/lib/submitTransaction";
+import { createFalconWorkerClient } from "@/crypto/falconInterface";
+import { initWallet, createQuantumAccount } from "../wallets";
 
 // ---------------------------------------------------------------------------
 
@@ -80,5 +82,76 @@ describe("initWallet", () => {
   it("throws when keyStore is not initialised", async () => {
     vi.mocked(isKeyStoreInitialised).mockReturnValue(false);
     await expect(initWallet()).rejects.toThrow(/not initialised/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createQuantumAccount — level-aware signing
+// ---------------------------------------------------------------------------
+
+const SENDER = "0x1234567890123456789012345678901234567890" as `0x${string}`;
+const DOMAIN_512 = {
+  name: "test.domain",
+  chainId: 11155111,
+  entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108" as `0x${string}`,
+  falconDomain: [{ factory: "0xfactory", falcon: "0xfalcon", falconLevel: 512 as const, creationCode: "0xcc" }],
+  bundler: "0xbundler",
+  rpcUrl: "http://localhost:8545",
+  transactionUrl: "http://localhost/tx/",
+  paymaster: [],
+  createdAt: 0,
+  updatedAt: 0,
+};
+const DOMAIN_1024 = { ...DOMAIN_512, falconDomain: [{ ...DOMAIN_512.falconDomain[0], falconLevel: 1024 as const }] };
+const SALT = "0x" + "00".repeat(32) as `0x${string}`;
+
+describe("createQuantumAccount", () => {
+  const falconClientMock = vi.mocked(createFalconWorkerClient)();
+
+  it("calls falcon.sign with level 512 for a Falcon-512 keypair", async () => {
+    vi.mocked(listKeypairs).mockResolvedValue([{ id: "key-1", level: 512, createdAt: 0 }]);
+    vi.mocked(getPublicKey).mockResolvedValue(new Uint8Array([0x01, 0x02]));
+    vi.mocked(getSecretKey).mockResolvedValue(new Uint8Array([0x05, 0x06]));
+
+    await createQuantumAccount({ sender: SENDER, domain: DOMAIN_512 as any, salt: SALT, keypairId: "key-1" });
+
+    expect(falconClientMock.sign).toHaveBeenCalledWith(512, expect.any(Uint8Array), expect.any(Uint8Array));
+  });
+
+  it("calls falcon.sign with level 1024 for a Falcon-1024 keypair", async () => {
+    vi.mocked(listKeypairs).mockResolvedValue([{ id: "key-2", level: 1024, createdAt: 0 }]);
+    vi.mocked(getPublicKey).mockResolvedValue(new Uint8Array([0x01, 0x02]));
+    vi.mocked(getSecretKey).mockResolvedValue(new Uint8Array([0x05, 0x06]));
+
+    await createQuantumAccount({ sender: SENDER, domain: DOMAIN_1024 as any, salt: SALT, keypairId: "key-2" });
+
+    expect(falconClientMock.sign).toHaveBeenCalledWith(1024, expect.any(Uint8Array), expect.any(Uint8Array));
+  });
+
+  it("calls PaymasterAPI.createNewAccount and returns true on success", async () => {
+    vi.mocked(listKeypairs).mockResolvedValue([{ id: "key-1", level: 512, createdAt: 0 }]);
+    vi.mocked(getPublicKey).mockResolvedValue(new Uint8Array([0x01, 0x02]));
+    vi.mocked(getSecretKey).mockResolvedValue(new Uint8Array([0x05, 0x06]));
+
+    const result = await createQuantumAccount({ sender: SENDER, domain: DOMAIN_512 as any, salt: SALT, keypairId: "key-1" });
+
+    expect(PaymasterAPI.createNewAccount).toHaveBeenCalledOnce();
+    expect(result).toBe(true);
+  });
+
+  it("throws when keypair is not found", async () => {
+    vi.mocked(listKeypairs).mockResolvedValue([]);
+
+    await expect(
+      createQuantumAccount({ sender: SENDER, domain: DOMAIN_512 as any, salt: SALT, keypairId: "missing" })
+    ).rejects.toThrow(/keypair missing not found/i);
+  });
+
+  it("throws when keypair level is ECC", async () => {
+    vi.mocked(listKeypairs).mockResolvedValue([{ id: "key-ecc", level: "ECC" as any, createdAt: 0 }]);
+
+    await expect(
+      createQuantumAccount({ sender: SENDER, domain: DOMAIN_512 as any, salt: SALT, keypairId: "key-ecc" })
+    ).rejects.toThrow(/ECC keys not yet implemented/i);
   });
 });
