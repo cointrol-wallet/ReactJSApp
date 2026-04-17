@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildContactShare, buildContractShare, buildProfileShareFromFolios, buildCoinShare } from "../shareBuilders";
-import { encodeSharePayload } from "../sharePayload";
+import { buildContactShare, buildContractShare, buildProfileShareFromFolios, buildCoinShare, buildRecoveryShare, buildTxRequestShare } from "../shareBuilders";
+import { encodeSharePayload, decodeSharePayload } from "../sharePayload";
 import type { Contact } from "@/storage/contactStore";
 import type { Contract } from "@/storage/contractStore";
 import type { Folio } from "@/storage/folioStore";
 import type { Coin } from "@/storage/coinStore";
+import type { Recovery } from "@/storage/recoveryStore";
 
 const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as `0x${string}`;
 
@@ -33,7 +34,7 @@ describe("buildContactShare", () => {
 
   it("includes name and surname", () => {
     const p = buildContactShare(contact);
-    expect(p.data.name).toBe("Alice");
+    expect((p.data as any).name).toBe("Alice");
     expect((p.data as any).surname).toBe("Smith");
   });
 
@@ -69,7 +70,7 @@ describe("buildContractShare", () => {
 
   it("includes name, address, chainId", () => {
     const p = buildContractShare(base);
-    expect(p.data.name).toBe("MyToken");
+    expect((p.data as any).name).toBe("MyToken");
     expect((p.data as any).address).toBe(ADDR);
     expect((p.data as any).chainId).toBe(1);
   });
@@ -116,7 +117,7 @@ describe("buildProfileShareFromFolios", () => {
 
   it("includes display name", () => {
     const p = buildProfileShareFromFolios("MyName", folios);
-    expect(p.data.name).toBe("MyName");
+    expect((p.data as any).name).toBe("MyName");
   });
 
   it("deduplicates wallets across folios", () => {
@@ -167,5 +168,145 @@ describe("buildCoinShare", () => {
     const p = buildCoinShare(coin);
     const encoded = encodeSharePayload(p);
     expect(encoded.length).toBeGreaterThan(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildRecoveryShare
+// ---------------------------------------------------------------------------
+
+describe("buildRecoveryShare", () => {
+  const recovery = {
+    id: "recovery:1",
+    name: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    chainId: 11155111,
+    recoverableAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    paymaster: "0xcccccccccccccccccccccccccccccccccccccccc",
+    threshold: 2,
+    status: true,
+    participants: [
+      "0xdddddddddddddddddddddddddddddddddddddddd",
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    ],
+    createdAt: 1000,
+    updatedAt: 1000,
+  } as unknown as Recovery;
+
+  it("sets v=1 and t=recovery", () => {
+    const p = buildRecoveryShare(recovery);
+    expect(p.v).toBe(1);
+    expect(p.t).toBe("recovery");
+  });
+
+  it("maps all Recovery fields into data", () => {
+    const p = buildRecoveryShare(recovery);
+    const d = p.data as any;
+    expect(d.name).toBe(recovery.name);
+    expect(d.chainId).toBe(11155111);
+    expect(d.recoverableAddress).toBe(recovery.recoverableAddress);
+    expect(d.paymaster).toBe(recovery.paymaster);
+    expect(d.threshold).toBe(2);
+    expect(d.status).toBe(true);
+    expect(d.participants).toEqual(recovery.participants);
+  });
+
+  it("sets meta.source to Cointrol", () => {
+    const p = buildRecoveryShare(recovery);
+    expect(p.meta?.source).toBe("Cointrol");
+  });
+
+  it("round-trips through encode/decode", () => {
+    const p = buildRecoveryShare(recovery);
+    const decoded = decodeSharePayload(encodeSharePayload(p));
+    expect(decoded).toEqual(p);
+  });
+
+  it("handles empty participants array", () => {
+    const noParticipants = { ...recovery, participants: [] } as unknown as Recovery;
+    const p = buildRecoveryShare(noParticipants);
+    expect((p.data as any).participants).toEqual([]);
+  });
+
+  it("handles empty recoverableAddress (pre-deployment)", () => {
+    const preDeployment = { ...recovery, recoverableAddress: "" } as unknown as Recovery;
+    const p = buildRecoveryShare(preDeployment);
+    expect((p.data as any).recoverableAddress).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTxRequestShare
+// ---------------------------------------------------------------------------
+
+describe("buildTxRequestShare", () => {
+  it("sets v=1 and t=txrequest", () => {
+    const p = buildTxRequestShare({ type: "transfer", chainId: 1 });
+    expect(p.v).toBe(1);
+    expect(p.t).toBe("txrequest");
+  });
+
+  it("includes required fields type and chainId", () => {
+    const p = buildTxRequestShare({ type: "contract", chainId: 11155111 });
+    const d = p.data as any;
+    expect(d.type).toBe("contract");
+    expect(d.chainId).toBe(11155111);
+  });
+
+  it("passes through all optional transfer fields", () => {
+    const input = {
+      type: "transfer" as const,
+      chainId: 1,
+      sender: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      coinAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      coinSymbol: "USDC",
+      coinDecimals: 6,
+      functionName: "transfer",
+      args: { to: "0xcccccccccccccccccccccccccccccccccccccccc", amount: "100" },
+    };
+    const p = buildTxRequestShare(input);
+    const d = p.data as any;
+    expect(d.sender).toBe(input.sender);
+    expect(d.coinAddress).toBe(input.coinAddress);
+    expect(d.coinSymbol).toBe("USDC");
+    expect(d.coinDecimals).toBe(6);
+    expect(d.functionName).toBe("transfer");
+    expect(d.args).toEqual(input.args);
+  });
+
+  it("passes through all optional contract fields", () => {
+    const input = {
+      type: "contract" as const,
+      chainId: 1,
+      contractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      contractName: "MyVault",
+      functionName: "deposit",
+      payableValue: "0.05",
+    };
+    const p = buildTxRequestShare(input);
+    const d = p.data as any;
+    expect(d.contractAddress).toBe(input.contractAddress);
+    expect(d.contractName).toBe("MyVault");
+    expect(d.payableValue).toBe("0.05");
+  });
+
+  it("sets meta.source to Cointrol", () => {
+    const p = buildTxRequestShare({ type: "transfer", chainId: 1 });
+    expect(p.meta?.source).toBe("Cointrol");
+  });
+
+  it("round-trips through encode/decode with full transfer payload", () => {
+    const input = {
+      type: "transfer" as const,
+      chainId: 11155111,
+      sender: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      coinAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      coinSymbol: "ETH",
+      coinDecimals: 18,
+      functionName: "transfer",
+      args: { to: "0xcccccccccccccccccccccccccccccccccccccccc", amount: "1000000000000000000" },
+    };
+    const p = buildTxRequestShare(input);
+    const decoded = decodeSharePayload(encodeSharePayload(p));
+    expect(decoded).toEqual(p);
   });
 });

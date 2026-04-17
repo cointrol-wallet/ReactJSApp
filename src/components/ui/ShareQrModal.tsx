@@ -1,19 +1,20 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import QRCode from "react-qr-code";
-import { encodeSharePayload } from "@/lib/sharePayload";
+import { QR_CHAR_LIMIT, encodeSharePayload } from "@/lib/sharePayload";
 import type { SharePayload } from "@/lib/sharePayload";
 import logo from "@/assets/logo.png";
 
-const QR_CHAR_LIMIT = 2800;
 const QR_SIZE = 240;
 
 export function ShareQrModal({
   payload,
   onClose,
+  title,
 }: {
   payload: SharePayload;
   onClose: () => void;
+  title?: string;
 }) {
   const value = encodeSharePayload(payload);
   const tooLarge = value.length > QR_CHAR_LIMIT;
@@ -114,7 +115,9 @@ export function ShareQrModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-lg font-semibold mb-3 text-center material-gold-text">Share {payload.t}: {payload.data.name}</div>
+        <div className="text-lg font-semibold mb-3 text-center material-gold-text">
+          {title ?? (`Share ${payload.t}` + ('name' in payload.data ? `: ${payload.data.name}` : ''))}
+        </div>
 
         {/* QR box */}
         <div className="mt-2 flex justify-center">

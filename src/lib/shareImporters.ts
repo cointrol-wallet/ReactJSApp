@@ -112,5 +112,9 @@ export async function importSharePayload(payload: SharePayload, deps?: ImportDep
   if (payload.t === "contact" || payload.t === "profile") return upsertContactByName(payload);
   if (payload.t === "contract") return upsertContractByChainAndAddress(payload);
   if (payload.t === "coin") return upsertCoinByChainAndAddress(payload, deps);
+  // Recovery and txrequest payloads are returned as prefill data for the caller
+  // to handle — they do not write to any store directly.
+  if (payload.t === "recovery") return { mode: "prefill" as const, data: payload.data };
+  if (payload.t === "txrequest") return { mode: "prefill" as const, data: payload.data };
   throw new Error("Unsupported payload type");
 }

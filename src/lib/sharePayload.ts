@@ -3,6 +3,9 @@ import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from
 
 export const SHARE_PREFIX = "cointrol://share/v1/";
 
+// Safe character limit for QR codes (version 40, ECC level L ≈ 2953 bytes binary)
+export const QR_CHAR_LIMIT = 2800;
+
 const zHexAddress = z
   .string()
   .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid address");
@@ -72,7 +75,51 @@ export const zCoinShare = z.object({
   meta: zShareMeta,
 });
 
-export const zSharePayload = z.union([zContactShare, zContractShare, zProfileShare, zCoinShare]);
+export const zRecoveryShare = z.object({
+  v: z.literal(1),
+  t: z.literal("recovery"),
+  data: z.object({
+    name: z.string().min(1),            // folio address (stable ID)
+    chainId: z.number().int().positive(),
+    recoverableAddress: z.string(),     // may be empty string before deployment
+    paymaster: z.string(),
+    threshold: z.number().int().min(1),
+    status: z.boolean(),
+    participants: z.array(z.string()),  // 0x addresses
+  }),
+  meta: zShareMeta,
+});
+
+export const zTxRequestShare = z.object({
+  v: z.literal(1),
+  t: z.literal("txrequest"),
+  data: z.object({
+    type: z.enum(["transfer", "contract"]),
+    chainId: z.number().int().positive(),
+    sender: z.string().optional(),          // folio or contact address
+    // Transfer mode fields
+    coinAddress: z.string().optional(),     // coin contract address
+    coinSymbol: z.string().optional(),      // for display
+    coinDecimals: z.number().int().optional(),
+    // Contract mode fields
+    contractAddress: z.string().optional(),
+    contractName: z.string().optional(),    // for display
+    // Shared
+    functionName: z.string().optional(),
+    args: z.record(z.string(), z.string()).optional(), // param name → value
+    payableValue: z.string().optional(),
+  }),
+  meta: zShareMeta,
+});
+
+export const zSharePayload = z.union([
+  zContactShare,
+  zContractShare,
+  zProfileShare,
+  zCoinShare,
+  zRecoveryShare,
+  zTxRequestShare,
+]);
 export type SharePayload = z.infer<typeof zSharePayload>;
 
 // ---- Encoding/decoding ------------------------------------------------------

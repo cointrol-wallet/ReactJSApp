@@ -2,8 +2,9 @@ import type { Contact } from "@/storage/contactStore";
 import type { Contract } from "@/storage/contractStore";
 import type { Folio } from "@/storage/folioStore";
 import type { Coin } from "@/storage/coinStore";
+import type { Recovery } from "@/storage/recoveryStore";
 import type { SharePayload } from "./sharePayload";
-import { encodeSharePayload } from "./sharePayload";
+import { QR_CHAR_LIMIT, encodeSharePayload } from "./sharePayload";
 
 function uniqWallets(wallets: { chainId: number; address: string; name?: string }[]) {
   const m = new Map<string, { chainId: number; address: string; name?: string }>();
@@ -29,9 +30,6 @@ export function buildContactShare(contact: Contact): SharePayload {
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };
 }
-
-// Safe character limit for QR codes (version 40, ECC level L ≈ 2953 bytes binary)
-const QR_CHAR_LIMIT = 2800;
 
 /**
  * Contract: include ABI/metadata but omit if the encoded payload would exceed
@@ -128,6 +126,60 @@ export function buildCoinShare(coin: Coin): SharePayload {
       address: coin.address,
       type: coin.type,
     },
+    meta: { createdAt: Date.now(), source: "Cointrol" },
+  };
+}
+
+/**
+ * Recovery: share recovery configuration details.
+ * The `name` field stores the folio's on-chain address (stable ID).
+ */
+export function buildRecoveryShare(recovery: Recovery): SharePayload {
+  return {
+    v: 1,
+    t: "recovery",
+    data: {
+      name: recovery.name,
+      chainId: recovery.chainId,
+      recoverableAddress: recovery.recoverableAddress,
+      paymaster: recovery.paymaster,
+      threshold: recovery.threshold,
+      status: recovery.status,
+      participants: recovery.participants,
+    },
+    meta: { createdAt: Date.now(), source: "Cointrol" },
+  };
+}
+
+/**
+ * TxRequest: share partial transaction form state so another user can
+ * pre-fill and submit the transaction themselves.
+ * Covers both "Send or Approve Coins" (type: "transfer") and
+ * "Use a Smart Contract" (type: "contract") modes.
+ * All fields except `type` and `chainId` are optional.
+ */
+export type TxRequestInput = {
+  type: "transfer" | "contract";
+  chainId: number;
+  sender?: string;
+  // transfer mode
+  coinAddress?: string;
+  coinSymbol?: string;
+  coinDecimals?: number;
+  // contract mode
+  contractAddress?: string;
+  contractName?: string;
+  // shared
+  functionName?: string;
+  args?: Record<string, string>;
+  payableValue?: string;
+};
+
+export function buildTxRequestShare(input: TxRequestInput): SharePayload {
+  return {
+    v: 1,
+    t: "txrequest",
+    data: { ...input },
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };
 }

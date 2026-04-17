@@ -121,6 +121,128 @@ describe("coin payload round-trip", () => {
 });
 
 // ---------------------------------------------------------------------------
+// recovery
+// ---------------------------------------------------------------------------
+
+describe("recovery payload round-trip", () => {
+  const payload: SharePayload = {
+    v: 1,
+    t: "recovery",
+    data: {
+      name: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      chainId: 11155111,
+      recoverableAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      paymaster: "0xcccccccccccccccccccccccccccccccccccccccc",
+      threshold: 2,
+      status: true,
+      participants: [
+        "0xdddddddddddddddddddddddddddddddddddddddd",
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      ],
+    },
+    meta: { createdAt: 1000, source: "Cointrol" },
+  };
+
+  it("decodes to the same object", () => {
+    expect(roundTrip(payload)).toEqual(payload);
+  });
+
+  it("encoded string starts with SHARE_PREFIX", () => {
+    expect(encodeSharePayload(payload).startsWith(SHARE_PREFIX)).toBe(true);
+  });
+
+  it("works with an empty participants array", () => {
+    const minimal: SharePayload = {
+      v: 1,
+      t: "recovery",
+      data: {
+        name: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        chainId: 1,
+        recoverableAddress: "",
+        paymaster: "",
+        threshold: 1,
+        status: false,
+        participants: [],
+      },
+    };
+    expect(roundTrip(minimal)).toEqual(minimal);
+  });
+
+  it("works without optional meta field", () => {
+    const noMeta: SharePayload = {
+      v: 1,
+      t: "recovery",
+      data: {
+        name: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        chainId: 1,
+        recoverableAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        paymaster: "0xcccccccccccccccccccccccccccccccccccccccc",
+        threshold: 1,
+        status: false,
+        participants: [],
+      },
+    };
+    expect(roundTrip(noMeta)).toEqual(noMeta);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// txrequest
+// ---------------------------------------------------------------------------
+
+describe("txrequest payload round-trip", () => {
+  it("round-trips a full transfer request", () => {
+    const payload: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "transfer",
+        chainId: 11155111,
+        sender: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        coinAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        coinSymbol: "USDC",
+        coinDecimals: 6,
+        functionName: "transfer",
+        args: { to: "0xcccccccccccccccccccccccccccccccccccccccc", amount: "1000000" },
+      },
+      meta: { source: "Cointrol" },
+    };
+    expect(roundTrip(payload)).toEqual(payload);
+  });
+
+  it("round-trips a full contract request", () => {
+    const payload: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "contract",
+        chainId: 1,
+        sender: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        contractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        contractName: "MyVault",
+        functionName: "deposit",
+        args: { amount: "500" },
+        payableValue: "0.01",
+      },
+      meta: { createdAt: 2000 },
+    };
+    expect(roundTrip(payload)).toEqual(payload);
+  });
+
+  it("round-trips with only required fields (partial pre-fill)", () => {
+    const payload: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "transfer",
+        chainId: 11155111,
+      },
+    };
+    expect(roundTrip(payload)).toEqual(payload);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // decodeSharePayload — error cases
 // ---------------------------------------------------------------------------
 

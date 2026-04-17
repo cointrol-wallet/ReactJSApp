@@ -181,3 +181,126 @@ describe("importSharePayload — coin", () => {
     expect(result.mode).toBe("matched");
   });
 });
+
+// ---------------------------------------------------------------------------
+// recovery — returns prefill, does NOT write to any store
+// ---------------------------------------------------------------------------
+
+describe("importSharePayload — recovery", () => {
+  const payload: SharePayload = {
+    v: 1,
+    t: "recovery",
+    data: {
+      name: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      chainId: 11155111,
+      recoverableAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      paymaster: "0xcccccccccccccccccccccccccccccccccccccccc",
+      threshold: 2,
+      status: true,
+      participants: [ADDR, ADDR2],
+    },
+  };
+
+  it("returns mode=prefill", async () => {
+    const result = await importSharePayload(payload);
+    expect(result.mode).toBe("prefill");
+  });
+
+  it("returns the full recovery data object", async () => {
+    const result = await importSharePayload(payload) as { mode: "prefill"; data: typeof payload.data };
+    expect(result.data.name).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(result.data.chainId).toBe(11155111);
+    expect(result.data.threshold).toBe(2);
+    expect(result.data.participants).toEqual([ADDR, ADDR2]);
+  });
+
+  it("does not write to any store", async () => {
+    const contactsBefore = (await getAllContacts()).length;
+    const contractsBefore = (await getAllContracts()).length;
+    const coinsBefore = (await getAllCoins()).length;
+    await importSharePayload(payload);
+    expect((await getAllContacts()).length).toBe(contactsBefore);
+    expect((await getAllContracts()).length).toBe(contractsBefore);
+    expect((await getAllCoins()).length).toBe(coinsBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// txrequest — returns prefill, does NOT write to any store
+// ---------------------------------------------------------------------------
+
+describe("importSharePayload — txrequest", () => {
+  const transferPayload: SharePayload = {
+    v: 1,
+    t: "txrequest",
+    data: {
+      type: "transfer",
+      chainId: 11155111,
+      sender: ADDR,
+      coinAddress: ADDR2,
+      coinSymbol: "ETH",
+      coinDecimals: 18,
+      functionName: "transfer",
+      args: { to: ADDR2, amount: "1000000000000000000" },
+    },
+  };
+
+  const contractPayload: SharePayload = {
+    v: 1,
+    t: "txrequest",
+    data: {
+      type: "contract",
+      chainId: 1,
+      contractAddress: ADDR,
+      contractName: "MyVault",
+      functionName: "deposit",
+      payableValue: "0.01",
+    },
+  };
+
+  it("returns mode=prefill for transfer request", async () => {
+    const result = await importSharePayload(transferPayload);
+    expect(result.mode).toBe("prefill");
+  });
+
+  it("returns the full transfer data object", async () => {
+    const result = await importSharePayload(transferPayload) as { mode: "prefill"; data: typeof transferPayload.data };
+    expect(result.data.type).toBe("transfer");
+    expect(result.data.chainId).toBe(11155111);
+    expect((result.data as any).coinSymbol).toBe("ETH");
+    expect((result.data as any).functionName).toBe("transfer");
+  });
+
+  it("returns mode=prefill for contract request", async () => {
+    const result = await importSharePayload(contractPayload);
+    expect(result.mode).toBe("prefill");
+  });
+
+  it("returns the full contract data object", async () => {
+    const result = await importSharePayload(contractPayload) as { mode: "prefill"; data: typeof contractPayload.data };
+    expect(result.data.type).toBe("contract");
+    expect((result.data as any).contractName).toBe("MyVault");
+    expect((result.data as any).payableValue).toBe("0.01");
+  });
+
+  it("does not write to any store", async () => {
+    const contactsBefore = (await getAllContacts()).length;
+    const contractsBefore = (await getAllContracts()).length;
+    const coinsBefore = (await getAllCoins()).length;
+    await importSharePayload(transferPayload);
+    await importSharePayload(contractPayload);
+    expect((await getAllContacts()).length).toBe(contactsBefore);
+    expect((await getAllContracts()).length).toBe(contractsBefore);
+    expect((await getAllCoins()).length).toBe(coinsBefore);
+  });
+
+  it("works with only required fields (minimal partial pre-fill)", async () => {
+    const minimal: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: { type: "transfer", chainId: 1 },
+    };
+    const result = await importSharePayload(minimal);
+    expect(result.mode).toBe("prefill");
+  });
+});

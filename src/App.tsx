@@ -16,6 +16,7 @@ const Transactions = React.lazy(() => import("./pages/transaction").then(m => ({
 const LoginPage    = React.lazy(() => import("./pages/LoginPage").then(m => ({ default: m.LoginPage })));
 const RegisterPage = React.lazy(() => import("./pages/RegisterPage").then(m => ({ default: m.RegisterPage })));
 const UserGuide    = React.lazy(() => import("./pages/userGuide").then(m => ({ default: m.UserGuide })));
+const Recovery     = React.lazy(() => import("./pages/recovery").then(m => ({ default: m.RecoveryPage })));
 import { initWallet } from "./lib/wallets";
 import { FalconProvider } from "./crypto/falconProvider";
 import { QrScanner } from "./components/ui/QrScanner";
@@ -235,6 +236,7 @@ function NavDropdown() {
               <NavDropItem to="/contacts" label="Contacts" onSelect={() => setOpen(false)} />
               <NavDropItem to="/contracts" label="Smart Contracts" onSelect={() => setOpen(false)} />
               <NavDropItem to="/coins" label="Coins" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/recovery" label="Recoverables" onSelect={() => setOpen(false)} />
               <NavDropItem to="/legal/terms" label="Terms" onSelect={() => setOpen(false)} />
               <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
               <NavDropItem to="/user-guide" label="User Guide" onSelect={() => setOpen(false)} />
@@ -460,6 +462,7 @@ function AppContainer() {
             <Route path="contracts" element={<Contracts />} />
             <Route path="coins" element={<Coins />} />
             <Route path="addressbook" element={<AddressBook />} />
+            <Route path="recovery" element={<Recovery />} />
             <Route path="legal/terms" element={<Terms />} />
             <Route path="legal/privacy" element={<Privacy />} />
             <Route path="user-guide" element={<UserGuide />} />
