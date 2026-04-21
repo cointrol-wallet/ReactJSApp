@@ -9,7 +9,12 @@ import {
 } from "@/storage/keyStore";
 import { getAllFolios, Folio } from "@/storage/folioStore";
 import { getAllDomains, Domain } from "@/storage/domainStore";
-import { rotateKey, KeyRotationStatus } from "@/lib/keyRotation";
+import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
+import { encodeFunctionData, bytesToHex, keccak256, type Hex } from "viem";
+import { quantumAccountAbi } from "@/lib/abiTypes";
+import { notifyBundlerPublicKeyUpdate } from "@/lib/wallets";
+import { getPublicKey } from "@/storage/keyStore";
+import { updateFolio } from "@/storage/folioStore";
 import { useNavigate } from "react-router-dom";
 
 // ─── Generate Key Modal ───────────────────────────────────────────────────────
@@ -101,17 +106,50 @@ function RotateKeyModal({
   onDone: () => void;
 }) {
   const [newKeypairId, setNewKeypairId] = React.useState("");
-  const [status, setStatus] = React.useState<KeyRotationStatus>({ phase: "idle" });
+  const txStatus = useTx(s => s.status);
+  const [localPhase, setLocalPhase] = React.useState<"idle" | "notifying" | "done">("idle");
+  const [error, setError] = React.useState<string | null>(null);
 
   const available = keypairs.filter(k => k.id !== folio.keypairId && k.level !== "ECC");
 
   async function handleRotate() {
     if (!newKeypairId) return;
-    await rotateKey(folio, domain, newKeypairId, setStatus);
-    if (status.phase === "done") onDone();
+    setError(null);
+    setLocalPhase("idle");
+
+    const newPK = await getPublicKey(newKeypairId);
+    if (!newPK) { setError("New keypair not found"); return; }
+
+    const encoded = encodeFunctionData({
+      abi: quantumAccountAbi,
+      functionName: "updatePublicKey",
+      args: [bytesToHex(newPK)],
+    }) as Hex;
+
+    const { startFlow } = useTx.getState();
+    await startFlow({ folio, encoded, domain, nonceKey: ADMIN_KEY });
+
+    const status = useTx.getState().status;
+    if (status.phase === "failed") {
+      setError(status.message ?? "Transaction failed.");
+      return;
+    }
+
+    setLocalPhase("notifying");
+    try {
+      await notifyBundlerPublicKeyUpdate({ folio, domain, newKeypairId });
+      await updateFolio(folio.id, { keypairId: newKeypairId });
+      setLocalPhase("done");
+      onDone();
+    } catch (e: any) {
+      setError(e?.message ?? "Bundler notification failed.");
+      setLocalPhase("idle");
+    }
   }
 
-  const busy = status.phase !== "idle" && status.phase !== "error" && status.phase !== "done";
+  const busy =
+    (txStatus.phase !== "idle" && txStatus.phase !== "finalized" && txStatus.phase !== "failed") ||
+    localPhase === "notifying";
 
   return createPortal(
     <div
@@ -143,19 +181,20 @@ function RotateKeyModal({
           )}
         </div>
 
-        {status.phase !== "idle" && (
-          <div className={`rounded-md border px-3 py-2 text-xs mb-4 ${status.phase === "error" ? "border-red-300 text-red-600" : "border-border"}`}>
-            {status.phase === "submitting" && "Submitting key rotation UserOp…"}
-            {status.phase === "confirming" && `Confirming on-chain… tx: ${status.txHash.slice(0, 12)}…`}
-            {status.phase === "notifying" && "Notifying bundler…"}
-            {status.phase === "done" && "Key rotation complete."}
-            {status.phase === "error" && status.message}
+        {(txStatus.phase !== "idle" || localPhase !== "idle" || error) && (
+          <div className={`rounded-md border px-3 py-2 text-xs mb-4 ${txStatus.phase === "failed" || error ? "border-red-300 text-red-600" : "border-border"}`}>
+            {txStatus.phase === "preparing" && "Building key rotation UserOp…"}
+            {txStatus.phase === "submitted" && `Confirming on-chain… tx: ${(txStatus.hash ?? txStatus.userOpHash ?? "").slice(0, 12)}…`}
+            {localPhase === "notifying" && "Notifying bundler…"}
+            {localPhase === "done" && "Key rotation complete."}
+            {txStatus.phase === "failed" && (error ?? txStatus.message)}
+            {txStatus.phase !== "failed" && error && error}
           </div>
         )}
 
         <div className="flex justify-end gap-2">
           <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={busy}>Cancel</button>
-          {status.phase === "done" ? (
+          {localPhase === "done" ? (
             <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={() => { onDone(); onClose(); }}>Done</button>
           ) : (
             <button
@@ -184,6 +223,30 @@ export function Keys() {
   const [loading, setLoading] = React.useState(true);
   const [showGenerate, setShowGenerate] = React.useState(false);
   const [rotatingFolio, setRotatingFolio] = React.useState<{ folio: Folio; domain: Domain } | null>(null);
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest("details")) return;
+      document.querySelectorAll("details[open]").forEach(d => d.removeAttribute("open"));
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function handleCopyRecoveryCode(keypairId: string) {
+    try {
+      const pkBytes = await getPublicKey(keypairId);
+      if (!pkBytes) throw new Error("Key not found");
+      const hash = keccak256(bytesToHex(pkBytes));
+      await navigator.clipboard.writeText(hash);
+      setCopiedId(keypairId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // silently fail — clipboard may not be available
+    }
+  }
 
   async function reload() {
     const [kps, fls, doms] = await Promise.all([listKeypairs(), getAllFolios(), getAllDomains()]);
@@ -251,7 +314,7 @@ export function Keys() {
                     </div>
                     <div className="text-xs text-muted-foreground font-mono break-all">{k.id}</div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 shrink-0 items-center">
                     {!isAssigned && (
                       <button
                         className="rounded-md border border-border px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
@@ -269,6 +332,22 @@ export function Keys() {
                     >
                       Delete
                     </button>
+                    <details className="relative inline-block">
+                      <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-2 py-1 text-xs">
+                        Actions
+                      </summary>
+                      <div className="absolute right-0 mt-1 w-44 rounded-md border border-border bg-background shadow-lg z-50">
+                        <button
+                          className="block w-full px-3 py-2 text-left text-xs hover:bg-primary hover:text-primary-foreground"
+                          onClick={(e) => {
+                            (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                            handleCopyRecoveryCode(k.id);
+                          }}
+                        >
+                          {copiedId === k.id ? "Copied!" : "Copy recovery code"}
+                        </button>
+                      </div>
+                    </details>
                   </div>
                 </div>
 

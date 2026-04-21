@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cn } from "../utils";
+import { cn, isSimilarFolioName } from "../utils";
 
 describe("cn", () => {
   it("combines class names", () => {
@@ -25,5 +25,43 @@ describe("cn", () => {
 
   it("handles array syntax", () => {
     expect(cn(["foo", "bar"])).toBe("foo bar");
+  });
+});
+
+describe("isSimilarFolioName", () => {
+  it("returns false for exact matches (not similar)", () => {
+    expect(isSimilarFolioName("main", "main")).toBe(false);
+  });
+
+  it("returns true for case variants", () => {
+    expect(isSimilarFolioName("Main", "main")).toBe(true);
+    expect(isSimilarFolioName("MAIN", "main")).toBe(true);
+  });
+
+  it("returns true for singular/plural pairs", () => {
+    expect(isSimilarFolioName("wallet", "wallets")).toBe(true);
+    expect(isSimilarFolioName("wallets", "wallet")).toBe(true);
+    expect(isSimilarFolioName("key", "keys")).toBe(true);
+  });
+
+  it("returns true for combined case + plural variants", () => {
+    expect(isSimilarFolioName("wallet", "Wallets")).toBe(true);
+    expect(isSimilarFolioName("Wallets", "wallet")).toBe(true);
+  });
+
+  it("returns false for unrelated names", () => {
+    expect(isSimilarFolioName("alpha", "beta")).toBe(false);
+  });
+
+  it("returns false for exact match after trim", () => {
+    expect(isSimilarFolioName("  main  ", "main")).toBe(false);
+  });
+
+  it("returns true for case variant after trim", () => {
+    expect(isSimilarFolioName("  Main  ", "main")).toBe(true);
+  });
+
+  it("returns false when suffix is more than a simple plural 's'", () => {
+    expect(isSimilarFolioName("main", "mainnet")).toBe(false);
   });
 });

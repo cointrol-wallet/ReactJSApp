@@ -1,5 +1,5 @@
 import React from "react";
-import { HashRouter, Routes, Route, Link, NavLink, Navigate, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Link, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { createPortal } from "react-dom";
 import { Badge } from "./components/ui/badge";
@@ -341,16 +341,25 @@ function AppContainer() {
   );
 
   const { folios, loading: foliosLoading, updateFolio, clearFolios } = useFolios();
+  const navigate = useNavigate();
 
   const handleDecoded = React.useCallback(async (qrText: string) => {
     try {
       const payload = decodeSharePayload(qrText);
+      if (payload.t === "recovery") {
+        navigate("/recovery", { state: { importRecovery: payload.data } });
+        return;
+      }
+      if (payload.t === "txrequest") {
+        navigate("/transactions", { state: { txQr: payload.data } });
+        return;
+      }
       const result = await importSharePayload(payload, { folios, updateFolio });
       console.log("[QR] import result:", result);
     } catch (e) {
       console.error("[QR] import failed:", e);
     }
-  }, [folios, updateFolio]);
+  }, [folios, updateFolio, navigate]);
 
   React.useEffect(() => {
     let cancelled = false;

@@ -87,6 +87,7 @@ import {
   useTx,
   BundlerAPI,
   defaultAccountGasLimits,
+  ADMIN_KEY,
 } from "../submitTransaction";
 import type { PackedUserOperation } from "../submitTransaction";
 import { listKeypairs } from "@/storage/keyStore";
@@ -404,6 +405,21 @@ describe("useTx store", () => {
     const packed = BigInt(submittedOp.accountGasLimits);
     const verificationGas = packed >> 128n;
     expect(verificationGas).toBe(5_000_000n);
+  });
+
+  it("startFlow passes nonceKey to getNonce when provided", async () => {
+    vi.spyOn(BundlerAPI, "submit").mockResolvedValue({ success: false, signed_tx: "0x", result: "rejected" });
+
+    await useTx.getState().startFlow({
+      folio: MOCK_FOLIO as any,
+      encoded: "0x",
+      domain: MOCK_DOMAIN as any,
+      nonceKey: ADMIN_KEY,
+    });
+
+    // Second arg to readContract (getNonce) should be the custom key
+    const call = mockReadContract.mock.calls[0];
+    expect(call[0].args[1]).toBe(ADMIN_KEY);
   });
 
   it("startFlow uses Falcon-1024 verification gas (9.9M) for level-1024 accounts", async () => {

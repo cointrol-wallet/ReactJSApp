@@ -24,17 +24,22 @@ import {
   erc721Abi,
   erc1155Abi,
   nativeAbi,
-  quantumAccountAbi
+  quantumAccountAbi,
+  recoverableAbi,
 } from "@/lib/abiTypes";
 import { TxStatus } from "@/lib/submitTransaction";
 import { createPortal } from "react-dom";
 import { resolveEnsAddress, lookupEnsName } from "@/lib/ens";
 import { fetchIncomingTransfers } from "@/lib/fetchIncomingTransfers";
 import { upsertIncomingTxns } from "@/storage/transactionStore";
+import { ShareQrModal } from "@/components/ui/ShareQrModal";
+import type { SharePayload } from "@/lib/sharePayload";
 
 const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 
 export function Transactions() {
+
+  type TxQrData = Extract<SharePayload, { t: "txrequest" }>["data"];
 
   type AddressMode = "manual" | "address" | "coin" | "folio";
 
@@ -72,6 +77,17 @@ export function Transactions() {
   const [selectContract, setSelectContract] = React.useState<Contract | null>(null);
   const [selectFolio, setSelectFolio] = React.useState<Folio | null>(null);
 
+  // Built-in contracts (no stored address — entered at time of use)
+  const [builtInContract, setBuiltInContract] = React.useState<"recoverable" | "quantumAccount" | null>(null);
+  const [recoverableAddressInput, setRecoverableAddressInput] = React.useState("");
+  const [recoverableAddressResolved, setRecoverableAddressResolved] = React.useState<string | null>(null);
+  const [recoverableAddressResolving, setRecoverableAddressResolving] = React.useState(false);
+  const [recoverableAddressError, setRecoverableAddressError] = React.useState<string | null>(null);
+  const [qaAddressInput, setQaAddressInput] = React.useState("");
+  const [qaAddressResolved, setQaAddressResolved] = React.useState<string | null>(null);
+  const [qaAddressResolving, setQaAddressResolving] = React.useState(false);
+  const [qaAddressError, setQaAddressError] = React.useState<string | null>(null);
+
   const [selectedFnName, setSelectedFnName] = React.useState<string>("");
   const [argValues, setArgValues] = React.useState<Record<string, string>>({});
   const [payableValue, setPayableValue] = React.useState<string>("");
@@ -85,6 +101,10 @@ export function Transactions() {
   const [refreshError, setRefreshError] = React.useState<string | null>(null);
   const refreshInFlightRef = React.useRef(false);
 
+  const [modalChainId, setModalChainId] = React.useState<number>(0);
+  const [txQrPayload, setTxQrPayload] = React.useState<SharePayload | null>(null);
+  const [unknownContractQr, setUnknownContractQr] = React.useState<{ address: string; chainId: number } | null>(null);
+
   // ENS reverse-lookup cache for history display (non-blocking, not persisted)
   const [ensLookupCache, setEnsLookupCache] = React.useState<Record<string, string | null>>({});
   const pendingEnsLookups = React.useRef(new Set<string>());
@@ -94,6 +114,9 @@ export function Transactions() {
   const prefillHandled = React.useRef(false);
   const pendingPrefillFnRef = React.useRef("");
   const pendingAddressFieldRef = React.useRef<Record<string, AddressFieldState> | null>(null);
+  const pendingArgValuesRef = React.useRef<Record<string, string> | null>(null);
+  const pendingPayableValueRef = React.useRef<string | null>(null);
+  const txQrHandled = React.useRef(false);
 
 
   const {
@@ -144,8 +167,8 @@ export function Transactions() {
   const CHAIN_NAMES: Record<number, string> = Object.fromEntries(domains.map(d => [d.chainId, d.name]));
 
   const selectDomain = React.useMemo(
-    () => domains.find(d => d.chainId === selectFolio?.chainId) ?? null,
-    [domains, selectFolio]
+    () => domains.find(d => d.chainId === modalChainId) ?? null,
+    [domains, modalChainId]
   );
 
   const {
@@ -233,6 +256,7 @@ export function Transactions() {
     if (!isModalOpen) return;
     if (folios.length === 1 && !selectFolio) {
       setSelectFolio(folios[0]);
+      setModalChainId(folios[0].chainId);
     }
   }, [isModalOpen, folios, selectFolio]);
 
@@ -256,7 +280,8 @@ export function Transactions() {
 
       setSelectCoin(coin);
       setSelectContact(contact);
-      if (folio) setSelectFolio(folio);
+      if (folio) { setSelectFolio(folio); setModalChainId(folio.chainId); }
+      else if (coin) setModalChainId(coin.chainId);
       setTransferOrTransaction(true);
       setCardTitle("Send or Approve Coins");
       setCardDescription("Select any coin and then choose an option.");
@@ -274,6 +299,7 @@ export function Transactions() {
       const contract = contracts.find(c => c.id === contractId) ?? null;
 
       setSelectContract(contract);
+      if (contract) setModalChainId(contract.chainId);
       setTransferOrTransaction(false);
       setCardTitle("Use a Smart Contract");
       setCardDescription("Select any contract and then choose a function");
@@ -282,6 +308,106 @@ export function Transactions() {
     }
   }, [location.state, cLoading, coLoading, crLoading, fLoading, aLoading,
       coins, contacts, contracts, folios, address]);
+
+  // QR-scan prefill for transaction requests
+  React.useEffect(() => {
+    if (txQrHandled.current) return;
+    const txQr = location.state?.txQr as TxQrData | undefined;
+    if (!txQr) return;
+    if (cLoading || crLoading || fLoading) return;
+
+    txQrHandled.current = true;
+
+    const EVM_ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
+
+    if (txQr.args) {
+      const addrFields: Record<string, AddressFieldState> = {};
+      const plainArgs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(txQr.args)) {
+        if (EVM_ADDR_RE.test(v)) {
+          addrFields[k] = { mode: "manual", manual: v, selectedIndex: null };
+        } else {
+          plainArgs[k] = v;
+        }
+      }
+      if (Object.keys(addrFields).length) pendingAddressFieldRef.current = addrFields;
+      if (Object.keys(plainArgs).length) pendingArgValuesRef.current = plainArgs;
+    }
+    if (txQr.payableValue) pendingPayableValueRef.current = txQr.payableValue;
+
+    if (txQr.type === "contract") {
+      // Check if this is a built-in QuantumAccount QR (generated by Migrate Account)
+      if (txQr.contractName === "QuantumAccount" && txQr.contractAddress) {
+        setBuiltInContract("quantumAccount");
+        setQaAddressInput(txQr.contractAddress);
+        if (txQr.chainId) setModalChainId(txQr.chainId);
+        if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+        setTransferOrTransaction(false);
+        setCardTitle("Use a Smart Contract");
+        setCardDescription("Select any contract and then choose a function");
+        setIsModalOpen(true);
+      // Check if this is a built-in Recoverable QR (generated by Create Attestation)
+      } else if (txQr.contractName === "Recoverable" && txQr.contractAddress) {
+        setBuiltInContract("recoverable");
+        setRecoverableAddressInput(txQr.contractAddress);
+        if (txQr.chainId) setModalChainId(txQr.chainId);
+        if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+        setTransferOrTransaction(false);
+        setCardTitle("Use a Smart Contract");
+        setCardDescription("Select any contract and then choose a function");
+        setIsModalOpen(true);
+      } else {
+        (async () => {
+          let contract: (typeof contracts)[number] | undefined;
+          if (txQr.contractAddress) {
+            // 1. Exact hex address match
+            contract = contracts.find(
+              c => EVM_ADDR_RE.test(c.address) &&
+                   c.address.toLowerCase() === txQr.contractAddress!.toLowerCase() &&
+                   c.chainId === txQr.chainId
+            );
+            // 2. Fallback: resolve ENS-stored addresses and compare
+            if (!contract) {
+              const ensContracts = contracts.filter(
+                c => !EVM_ADDR_RE.test(c.address) && c.chainId === txQr.chainId
+              );
+              if (ensContracts.length > 0) {
+                const resolved = await Promise.all(
+                  ensContracts.map(c => resolveEnsAddress(c.address, mainnetRpcUrl))
+                );
+                const idx = resolved.findIndex(
+                  addr => addr?.toLowerCase() === txQr.contractAddress!.toLowerCase()
+                );
+                if (idx >= 0) contract = ensContracts[idx];
+              }
+            }
+            if (!contract) {
+              setUnknownContractQr({ address: txQr.contractAddress, chainId: txQr.chainId });
+              return;
+            }
+          }
+          if (contract) setSelectContract(contract);
+          if (txQr.chainId) setModalChainId(txQr.chainId);
+          if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+          setTransferOrTransaction(false);
+          setCardTitle("Use a Smart Contract");
+          setCardDescription("Select any contract and then choose a function");
+          setIsModalOpen(true);
+        })();
+      }
+    } else if (txQr.type === "transfer") {
+      const coin = txQr.coinAddress
+        ? coins.find(c => c.address.toLowerCase() === txQr.coinAddress!.toLowerCase() && c.chainId === txQr.chainId)
+        : undefined;
+      if (coin) setSelectCoin(coin);
+      if (txQr.chainId) setModalChainId(txQr.chainId);
+      if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+      setTransferOrTransaction(true);
+      setCardTitle("Send or Approve Coins");
+      setCardDescription("Select any coin and then choose an option.");
+      setIsModalOpen(true);
+    }
+  }, [location.state, cLoading, crLoading, fLoading, contracts, coins, mainnetRpcUrl]);
 
   // Trigger non-blocking ENS reverse lookups for history addresses
   React.useEffect(() => {
@@ -309,11 +435,83 @@ export function Transactions() {
     }
   }, [txns, mainnetRpcUrl]);
 
+  // ENS resolution for built-in Recoverable address input
+  React.useEffect(() => {
+    const val = recoverableAddressInput.trim();
+    if (!val) {
+      setRecoverableAddressResolved(null);
+      setRecoverableAddressError(null);
+      return;
+    }
+    if (/^0x[a-fA-F0-9]{40}$/.test(val)) {
+      setRecoverableAddressResolved(val);
+      setRecoverableAddressError(null);
+      return;
+    }
+    if (ENS_REGEX.test(val)) {
+      setRecoverableAddressResolving(true);
+      setRecoverableAddressResolved(null);
+      setRecoverableAddressError(null);
+      resolveEnsAddress(val, mainnetRpcUrl)
+        .then(addr => {
+          if (addr) setRecoverableAddressResolved(addr);
+          else setRecoverableAddressError("ENS name not found");
+        })
+        .catch(() => setRecoverableAddressError("ENS resolution failed"))
+        .finally(() => setRecoverableAddressResolving(false));
+    } else {
+      setRecoverableAddressResolved(null);
+      setRecoverableAddressError("Invalid address");
+    }
+  }, [recoverableAddressInput, mainnetRpcUrl]);
+
+  // ENS resolution for built-in QuantumAccount address input
+  React.useEffect(() => {
+    const val = qaAddressInput.trim();
+    if (!val) {
+      setQaAddressResolved(null);
+      setQaAddressError(null);
+      return;
+    }
+    if (/^0x[a-fA-F0-9]{40}$/.test(val)) {
+      setQaAddressResolved(val);
+      setQaAddressError(null);
+      return;
+    }
+    if (ENS_REGEX.test(val)) {
+      setQaAddressResolving(true);
+      setQaAddressResolved(null);
+      setQaAddressError(null);
+      resolveEnsAddress(val, mainnetRpcUrl)
+        .then(addr => {
+          if (addr) setQaAddressResolved(addr);
+          else setQaAddressError("ENS name not found");
+        })
+        .catch(() => setQaAddressError("ENS resolution failed"))
+        .finally(() => setQaAddressResolving(false));
+    } else {
+      setQaAddressResolved(null);
+      setQaAddressError("Invalid address");
+    }
+  }, [qaAddressInput, mainnetRpcUrl]);
+
   function resetForm() {
     setSelectCoin(null);
     setSelectContact(null);
     setSelectContract(null);
     setSelectFolio(null);
+    setModalChainId(0);
+
+    // built-in contract state
+    setBuiltInContract(null);
+    setRecoverableAddressInput("");
+    setRecoverableAddressResolved(null);
+    setRecoverableAddressResolving(false);
+    setRecoverableAddressError(null);
+    setQaAddressInput("");
+    setQaAddressResolved(null);
+    setQaAddressResolving(false);
+    setQaAddressError(null);
 
     // clear dynamic input state
     setSelectedFnName("");
@@ -589,9 +787,11 @@ export function Transactions() {
           return erc20Abi;
       }
     } else {
+      if (builtInContract === "recoverable") return recoverableAbi;
+      if (builtInContract === "quantumAccount") return quantumAccountAbi;
       return extractAbi(selectContract?.metadata);
     }
-  }, [selectCoin, transferOrTransaction, selectContract]);
+  }, [selectCoin, transferOrTransaction, selectContract, builtInContract]);
 
   const coinBalance = React.useMemo(() => {
     if (selectCoin != null && selectFolio != null) {
@@ -678,9 +878,19 @@ export function Transactions() {
   React.useEffect(() => {
     if (!selectedFnName) return;
 
-    // clear BOTH types of inputs whenever function changes
-    setArgValues({});
-    setPayableValue("");
+    // clear BOTH types of inputs whenever function changes (apply pending prefill if set)
+    if (pendingArgValuesRef.current) {
+      setArgValues(pendingArgValuesRef.current);
+      pendingArgValuesRef.current = null;
+    } else {
+      setArgValues({});
+    }
+    if (pendingPayableValueRef.current) {
+      setPayableValue(pendingPayableValueRef.current);
+      pendingPayableValueRef.current = null;
+    } else {
+      setPayableValue("");
+    }
     setEnsResolutionState({});
     if (pendingAddressFieldRef.current) {
       setAddressFieldState(pendingAddressFieldRef.current);
@@ -737,8 +947,16 @@ export function Transactions() {
       return;
     }
 
-    if (!selectContract && !transferOrTransaction) {
+    if (!selectContract && !transferOrTransaction && builtInContract !== "recoverable" && builtInContract !== "quantumAccount") {
       setError("No contract selected");
+      return;
+    }
+    if (builtInContract === "recoverable" && !recoverableAddressResolved) {
+      setError("Enter a valid Recoverable contract address");
+      return;
+    }
+    if (builtInContract === "quantumAccount" && !qaAddressResolved) {
+      setError("Enter a valid QuantumAccount address");
       return;
     }
 
@@ -835,8 +1053,15 @@ export function Transactions() {
           }
           value = 0n;
         } else {
-          // contract call: dest = selected contract address
-          const cAddr = (selectContract?.address ?? "").trim();
+          // contract call: dest = selected contract address (or built-in recoverable address)
+          let cAddr: string;
+          if (builtInContract === "recoverable") {
+            cAddr = recoverableAddressResolved ?? "";
+          } else if (builtInContract === "quantumAccount") {
+            cAddr = qaAddressResolved ?? "";
+          } else {
+            cAddr = (selectContract?.address ?? "").trim();
+          }
           if (!cAddr.startsWith("0x")) {
             setError("Contract has no valid address");
             return;
@@ -1082,6 +1307,71 @@ export function Transactions() {
     const cached = ensLookupCache[addrLower];
     if (cached) return { primary: cached, secondary: short };
     return { primary: short };
+  }
+
+  function buildTxQrPayload(): SharePayload {
+    const argMap: Record<string, string> = { ...argValues };
+    if (selectedFn) {
+      selectedFn.inputs.forEach((input, i) => {
+        if (input.type !== "address") return;
+        const key = getInputName(input, i);
+        const st = addressFieldState[key];
+        if (!st) return;
+        if (st.mode === "manual") {
+          argMap[key] = st.manual ?? "";
+        } else if (st.mode === "folio" && st.selectedIndex != null) {
+          argMap[key] = folios.filter(f => f.chainId === modalChainId)[st.selectedIndex]?.address ?? "";
+        } else if (st.mode === "coin" && st.selectedIndex != null) {
+          argMap[key] = coins.filter(c => c.chainId === modalChainId)[st.selectedIndex]?.address ?? "";
+        } else if (st.mode === "address" && st.selectedIndex != null) {
+          const filteredAddr = address.filter(a => {
+            if (a.isContact) {
+              const cId = a.id.replace(/^address:/, "");
+              return contacts.find(c => c.id === cId)?.wallets?.some(w => w.chainId === modalChainId) ?? false;
+            }
+            return contracts.find(c => c.id === a.id)?.chainId === modalChainId;
+          });
+          const row = filteredAddr[st.selectedIndex];
+          if (row?.isContact) {
+            const cId = row.id.replace(/^address:/, "");
+            const w = contacts.find(c => c.id === cId)?.wallets?.find(w => w.chainId === modalChainId);
+            argMap[key] = w?.address ?? "";
+          } else {
+            argMap[key] = contracts.find(c => c.id === row?.id)?.address ?? "";
+          }
+        }
+      });
+    }
+
+    const chainId = modalChainId || selectFolio?.chainId || 0;
+    const hasArgs = Object.values(argMap).some(v => v !== "");
+
+    if (transferOrTransaction) {
+      return {
+        v: 1, t: "txrequest",
+        data: {
+          type: "transfer",
+          chainId,
+          coinAddress: selectCoin?.address,
+          coinSymbol: selectCoin?.symbol,
+          coinDecimals: selectCoin?.decimals,
+          functionName: selectedFnName || undefined,
+          args: hasArgs ? argMap : undefined,
+        },
+      };
+    }
+    return {
+      v: 1, t: "txrequest",
+      data: {
+        type: "contract",
+        chainId,
+        contractAddress: selectContract?.address,
+        contractName: selectContract?.name,
+        functionName: selectedFnName || undefined,
+        args: hasArgs ? argMap : undefined,
+        payableValue: payableValue || undefined,
+      },
+    };
   }
 
   if (loading) return <div className="p-4">Loading transactions…</div>;
@@ -1349,17 +1639,44 @@ export function Transactions() {
             </h3>
             <div className="space-y-1">
               <div className="min-w-0">
+                <label className="text-xs font-medium">Domain</label>
+              </div>
+              <select
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                value={modalChainId}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setModalChainId(id);
+                  if (selectFolio && selectFolio.chainId !== id) setSelectFolio(null);
+                  if (selectCoin && selectCoin.chainId !== id) setSelectCoin(null);
+                  if (selectContract && selectContract.chainId !== id) setSelectContract(null);
+                  if (builtInContract) { setBuiltInContract(null); setRecoverableAddressInput(""); setRecoverableAddressResolved(null); setQaAddressInput(""); setQaAddressResolved(null); }
+                }}
+              >
+                <option value={0} disabled>Choose a domain…</option>
+                {domains.map(d => (
+                  <option key={d.chainId} value={d.chainId}>{d.name} ({d.chainId})</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <div className="min-w-0">
                 <label className="text-xs font-medium">Folio</label>
               </div>
               <select
                 className="w-full rounded-md border px-2 py-1 text-sm"
+                disabled={!modalChainId}
                 value={selectFolio?.id ?? ""}
-                onChange={(e) => setSelectFolio(folios.find((f) => String(f.id) === e.target.value) ?? null)}
+                onChange={(e) => {
+                  const folio = folios.find((f) => String(f.id) === e.target.value) ?? null;
+                  setSelectFolio(folio);
+                  if (folio) setModalChainId(folio.chainId);
+                }}
               >
                 <option value="">{fLoading ? "Loading..." : "Select folio"}</option>
-                {folios.map((c) => (
+                {folios.filter(f => f.chainId === modalChainId).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.address}) — {CHAIN_NAMES[c.chainId] ?? c.chainId}
+                    {c.name} ({c.address})
                   </option>
                 ))}
               </select>
@@ -1374,11 +1691,33 @@ export function Transactions() {
               </div>
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
-                value={selectContract?.id ?? ""}
-                onChange={(e) => setSelectContract(contracts.find((c) => String(c.id) === e.target.value) ?? null)}
+                disabled={!modalChainId}
+                value={builtInContract === "recoverable" ? "Recoverable" : builtInContract === "quantumAccount" ? "QuantumAccount" : (selectContract?.id ?? "")}
+                onChange={(e) => {
+                  if (e.target.value === "Recoverable") {
+                    setBuiltInContract("recoverable");
+                    setSelectContract(null);
+                    setQaAddressInput("");
+                    setQaAddressResolved(null);
+                  } else if (e.target.value === "QuantumAccount") {
+                    setBuiltInContract("quantumAccount");
+                    setSelectContract(null);
+                    setRecoverableAddressInput("");
+                    setRecoverableAddressResolved(null);
+                  } else {
+                    setBuiltInContract(null);
+                    setRecoverableAddressInput("");
+                    setRecoverableAddressResolved(null);
+                    setQaAddressInput("");
+                    setQaAddressResolved(null);
+                    setSelectContract(contracts.find((c) => String(c.id) === e.target.value) ?? null);
+                  }
+                }}
               >
                 <option value="">{crLoading ? "Loading..." : "Select contract"}</option>
-                {contracts.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
+                <option value="Recoverable">Recoverable</option>
+                <option value="QuantumAccount">QuantumAccount</option>
+                {contracts.filter(c => c.chainId === modalChainId).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.address})
                   </option>
@@ -1387,6 +1726,48 @@ export function Transactions() {
               {crError && (
                 <p className="text-xs text-red-600 mt-1">Error: {crError}</p>
               )}
+              {/* Address input for built-in Recoverable (no stored address) */}
+              {builtInContract === "recoverable" && (
+                <div className="mt-2 space-y-1">
+                  <label className="text-xs font-medium">Recoverable Contract Address</label>
+                  <input
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                    placeholder="0x… or name.eth"
+                    value={recoverableAddressInput}
+                    onChange={e => setRecoverableAddressInput(e.target.value)}
+                  />
+                  {recoverableAddressResolving && (
+                    <p className="text-xs text-muted">Resolving…</p>
+                  )}
+                  {recoverableAddressResolved && !recoverableAddressResolving && (
+                    <p className="text-xs text-green-600 font-mono">Resolved: {recoverableAddressResolved}</p>
+                  )}
+                  {recoverableAddressError && (
+                    <p className="text-xs text-red-600">{recoverableAddressError}</p>
+                  )}
+                </div>
+              )}
+              {/* Address input for built-in QuantumAccount (no stored address) */}
+              {builtInContract === "quantumAccount" && (
+                <div className="mt-2 space-y-1">
+                  <label className="text-xs font-medium">QuantumAccount Address</label>
+                  <input
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                    placeholder="0x… or name.eth"
+                    value={qaAddressInput}
+                    onChange={e => setQaAddressInput(e.target.value)}
+                  />
+                  {qaAddressResolving && (
+                    <p className="text-xs text-muted">Resolving…</p>
+                  )}
+                  {qaAddressResolved && !qaAddressResolving && (
+                    <p className="text-xs text-green-600 font-mono">Resolved: {qaAddressResolved}</p>
+                  )}
+                  {qaAddressError && (
+                    <p className="text-xs text-red-600">{qaAddressError}</p>
+                  )}
+                </div>
+              )}
             </div>)}
             {transferOrTransaction && (<div className="space-y-1">
               <div className="min-w-0">
@@ -1394,11 +1775,12 @@ export function Transactions() {
               </div>
               <select
                 className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                disabled={!modalChainId}
                 value={selectCoin?.id ?? ""}
                 onChange={(e) => setSelectCoin(coins.find((c) => String(c.id) === e.target.value) ?? null)}
               >
                 <option value="">{cLoading ? "Loading..." : "Select coin"}</option>
-                {coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
+                {coins.filter(c => c.chainId === modalChainId).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.symbol})
                   </option>
@@ -1426,6 +1808,7 @@ export function Transactions() {
                 </div>
                 <select
                   className="h-9 w-[110px] rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                  disabled={!modalChainId}
                   value={selectedFnName}
                   onChange={(e) => {
                     setSelectedFnName(e.target.value);
@@ -1485,7 +1868,7 @@ export function Transactions() {
                       }
                     >
                       <option value="">Select token</option>
-                      {erc20Coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId).map((c) => (
+                      {erc20Coins.filter(c => c.chainId === modalChainId).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} ({c.symbol})
                         </option>
@@ -1526,10 +1909,19 @@ export function Transactions() {
                 const st = addressFieldState[key] ?? { mode: "manual", manual: "", selectedIndex: null };
 
                 const list =
-                  st.mode === "address" ? address :
-                    st.mode === "coin" ? coins.filter(c => !selectFolio || c.chainId === selectFolio.chainId) :
-                      st.mode === "folio" ? folios.filter(f => !selectFolio || f.chainId === selectFolio.chainId) :
-                        [];
+                  st.mode === "address"
+                    ? address.filter(a => {
+                        if (a.isContact) {
+                          const cId = a.id.replace(/^address:/, "");
+                          return contacts.find(c => c.id === cId)?.wallets?.some(w => w.chainId === modalChainId) ?? false;
+                        }
+                        return contracts.find(c => c.id === a.id)?.chainId === modalChainId;
+                      })
+                    : st.mode === "coin"
+                      ? coins.filter(c => c.chainId === modalChainId)
+                      : st.mode === "folio"
+                        ? folios.filter(f => f.chainId === modalChainId)
+                        : [];
 
                 const ensState = ensResolutionState[key];
 
@@ -1641,6 +2033,12 @@ export function Transactions() {
               );
             })}
 
+            {builtInContract === "quantumAccount" && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+                This transaction will migrate control of your account to another device, be absolutely certain this is what you intend.
+              </div>
+            )}
+
             <div className="space-y-2">
               <button
                 type="button"
@@ -1648,6 +2046,17 @@ export function Transactions() {
                 onClick={closeModal}
               >
                 &nbsp;Cancel&nbsp;
+              </button>&nbsp;
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1 text-xs"
+                onClick={() => {
+                  const p = buildTxQrPayload();
+                  closeModal();
+                  setTxQrPayload(p);
+                }}
+              >
+                &nbsp;Generate QR&nbsp;
               </button>&nbsp;
               {isReadOnly ? (<button
                 type="button"
@@ -1686,6 +2095,40 @@ export function Transactions() {
         document.body
       ) : null}
 
+      {/* TX QR display */}
+      {txQrPayload && (
+        <ShareQrModal
+          payload={txQrPayload}
+          title="Share Transaction Request"
+          onClose={() => setTxQrPayload(null)}
+        />
+      )}
+
+      {/* Unknown contract warning */}
+      {unknownContractQr && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
+          <div className="bg-background rounded-xl border border-border shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-semibold mb-3 material-gold-text">Contract Not Found</h2>
+            <p className="text-sm text-muted-foreground mb-2">
+              The scanned QR references a contract on {CHAIN_NAMES[unknownContractQr.chainId] ?? `chain ${unknownContractQr.chainId}`} that is not saved on this device:
+            </p>
+            <p className="text-xs font-mono break-all mb-4">{unknownContractQr.address}</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Ask the contract owner to share it to this device first, then try scanning the transaction QR again.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={() => setUnknownContractQr(null)}>Close</button>
+              <button
+                className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium"
+                onClick={() => { setUnknownContractQr(null); navigate("/contracts"); }}
+              >
+                Go to Contracts
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

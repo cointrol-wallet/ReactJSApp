@@ -7,10 +7,22 @@ import { useDomains } from "@/hooks/useDomains";
 import { useContactsList } from "@/hooks/useContactList";
 import { Contact } from "@/storage/contactStore";
 import { Folio } from "@/storage/folioStore";
+import { Domain } from "@/storage/domainStore";
+import { useLocation } from "react-router-dom";
 import { resolveEnsAddress } from "@/lib/ens";
 import { RecoverySortMode } from "@/lib/recoverySorting";
 import { ShareQrModal } from "@/components/ui/ShareQrModal";
 import { buildRecoveryShare } from "@/lib/shareBuilders";
+import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
+import { encodeFunctionData, createPublicClient, http, keccak256, bytesToHex, type Hex, type Address } from "viem";
+import { paymasterAbi, quantumAccountAbi, recoverableAbi } from "@/lib/abiTypes";
+import { listKeypairs, getPublicKey, generateAndStoreKeypair, KeypairMeta } from "@/storage/keyStore";
+import { addAttestation, AttestationRecord } from "@/storage/attestationStore";
+import { addFolio, Wallet as FolioWallet } from "@/storage/folioStore";
+import { getAllCoins } from "@/storage/coinStore";
+import { useAttestations } from "@/hooks/useAttestations";
+import { encodeSharePayload } from "@/lib/sharePayload";
+import QRCode from "react-qr-code";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +90,18 @@ function downloadTextFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+// ── Import prefill type ───────────────────────────────────────────────────────
+
+type ImportPrefill = {
+  name: string;
+  chainId: number;
+  recoverableAddress: string;
+  paymaster: string;
+  threshold: number;
+  status: boolean;
+  participants: string[];
+};
+
 // ── Participant row type ───────────────────────────────────────────────────────
 
 type PRow = {
@@ -102,6 +126,46 @@ function emptyRow(): PRow {
     resolving: false,
     error: null,
   };
+}
+
+// ── prefillParticipantRows ────────────────────────────────────────────────────
+
+function prefillParticipantRows(
+  addresses: string[],
+  contacts: Contact[],
+  chainId: number,
+): PRow[] {
+  return addresses.map(addr => {
+    const lc = addr.toLowerCase();
+    for (const c of contacts) {
+      const wallets = c.wallets ?? [];
+      const idx = wallets.findIndex(
+        w => w.chainId === chainId && w.address.toLowerCase() === lc
+      );
+      if (idx >= 0) {
+        return {
+          key: crypto.randomUUID(),
+          mode: "contact" as const,
+          contactId: c.id,
+          contactWalletIdx: idx,
+          input: "",
+          resolved: wallets[idx].address,
+          resolving: false,
+          error: null,
+        };
+      }
+    }
+    return {
+      key: crypto.randomUUID(),
+      mode: "manual" as const,
+      contactId: "",
+      contactWalletIdx: 0,
+      input: addr,
+      resolved: addr,
+      resolving: false,
+      error: null,
+    };
+  });
 }
 
 // ── ParticipantRows sub-component ─────────────────────────────────────────────
@@ -415,6 +479,7 @@ type CreateRecoveryModalProps = {
   folios: Folio[];
   contacts: Contact[];
   chainMap: Map<number, string>;
+  domains: Domain[];
   onClose: () => void;
   onSubmit: (input: {
     name: string;
@@ -431,6 +496,7 @@ function CreateRecoveryModal({
   folios,
   contacts,
   chainMap,
+  domains,
   onClose,
   onSubmit,
 }: CreateRecoveryModalProps) {
@@ -472,13 +538,38 @@ function CreateRecoveryModal({
       return;
     }
 
+    const domain = domains.find(d => d.chainId === selectedFolio.chainId);
+    if (!domain) {
+      setError("No domain/RPC found for the selected chain.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
+      const encoded = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "createRecoverable",
+        args: [
+          selectedFolio.paymaster as `0x${string}`,
+          BigInt(threshold),
+          resolvedParticipants as `0x${string}`[],
+        ],
+      }) as Hex;
+
+      const { startFlow } = useTx.getState();
+      await startFlow({ folio: selectedFolio, encoded, domain });
+
+      const txStatus = useTx.getState().status;
+      if (txStatus.phase === "failed") {
+        setError(txStatus.message ?? "Transaction failed.");
+        return;
+      }
+
       await onSubmit({
         name: selectedFolio.address,
         paymaster: selectedFolio.paymaster,
-        recoverableAddress: null, // placeholder — address comes from on-chain deployment
+        recoverableAddress: null,
         participants: resolvedParticipants,
         threshold,
         chainId: selectedFolio.chainId,
@@ -609,6 +700,414 @@ function CreateRecoveryModal({
   );
 }
 
+// ── ImportRecoveryModal ───────────────────────────────────────────────────────
+
+type ImportRecoveryModalProps = {
+  folios: Folio[];
+  contacts: Contact[];
+  chainMap: Map<number, string>;
+  prefill: ImportPrefill | null;
+  onClose: () => void;
+  onSubmit: (input: {
+    name: string;
+    paymaster: string | null;
+    recoverableAddress: string | null;
+    participants: string[];
+    threshold: number;
+    chainId: number;
+    status: boolean;
+  }) => Promise<void>;
+};
+
+function ImportRecoveryModal({
+  folios,
+  contacts,
+  chainMap,
+  prefill,
+  onClose,
+  onSubmit,
+}: ImportRecoveryModalProps) {
+  // ── Determine initial account type from prefill ──
+  function resolveInitial() {
+    if (!prefill) {
+      return {
+        accountType: "manual" as "manual" | "folio" | "contact",
+        selectedFolioId: folios[0]?.id ?? "",
+        contactId: "",
+        contactWalletIdx: 0,
+        manualName: "",
+        manualChainId: 0,
+        manualPaymaster: "",
+      };
+    }
+    const matchFolio = folios.find(
+      f => f.address.toLowerCase() === prefill.name.toLowerCase() && f.chainId === prefill.chainId
+    );
+    if (matchFolio) {
+      return {
+        accountType: "folio" as const,
+        selectedFolioId: matchFolio.id,
+        contactId: "",
+        contactWalletIdx: 0,
+        manualName: "",
+        manualChainId: 0,
+        manualPaymaster: "",
+      };
+    }
+    for (const c of contacts) {
+      const idx = (c.wallets ?? []).findIndex(
+        w => w.chainId === prefill.chainId && w.address.toLowerCase() === prefill.name.toLowerCase()
+      );
+      if (idx >= 0) {
+        return {
+          accountType: "contact" as const,
+          selectedFolioId: "",
+          contactId: c.id,
+          contactWalletIdx: idx,
+          manualName: "",
+          manualChainId: 0,
+          manualPaymaster: prefill.paymaster,
+        };
+      }
+    }
+    return {
+      accountType: "manual" as const,
+      selectedFolioId: "",
+      contactId: "",
+      contactWalletIdx: 0,
+      manualName: prefill.name,
+      manualChainId: prefill.chainId,
+      manualPaymaster: prefill.paymaster,
+    };
+  }
+
+  const init = React.useMemo(resolveInitial, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [accountType, setAccountType] = React.useState<"manual" | "folio" | "contact">(init.accountType);
+  const [selectedFolioId, setSelectedFolioId] = React.useState(init.selectedFolioId);
+  const [contactId, setContactId] = React.useState(init.contactId);
+  const [contactWalletIdx, setContactWalletIdx] = React.useState(init.contactWalletIdx);
+  const [manualName, setManualName] = React.useState(init.manualName);
+  const [manualChainId, setManualChainId] = React.useState(init.manualChainId);
+  const [manualPaymaster, setManualPaymaster] = React.useState(init.manualPaymaster);
+  const [recoverableAddress, setRecoverableAddress] = React.useState(prefill?.recoverableAddress ?? "");
+  const [threshold, setThreshold] = React.useState(prefill?.threshold ?? 1);
+  const [status, setStatus] = React.useState(prefill?.status ?? false);
+  const [participantRows, setParticipantRows] = React.useState<PRow[]>(() =>
+    prefill ? prefillParticipantRows(prefill.participants, contacts, prefill.chainId) : []
+  );
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // ── Derived values ──
+  const derivedName = React.useMemo((): string | null => {
+    if (accountType === "folio") return folios.find(f => f.id === selectedFolioId)?.address ?? null;
+    if (accountType === "contact") return (contacts.find(c => c.id === contactId)?.wallets ?? [])[contactWalletIdx]?.address ?? null;
+    return EVM_ADDRESS_REGEX.test(manualName.trim()) ? manualName.trim() : null;
+  }, [accountType, selectedFolioId, contactId, contactWalletIdx, manualName, folios, contacts]);
+
+  const derivedChainId = React.useMemo((): number => {
+    if (accountType === "folio") return folios.find(f => f.id === selectedFolioId)?.chainId ?? 0;
+    if (accountType === "contact") return (contacts.find(c => c.id === contactId)?.wallets ?? [])[contactWalletIdx]?.chainId ?? 0;
+    return manualChainId;
+  }, [accountType, selectedFolioId, contactId, contactWalletIdx, manualChainId, folios, contacts]);
+
+  const derivedPaymaster = React.useMemo((): string => {
+    if (accountType === "folio") return folios.find(f => f.id === selectedFolioId)?.paymaster ?? "";
+    return manualPaymaster;
+  }, [accountType, selectedFolioId, manualPaymaster, folios]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!derivedName) {
+      setError("A valid account address is required.");
+      return;
+    }
+    if (derivedChainId === 0) {
+      setError("Please select a chain.");
+      return;
+    }
+
+    const resolvedParticipants: string[] = [];
+    for (const row of participantRows) {
+      const addr =
+        row.mode === "contact"
+          ? (contacts.find(c => c.id === row.contactId)?.wallets?.[row.contactWalletIdx]?.address ?? null)
+          : row.resolved;
+      if (!addr || !EVM_ADDRESS_REGEX.test(addr)) {
+        setError("One or more participants have an unresolved or invalid address.");
+        return;
+      }
+      if (resolvedParticipants.includes(addr)) {
+        setError(`Duplicate participant address: ${addr}`);
+        return;
+      }
+      resolvedParticipants.push(addr);
+    }
+
+    if (threshold < 1 || threshold > Math.max(1, resolvedParticipants.length)) {
+      setError(`Threshold must be between 1 and ${Math.max(1, resolvedParticipants.length)}.`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        name: derivedName,
+        paymaster: derivedPaymaster || null,
+        recoverableAddress: recoverableAddress.trim() || null,
+        participants: resolvedParticipants,
+        threshold,
+        chainId: derivedChainId,
+        status,
+      });
+      onClose();
+    } catch (err: any) {
+      setError(err?.message ?? "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const contactWallets = contacts.find(c => c.id === contactId)?.wallets ?? [];
+
+  return createPortal(
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 2147483647,
+        background: "rgba(0,0,0,0.35)",
+        backdropFilter: "blur(6px)",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch" as any,
+        padding: 16,
+        minHeight: "100dvh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          marginTop: 32,
+          marginBottom: 32,
+          width: "min(480px, calc(100dvw - 32px))",
+          borderRadius: 12,
+          padding: 16,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+          background: "#fff",
+          color: "#111",
+        }}
+      >
+        <h2 className="mb-3 text-base font-semibold material-gold-text">Import Recovery</h2>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          {error && (
+            <div className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-600">{error}</div>
+          )}
+
+          {/* ── Account name section ── */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium">Account</label>
+            <select
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={accountType}
+              disabled={submitting}
+              onChange={(e) => setAccountType(e.target.value as "manual" | "folio" | "contact")}
+            >
+              <option value="manual">Manual address</option>
+              <option value="folio">Folio account</option>
+              <option value="contact">Contact wallet</option>
+            </select>
+
+            {accountType === "folio" && (
+              folios.length === 0 ? (
+                <p className="text-xs text-muted">No folio accounts found.</p>
+              ) : (
+                <select
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={selectedFolioId}
+                  disabled={submitting}
+                  onChange={(e) => setSelectedFolioId(e.target.value)}
+                >
+                  {folios.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} — {shortenAddress(f.address)} ({chainMap.get(f.chainId) ?? f.chainId})
+                    </option>
+                  ))}
+                </select>
+              )
+            )}
+
+            {accountType === "contact" && (
+              <>
+                <select
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={contactId}
+                  disabled={submitting}
+                  onChange={(e) => { setContactId(e.target.value); setContactWalletIdx(0); }}
+                >
+                  <option value="">Select a contact…</option>
+                  {contacts.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {[c.name, c.surname].filter(Boolean).join(" ")}
+                    </option>
+                  ))}
+                </select>
+                {contactId && (
+                  contactWallets.length === 0 ? (
+                    <p className="text-xs text-muted">This contact has no wallets.</p>
+                  ) : (
+                    <select
+                      className="w-full rounded-md border px-2 py-1 text-sm"
+                      value={contactWalletIdx}
+                      disabled={submitting}
+                      onChange={(e) => setContactWalletIdx(Number(e.target.value))}
+                    >
+                      {contactWallets.map((w, i) => (
+                        <option key={i} value={i}>
+                          {w.name ? `${w.name} ` : ""}{shortenAddress(w.address)} — {chainMap.get(w.chainId) ?? `Chain ${w.chainId}`}
+                        </option>
+                      ))}
+                    </select>
+                  )
+                )}
+              </>
+            )}
+
+            {accountType === "manual" && (
+              <>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  placeholder="0x account address"
+                  value={manualName}
+                  disabled={submitting}
+                  onChange={(e) => setManualName(e.target.value)}
+                />
+                <select
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  value={manualChainId}
+                  disabled={submitting}
+                  onChange={(e) => setManualChainId(Number(e.target.value))}
+                >
+                  <option value={0}>Select chain…</option>
+                  {[...chainMap.entries()].map(([id, label]) => (
+                    <option key={id} value={id}>{label} ({id})</option>
+                  ))}
+                </select>
+              </>
+            )}
+
+            {derivedName && (
+              <div className="rounded-md border border-border bg-card px-3 py-2 text-xs space-y-0.5">
+                <div><span className="text-muted">Account address:</span> <span className="font-mono">{derivedName}</span></div>
+                <div><span className="text-muted">Chain:</span> {chainMap.get(derivedChainId) ?? "Unknown"} ({derivedChainId})</div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Paymaster (manual / contact only) ── */}
+          {accountType !== "folio" && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Paymaster address</label>
+              <input
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                placeholder="0x paymaster address"
+                value={manualPaymaster}
+                disabled={submitting}
+                onChange={(e) => setManualPaymaster(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* ── Recoverable address ── */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">
+              Recoverable contract address{" "}
+              <span className="text-muted font-normal">(leave blank if not yet deployed)</span>
+            </label>
+            <input
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              placeholder="0x address or leave blank"
+              value={recoverableAddress}
+              disabled={submitting}
+              onChange={(e) => setRecoverableAddress(e.target.value)}
+            />
+          </div>
+
+          {/* ── Threshold ── */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Threshold</label>
+            <input
+              type="number"
+              min={1}
+              max={Math.max(1, participantRows.length)}
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={threshold}
+              onChange={(e) => setThreshold(Math.max(1, Number(e.target.value)))}
+              disabled={submitting}
+            />
+            <p className="text-xs text-muted">
+              Number of participants required to approve recovery ({participantRows.length} participant{participantRows.length !== 1 ? "s" : ""} added).
+            </p>
+          </div>
+
+          {/* ── Status ── */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Status</label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={status}
+                onChange={(e) => setStatus(e.target.checked)}
+                disabled={submitting}
+                className="rounded"
+              />
+              <span className="text-sm">{status ? "Enabled" : "Disabled"}</span>
+            </label>
+          </div>
+
+          {/* ── Participants ── */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Participants</label>
+            <ParticipantRows
+              rows={participantRows}
+              contacts={contacts}
+              chainId={derivedChainId}
+              onChange={setParticipantRows}
+              disabled={submitting}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              className="rounded-md border px-4 py-3 text-sm sm:px-3 sm:py-1 sm:text-xs"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              &nbsp;Cancel&nbsp;
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 sm:text-xs font-medium text-primary-foreground disabled:opacity-50"
+              disabled={submitting}
+            >
+              &nbsp;{submitting ? "Adding…" : "Add item"}&nbsp;
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── EditRecoveryModal ─────────────────────────────────────────────────────────
 
 type EditRecoveryModalProps = {
@@ -616,6 +1115,8 @@ type EditRecoveryModalProps = {
   contacts: Contact[];
   contactMap: Map<string, string>;
   folioName: string | null;
+  folio: Folio | null;
+  domain: Domain | null;
   onClose: () => void;
   onUpdate: (patch: Partial<Omit<Recovery, "id" | "createdAt" | "paymaster" | "chainId" | "recoverableAddress" | "name">>) => Promise<void>;
 };
@@ -631,6 +1132,8 @@ function EditRecoveryModal({
   contacts,
   contactMap,
   folioName,
+  folio,
+  domain,
   onClose,
   onUpdate,
 }: EditRecoveryModalProps) {
@@ -645,12 +1148,19 @@ function EditRecoveryModal({
 
   async function doUpdate(
     patch: Partial<Omit<Recovery, "id" | "createdAt" | "paymaster" | "chainId" | "recoverableAddress" | "name">>,
+    encoded: Hex,
     onSuccess?: () => void
   ) {
     setSubmitting(true);
     setError(null);
     try {
-      // TODO: submit on-chain transaction here and await confirmation
+      const { startFlow } = useTx.getState();
+      await startFlow({ folio: folio!, encoded, domain: domain! });
+      const txStatus = useTx.getState().status;
+      if (txStatus.phase === "failed") {
+        setError(txStatus.message ?? "Transaction failed.");
+        return;
+      }
       await onUpdate(patch);
       onSuccess?.();
       setConfirm(null);
@@ -663,20 +1173,50 @@ function EditRecoveryModal({
 
   async function confirmAction() {
     if (!confirm) return;
+
+    if (!folio || !domain) {
+      setError("Cannot submit: folio or domain not found for this recovery.");
+      return;
+    }
+    if (!recovery.recoverableAddress) {
+      setError("Recoverable contract address not yet known. Use 'Fetch recoverable details' to sync on-chain state.");
+      return;
+    }
+
+    const recov = recovery.recoverableAddress as `0x${string}`;
+    const pmAddr = folio.paymaster as `0x${string}`;
+
     if (confirm.type === "threshold") {
-      await doUpdate({ threshold: confirm.value }, () => setThreshold(confirm.value));
+      const innerData = encodeFunctionData({ abi: paymasterAbi, functionName: "updateThreshold",
+        args: [BigInt(confirm.value), recov] }) as Hex;
+      const encoded = encodeFunctionData({ abi: quantumAccountAbi, functionName: "execute",
+        args: [pmAddr, 0n, innerData] }) as Hex;
+      await doUpdate({ threshold: confirm.value }, encoded, () => setThreshold(confirm.value));
+
     } else if (confirm.type === "status") {
-      await doUpdate({ status: confirm.value }, () => setStatus(confirm.value));
+      const fnName = confirm.value ? "enableRecoverable" : "disableRecoverable";
+      const encoded = encodeFunctionData({ abi: quantumAccountAbi, functionName: fnName,
+        args: [recov] }) as Hex;
+      await doUpdate({ status: confirm.value }, encoded, () => setStatus(confirm.value));
+
     } else if (confirm.type === "removeParticipant") {
       const next = participants.filter(p => p !== confirm.address);
       const nextThreshold = Math.min(threshold, Math.max(1, next.length));
-      await doUpdate(
-        { participants: next, threshold: nextThreshold },
-        () => { setParticipants(next); setThreshold(nextThreshold); }
-      );
+      const innerData = encodeFunctionData({ abi: paymasterAbi, functionName: "removeAddressFromRecoverable",
+        args: [recov, confirm.address as `0x${string}`] }) as Hex;
+      const encoded = encodeFunctionData({ abi: quantumAccountAbi, functionName: "execute",
+        args: [pmAddr, 0n, innerData] }) as Hex;
+      await doUpdate({ participants: next, threshold: nextThreshold }, encoded,
+        () => { setParticipants(next); setThreshold(nextThreshold); });
+
     } else if (confirm.type === "addParticipant") {
       const next = [...participants, confirm.address];
-      await doUpdate({ participants: next }, () => { setParticipants(next); clearAddRow(); });
+      const innerData = encodeFunctionData({ abi: paymasterAbi, functionName: "addAddressToRecoverable",
+        args: [recov, confirm.address as `0x${string}`] }) as Hex;
+      const encoded = encodeFunctionData({ abi: quantumAccountAbi, functionName: "execute",
+        args: [pmAddr, 0n, innerData] }) as Hex;
+      await doUpdate({ participants: next }, encoded,
+        () => { setParticipants(next); clearAddRow(); });
     }
   }
 
@@ -765,6 +1305,12 @@ function EditRecoveryModal({
           <div className="mb-3 rounded-md border border-red-300 px-3 py-2 text-xs text-red-600">{error}</div>
         )}
 
+        {!folio && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            This recovery account is not in your folios. All actions are view-only.
+          </div>
+        )}
+
         {/* Confirmation overlay */}
         {confirm && (
           <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 space-y-3">
@@ -805,7 +1351,7 @@ function EditRecoveryModal({
                 className="w-24 rounded-md border px-2 py-1 text-sm"
                 value={threshold}
                 onChange={(e) => setThreshold(Math.max(1, Number(e.target.value)))}
-                disabled={submitting || !!confirm}
+                disabled={submitting || !!confirm || !folio}
               />
               <span className="text-xs text-muted">of {participants.length} participant{participants.length !== 1 ? "s" : ""}</span>
               <button
@@ -815,7 +1361,7 @@ function EditRecoveryModal({
                   if (threshold === recovery.threshold) return;
                   setConfirm({ type: "threshold", value: threshold });
                 }}
-                disabled={submitting || !!confirm || threshold === recovery.threshold || threshold > participants.length}
+                disabled={submitting || !!confirm || threshold === recovery.threshold || threshold > participants.length || !folio}
               >
                 Update threshold
               </button>
@@ -837,7 +1383,7 @@ function EditRecoveryModal({
                   type="checkbox"
                   checked={status}
                   onChange={(e) => setStatus(e.target.checked)}
-                  disabled={submitting || !!confirm}
+                  disabled={submitting || !!confirm || !folio}
                   className="rounded"
                 />
                 <span className="text-sm">{status ? "Enabled" : "Disabled"}</span>
@@ -849,7 +1395,7 @@ function EditRecoveryModal({
                   if (status === recovery.status) return;
                   setConfirm({ type: "status", value: status });
                 }}
-                disabled={submitting || !!confirm || status === recovery.status}
+                disabled={submitting || !!confirm || status === recovery.status || !folio}
               >
                 Update status
               </button>
@@ -887,7 +1433,7 @@ function EditRecoveryModal({
                           }
                           setConfirm({ type: "removeParticipant", address: addr });
                         }}
-                        disabled={submitting || !!confirm}
+                        disabled={submitting || !!confirm || !folio}
                       >
                         Remove
                       </button>
@@ -905,14 +1451,14 @@ function EditRecoveryModal({
                 chainId={recovery.chainId}
                 existingAddresses={participants}
                 onChange={(rows) => setAddRow(rows[0] ?? emptyRow())}
-                disabled={submitting || !!confirm}
+                disabled={submitting || !!confirm || !folio}
                 showRemove={false}
               />
               <button
                 type="button"
                 className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
                 onClick={handleAddSubmit}
-                disabled={submitting || !!confirm}
+                disabled={submitting || !!confirm || !folio}
               >
                 Add
               </button>
@@ -993,6 +1539,1282 @@ function PlaceholderModal({
   );
 }
 
+// ── Attestation prefill type ─────────────────────────────────────────────────
+
+type AttestationPrefill = {
+  chainId: number;
+  accountAddress: string;
+  recoverableAddress: string;
+  paymaster?: string;
+};
+
+// ── CreateAttestationModal ────────────────────────────────────────────────────
+
+function CreateAttestationModal({
+  prefill,
+  folios,
+  contacts,
+  domains,
+  onClose,
+}: {
+  prefill: AttestationPrefill | null;
+  folios: Folio[];
+  contacts: Contact[];
+  domains: Domain[];
+  onClose: () => void;
+}) {
+  const ENS_MAINNET_RPC = "https://cloudflare-eth.com";
+
+  // Step state
+  const [step, setStep] = React.useState<1 | 2 | 3>(1);
+
+  // Step 1 state
+  const [chainId, setChainId] = React.useState<number>(prefill?.chainId ?? 0);
+  const [accountMode, setAccountMode] = React.useState<"manual" | "contact">("manual");
+  const [accountInput, setAccountInput] = React.useState(prefill?.accountAddress ?? "");
+  const [accountResolving, setAccountResolving] = React.useState(false);
+  const [accountResolved, setAccountResolved] = React.useState<string | null>(prefill?.accountAddress ?? null);
+  const [accountError, setAccountError] = React.useState<string | null>(null);
+  const [selectedContactKey, setSelectedContactKey] = React.useState("");
+  const [recoverableInput, setRecoverableInput] = React.useState(prefill?.recoverableAddress ?? "");
+  const [recoverableResolving, setRecoverableResolving] = React.useState(false);
+  const [recoverableResolved, setRecoverableResolved] = React.useState<string | null>(prefill?.recoverableAddress ?? null);
+  const [recoverableError, setRecoverableError] = React.useState<string | null>(null);
+  const [fetchingKey, setFetchingKey] = React.useState(false);
+  const [step1Error, setStep1Error] = React.useState<string | null>(null);
+
+  // Step 2 state (populated after step 1)
+  const [falconLevel, setFalconLevel] = React.useState<512 | 1024>(512);
+  const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
+  const [formKeypairId, setFormKeypairId] = React.useState("");
+  const [step2Busy, setStep2Busy] = React.useState(false);
+  const [step2Error, setStep2Error] = React.useState<string | null>(null);
+
+  // Step 3 state (populated after step 2)
+  const [effectiveKeypairId, setEffectiveKeypairId] = React.useState("");
+  const [keyHash, setKeyHash] = React.useState<`0x${string}`>("0x");
+  const [qrPayload, setQrPayload] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const folioKeypairIds = React.useMemo(() => new Set(folios.map(f => f.keypairId)), [folios]);
+  const selectedDomain = domains.find(d => d.chainId === chainId) ?? null;
+
+  // Load keypairs on entering step 2
+  React.useEffect(() => {
+    if (step !== 2) return;
+    listKeypairs().then(setKeypairs).catch(() => {});
+  }, [step]);
+
+  // ENS resolution for account (manual mode)
+  React.useEffect(() => {
+    if (accountMode !== "manual") return;
+    const val = accountInput.trim();
+    if (!val) { setAccountResolved(null); setAccountError(null); return; }
+    if (EVM_ADDRESS_REGEX.test(val)) { setAccountResolved(val); setAccountError(null); return; }
+    if (ENS_REGEX.test(val)) {
+      setAccountResolving(true);
+      setAccountResolved(null);
+      setAccountError(null);
+      resolveEnsAddress(val, ENS_MAINNET_RPC)
+        .then(addr => {
+          if (addr) setAccountResolved(addr);
+          else setAccountError("ENS name not found");
+        })
+        .catch(() => setAccountError("ENS resolution failed"))
+        .finally(() => setAccountResolving(false));
+    } else {
+      setAccountResolved(null);
+      setAccountError(val.length > 0 ? "Invalid address" : null);
+    }
+  }, [accountInput, accountMode]);
+
+  // ENS resolution for recoverable address
+  React.useEffect(() => {
+    const val = recoverableInput.trim();
+    if (!val) { setRecoverableResolved(null); setRecoverableError(null); return; }
+    if (EVM_ADDRESS_REGEX.test(val)) { setRecoverableResolved(val); setRecoverableError(null); return; }
+    if (ENS_REGEX.test(val)) {
+      setRecoverableResolving(true);
+      setRecoverableResolved(null);
+      setRecoverableError(null);
+      resolveEnsAddress(val, ENS_MAINNET_RPC)
+        .then(addr => {
+          if (addr) setRecoverableResolved(addr);
+          else setRecoverableError("ENS name not found");
+        })
+        .catch(() => setRecoverableError("ENS resolution failed"))
+        .finally(() => setRecoverableResolving(false));
+    } else {
+      setRecoverableResolved(null);
+      setRecoverableError(val.length > 0 ? "Invalid address" : null);
+    }
+  }, [recoverableInput]);
+
+  // Contacts filtered to selected chain
+  const contactsForChain = React.useMemo(() =>
+    contacts.flatMap(c =>
+      (c.wallets ?? [])
+        .map((w, i) => ({ contact: c, wallet: w, walletIdx: i }))
+        .filter(({ wallet }) => wallet.chainId === chainId)
+    ),
+    [contacts, chainId]
+  );
+
+  function getContactAddress(): string | null {
+    if (!selectedContactKey) return null;
+    const [cId, wIdxStr] = selectedContactKey.split(":");
+    const contact = contacts.find(c => c.id === cId);
+    return contact?.wallets?.[Number(wIdxStr)]?.address ?? null;
+  }
+
+  async function handleStep1Next() {
+    setStep1Error(null);
+    const account = accountMode === "contact" ? getContactAddress() : accountResolved;
+    if (!account) { setStep1Error("Please enter a valid account address."); return; }
+    if (!recoverableResolved) { setStep1Error("Please enter a valid recoverable contract address."); return; }
+    if (!selectedDomain) { setStep1Error("Please select a domain."); return; }
+
+    setFetchingKey(true);
+    try {
+      const client = createPublicClient({ transport: http(selectedDomain.rpcUrl) });
+      const pkHex = await client.readContract({
+        address: account as Address,
+        abi: quantumAccountAbi,
+        functionName: "getPublicKeyBytes",
+      }) as `0x${string}`;
+
+      // 1026 bytes (2052 hex chars + 2 for "0x") = Falcon-512; otherwise Falcon-1024
+      const byteLen = (pkHex.length - 2) / 2;
+      const level: 512 | 1024 = byteLen === 1026 ? 512 : 1024;
+
+      setFalconLevel(level);
+      setStep(2);
+    } catch {
+      setStep1Error("Unable to retrieve public keys — this address may not be a Quantum Account on this network.");
+    } finally {
+      setFetchingKey(false);
+    }
+  }
+
+  async function handleStep2Next() {
+    setStep2Busy(true);
+    setStep2Error(null);
+    try {
+      let kpId = formKeypairId;
+      if (!kpId) {
+        // Generate and immediately persist to keyStore so it is never lost
+        const meta = await generateAndStoreKeypair(falconLevel);
+        kpId = meta.id;
+      }
+
+      const pkBytes = await getPublicKey(kpId);
+      if (!pkBytes) throw new Error("Failed to load public key from keyStore.");
+
+      const hash = keccak256(bytesToHex(pkBytes));
+      const payload = encodeSharePayload({
+        v: 1,
+        t: "txrequest",
+        data: {
+          type: "contract",
+          chainId,
+          contractAddress: recoverableResolved!,
+          contractName: "Recoverable",
+          functionName: "recoverWallet",
+          args: { "_newKey": hash },
+        },
+      });
+
+      setEffectiveKeypairId(kpId);
+      setKeyHash(hash);
+      setQrPayload(payload);
+      setStep(3);
+    } catch (e: any) {
+      setStep2Error(e?.message ?? "Failed to prepare key.");
+    } finally {
+      setStep2Busy(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const account = accountMode === "contact" ? getContactAddress()! : accountResolved!;
+      await addAttestation({
+        chainId,
+        accountAddress: account,
+        recoverableAddress: recoverableResolved!,
+        keypairId: effectiveKeypairId,
+        keyHash,
+        falconLevel,
+        paymaster: prefill?.paymaster,
+      });
+      onClose();
+    } catch (e: any) {
+      setSaveError(e?.message ?? "Failed to save attestation record.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCopyQrData() {
+    await navigator.clipboard.writeText(qrPayload).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const availableKeypairs = keypairs.filter(k => k.level === falconLevel && !folioKeypairIds.has(k.id));
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-background rounded-xl border border-border shadow-xl w-full overflow-y-auto"
+        style={{ maxWidth: 480, maxHeight: "calc(100dvh - 32px)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold material-gold-text">Create Attestation</h2>
+            <span className="text-xs text-muted">Step {step} of 3</span>
+          </div>
+
+          {/* ── Step 1: Identify account ── */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted">Identify the account to be recovered and the Recoverable contract that will receive the attestation.</p>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Domain</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={chainId}
+                  onChange={e => {
+                    setChainId(Number(e.target.value));
+                    setAccountResolved(null);
+                    setAccountInput("");
+                    setSelectedContactKey("");
+                  }}
+                >
+                  <option value={0} disabled>Select domain…</option>
+                  {domains.map(d => (
+                    <option key={d.chainId} value={d.chainId}>{d.name} ({d.chainId})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Account to Recover</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={accountMode}
+                  onChange={e => {
+                    setAccountMode(e.target.value as "manual" | "contact");
+                    setAccountResolved(null);
+                    setAccountInput("");
+                    setSelectedContactKey("");
+                  }}
+                >
+                  <option value="manual">Enter manually</option>
+                  <option value="contact">Select from contacts</option>
+                </select>
+                {accountMode === "manual" && (
+                  <>
+                    <input
+                      className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                      placeholder="0x… or name.eth"
+                      value={accountInput}
+                      onChange={e => setAccountInput(e.target.value)}
+                    />
+                    {accountResolving && <p className="text-xs text-muted">Resolving…</p>}
+                    {accountResolved && !accountResolving && (
+                      <p className="text-xs text-green-600 font-mono">Resolved: {accountResolved}</p>
+                    )}
+                    {accountError && <p className="text-xs text-red-600">{accountError}</p>}
+                  </>
+                )}
+                {accountMode === "contact" && (
+                  <select
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    value={selectedContactKey}
+                    onChange={e => setSelectedContactKey(e.target.value)}
+                    disabled={!chainId}
+                  >
+                    <option value="">{chainId ? "Select contact wallet…" : "Select a domain first"}</option>
+                    {contactsForChain.map(({ contact, wallet, walletIdx }) => (
+                      <option key={`${contact.id}:${walletIdx}`} value={`${contact.id}:${walletIdx}`}>
+                        {[contact.name, contact.surname].filter(Boolean).join(" ")}{wallet.name ? ` — ${wallet.name}` : ""} ({wallet.address.slice(0, 6)}…{wallet.address.slice(-4)})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Recoverable Contract Address</label>
+                <input
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  placeholder="0x… or name.eth"
+                  value={recoverableInput}
+                  onChange={e => setRecoverableInput(e.target.value)}
+                />
+                {recoverableResolving && <p className="text-xs text-muted">Resolving…</p>}
+                {recoverableResolved && !recoverableResolving && (
+                  <p className="text-xs text-green-600 font-mono">Resolved: {recoverableResolved}</p>
+                )}
+                {recoverableError && <p className="text-xs text-red-600">{recoverableError}</p>}
+              </div>
+
+              {step1Error && <p className="text-xs text-red-600">{step1Error}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                  onClick={onClose}
+                  disabled={fetchingKey}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 text-primary-foreground disabled:opacity-50"
+                  onClick={handleStep1Next}
+                  disabled={fetchingKey || !chainId || recoverableResolving || accountResolving}
+                >
+                  {fetchingKey ? "Checking account…" : "Next"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: Select key ── */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted">
+                Select the Falcon-{falconLevel} key to use for this recovery. The key will be used to compute the <em>_newKey</em> hash that participants attest to.
+              </p>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Keypair</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={formKeypairId}
+                  onChange={e => setFormKeypairId(e.target.value)}
+                  disabled={step2Busy}
+                >
+                  <option value="">Generate new Falcon-{falconLevel} keypair</option>
+                  {availableKeypairs.map(k => (
+                    <option key={k.id} value={k.id}>
+                      Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+                {availableKeypairs.length === 0 && (
+                  <p className="text-xs text-muted">No unused Falcon-{falconLevel} keys in keystore — a new one will be generated.</p>
+                )}
+              </div>
+
+              {step2Error && <p className="text-xs text-red-600">{step2Error}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                  onClick={() => { setStep(1); setStep2Error(null); }}
+                  disabled={step2Busy}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 text-primary-foreground disabled:opacity-50"
+                  onClick={handleStep2Next}
+                  disabled={step2Busy}
+                >
+                  {step2Busy ? (formKeypairId ? "Loading key…" : "Generating key…") : "Next"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: QR code ── */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted">
+                Share this QR code with recovery participants. When scanned, it will open the <strong>recoverWallet</strong> transaction in their app.
+              </p>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Recovery Code (_newKey)</label>
+                <p className="text-xs font-mono break-all rounded border border-border bg-muted/20 p-2 select-all">{keyHash}</p>
+              </div>
+
+              <div className="flex justify-center">
+                <div className="inline-block rounded-lg border border-border p-3 bg-white">
+                  <QRCode value={qrPayload} size={200} level="H" />
+                </div>
+              </div>
+
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                  onClick={handleCopyQrData}
+                >
+                  {copied ? "Copied!" : "Copy QR data"}
+                </button>
+              </div>
+
+              {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                  onClick={() => { setStep(2); setSaveError(null); }}
+                  disabled={saving}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 text-primary-foreground disabled:opacity-50"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? "Saving…" : "Confirm & Save"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── RecoverAccountChooser ─────────────────────────────────────────────────────
+
+function RecoverAccountChooser({
+  onInitiate,
+  onMigrate,
+  onClose,
+}: {
+  onInitiate: () => void;
+  onMigrate: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-background rounded-xl border border-border shadow-xl w-full overflow-y-auto"
+        style={{ maxWidth: 420, maxHeight: "calc(100dvh - 32px)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold material-gold-text">Recover Account</h2>
+            <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={onClose}>✕</button>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-card px-4 py-4 text-left hover:bg-primary/5 transition-colors"
+              onClick={onInitiate}
+            >
+              <div className="text-sm font-medium mb-1">Initiate Recovery</div>
+              <div className="text-xs text-muted-foreground">Use a stored attestation to complete threshold recovery of an account. Requires that the threshold has already been met on the Recoverable contract.</div>
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-card px-4 py-4 text-left hover:bg-primary/5 transition-colors"
+              onClick={onMigrate}
+            >
+              <div className="text-sm font-medium mb-1">Migrate Account</div>
+              <div className="text-xs text-muted-foreground">Import an account you still control onto this device. Generate a key-update QR code for your existing device to scan.</div>
+            </button>
+          </div>
+          <div className="flex justify-end mt-4">
+            <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── InitiateRecoveryModal ─────────────────────────────────────────────────────
+
+function InitiateRecoveryModal({
+  attestations,
+  domains,
+  contacts,
+  onClose,
+}: {
+  attestations: AttestationRecord[];
+  domains: Domain[];
+  contacts: Contact[];
+  onClose: () => void;
+}) {
+  const txStatus = useTx(s => s.status);
+
+  const [selectedAttestationId, setSelectedAttestationId] = React.useState("");
+  const [domain, setDomain] = React.useState<Domain | null>(null);
+  const [accountMode, setAccountMode] = React.useState<"manual" | "contact">("manual");
+  const [accountInput, setAccountInput] = React.useState("");
+  const [accountResolving, setAccountResolving] = React.useState(false);
+  const [accountResolved, setAccountResolved] = React.useState<string | null>(null);
+  const [accountError, setAccountError] = React.useState<string | null>(null);
+  const [selectedContactKey, setSelectedContactKey] = React.useState("");
+  const [recoverableInput, setRecoverableInput] = React.useState("");
+  const [recoverableResolving, setRecoverableResolving] = React.useState(false);
+  const [recoverableResolved, setRecoverableResolved] = React.useState<string | null>(null);
+  const [recoverableError, setRecoverableError] = React.useState<string | null>(null);
+  const [paymaster, setPaymaster] = React.useState("");
+  const [falconLevel, setFalconLevel] = React.useState<512 | 1024>(512);
+  const [keypairId, setKeypairId] = React.useState("");
+  const [folioName, setFolioName] = React.useState("");
+  const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    listKeypairs().then(setKeypairs).catch(() => {});
+  }, []);
+
+  // ENS resolution for account (manual mode)
+  React.useEffect(() => {
+    if (accountMode !== "manual") return;
+    const val = accountInput.trim();
+    if (!val) { setAccountResolved(null); setAccountError(null); return; }
+    if (EVM_ADDRESS_REGEX.test(val)) { setAccountResolved(val); setAccountError(null); return; }
+    if (ENS_REGEX.test(val)) {
+      setAccountResolving(true);
+      setAccountResolved(null);
+      setAccountError(null);
+      resolveEnsAddress(val, ENS_MAINNET_RPC)
+        .then(addr => {
+          if (addr) setAccountResolved(addr);
+          else setAccountError("ENS name not found");
+        })
+        .catch(() => setAccountError("ENS resolution failed"))
+        .finally(() => setAccountResolving(false));
+    } else {
+      setAccountResolved(null);
+      setAccountError(val.length > 0 ? "Invalid address" : null);
+    }
+  }, [accountInput, accountMode]);
+
+  // ENS resolution for recoverable address
+  React.useEffect(() => {
+    const val = recoverableInput.trim();
+    if (!val) { setRecoverableResolved(null); setRecoverableError(null); return; }
+    if (EVM_ADDRESS_REGEX.test(val)) { setRecoverableResolved(val); setRecoverableError(null); return; }
+    if (ENS_REGEX.test(val)) {
+      setRecoverableResolving(true);
+      setRecoverableResolved(null);
+      setRecoverableError(null);
+      resolveEnsAddress(val, ENS_MAINNET_RPC)
+        .then(addr => {
+          if (addr) setRecoverableResolved(addr);
+          else setRecoverableError("ENS name not found");
+        })
+        .catch(() => setRecoverableError("ENS resolution failed"))
+        .finally(() => setRecoverableResolving(false));
+    } else {
+      setRecoverableResolved(null);
+      setRecoverableError(val.length > 0 ? "Invalid address" : null);
+    }
+  }, [recoverableInput]);
+
+  const contactsForChain = React.useMemo(() =>
+    contacts.flatMap(c =>
+      (c.wallets ?? [])
+        .map((w, i) => ({ contact: c, wallet: w, walletIdx: i }))
+        .filter(({ wallet }) => wallet.chainId === domain?.chainId)
+    ),
+    [contacts, domain]
+  );
+
+  const filteredKeypairs = keypairs.filter(k => k.level === falconLevel);
+
+  function applyAttestation(id: string) {
+    setSelectedAttestationId(id);
+    if (!id) return;
+    const a = attestations.find(att => att.id === id);
+    if (!a) return;
+
+    const d = domains.find(dom => dom.chainId === a.chainId) ?? null;
+    setDomain(d);
+
+    // Try to auto-select contact
+    const contactMatch = contacts.flatMap(c =>
+      (c.wallets ?? []).map((w, wi) => ({ c, w, wi }))
+    ).find(({ w }) => w.chainId === a.chainId && w.address.toLowerCase() === a.accountAddress.toLowerCase());
+
+    if (contactMatch) {
+      setAccountMode("contact");
+      setSelectedContactKey(`${contactMatch.c.id}:${contactMatch.wi}`);
+      setFolioName(contactMatch.w.name ?? `${contactMatch.c.name}${contactMatch.c.surname ? " " + contactMatch.c.surname : ""}`);
+    } else {
+      setAccountMode("manual");
+      setAccountInput(a.accountAddress);
+      setAccountResolved(a.accountAddress);
+    }
+
+    setRecoverableInput(a.recoverableAddress);
+    setRecoverableResolved(a.recoverableAddress);
+    setPaymaster(a.paymaster ?? d?.paymaster?.[0]?.address ?? "");
+    setFalconLevel(a.falconLevel);
+    setKeypairId(a.keypairId);
+  }
+
+  function getEffectiveAccount(): string | null {
+    if (accountMode === "contact") {
+      if (!selectedContactKey) return null;
+      const [cId, wIdxStr] = selectedContactKey.split(":");
+      return contacts.find(c => c.id === cId)?.wallets?.[Number(wIdxStr)]?.address ?? null;
+    }
+    return accountResolved;
+  }
+
+  async function handleSubmit() {
+    setError(null);
+    const account = getEffectiveAccount();
+    if (!account) { setError("Please enter a valid account address."); return; }
+    if (!recoverableResolved) { setError("Please enter a valid recoverable contract address."); return; }
+    if (!domain) { setError("Please select a domain."); return; }
+    if (!paymaster.trim()) { setError("Paymaster is required."); return; }
+    if (!keypairId) { setError("Please select a keypair."); return; }
+
+    setBusy(true);
+    try {
+      const pkBytes = await getPublicKey(keypairId);
+      if (!pkBytes) throw new Error("Keypair not found in keystore.");
+
+      const encoded = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "updatePublicKeyViaRecoverable",
+        args: [recoverableResolved as Address, bytesToHex(pkBytes) as Hex],
+      }) as Hex;
+
+      const tempFolio: Folio = {
+        id: crypto.randomUUID(),
+        address: account,
+        name: folioName || "Recovered Account",
+        chainId: domain.chainId,
+        paymaster: paymaster.trim(),
+        type: 0,
+        bundler: domain.bundler,
+        keypairId,
+        wallet: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      const { startFlow } = useTx.getState();
+      await startFlow({ folio: tempFolio, encoded, domain, nonceKey: ADMIN_KEY });
+
+      const status = useTx.getState().status;
+      if (status.phase === "failed") {
+        setError(status.message ?? "Transaction failed.");
+        return;
+      }
+
+      const allCoins = await getAllCoins();
+      const walletArray: FolioWallet[] = allCoins
+        .filter(c => c.chainId === domain.chainId)
+        .map(c => ({ coin: c.id, balance: 0n }));
+
+      await addFolio({
+        address: account,
+        name: folioName || "Recovered Account",
+        chainId: domain.chainId,
+        paymaster: paymaster.trim(),
+        type: 0,
+        bundler: domain.bundler,
+        keypairId,
+        wallet: walletArray,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      setDone(true);
+    } catch (e: any) {
+      setError(e?.message ?? "Transaction failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const isBusy = busy || (txStatus.phase !== "idle" && txStatus.phase !== "finalized" && txStatus.phase !== "failed");
+
+  if (done) {
+    return createPortal(
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      >
+        <div className="bg-background rounded-xl border border-border shadow-xl w-full p-5" style={{ maxWidth: 420 }}>
+          <h2 className="text-base font-semibold material-gold-text mb-2">Recovery Complete</h2>
+          <p className="text-sm text-muted-foreground mb-4">The account has been successfully recovered and added to your portfolio.</p>
+          <div className="flex justify-end">
+            <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Done</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isBusy) onClose(); }}
+    >
+      <div
+        className="bg-background rounded-xl border border-border shadow-xl w-full overflow-y-auto"
+        style={{ maxWidth: 480, maxHeight: "calc(100dvh - 32px)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5 space-y-4">
+          <h2 className="text-base font-semibold material-gold-text">Initiate Recovery</h2>
+
+          {/* Attestation selector */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Load from attestation</label>
+            <select
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              value={selectedAttestationId}
+              onChange={e => applyAttestation(e.target.value)}
+              disabled={isBusy}
+            >
+              <option value="">Enter details manually</option>
+              {attestations.map(a => {
+                const domainName = domains.find(d => d.chainId === a.chainId)?.name ?? String(a.chainId);
+                const contactMatch = contacts.flatMap(c =>
+                  (c.wallets ?? []).map((w) => ({ c, w }))
+                ).find(({ w }) => w.chainId === a.chainId && w.address.toLowerCase() === a.accountAddress.toLowerCase());
+                const label = contactMatch
+                  ? `${contactMatch.c.name}${contactMatch.c.surname ? " " + contactMatch.c.surname : ""} / ${domainName}`
+                  : `${a.accountAddress.slice(0, 10)}… / ${domainName}`;
+                return <option key={a.id} value={a.id}>{label}</option>;
+              })}
+            </select>
+          </div>
+
+          {/* Domain */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Domain</label>
+            <select
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              value={domain?.chainId ?? 0}
+              onChange={e => {
+                const d = domains.find(dom => dom.chainId === Number(e.target.value)) ?? null;
+                setDomain(d);
+                setSelectedContactKey("");
+                setAccountInput("");
+                setAccountResolved(null);
+                setPaymaster(d?.paymaster?.[0]?.address ?? "");
+              }}
+              disabled={isBusy}
+            >
+              <option value={0} disabled>Select domain…</option>
+              {domains.map(d => (
+                <option key={d.chainId} value={d.chainId}>{d.name} ({d.chainId})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Account */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Account to Recover</label>
+            <select
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              value={accountMode}
+              onChange={e => {
+                setAccountMode(e.target.value as "manual" | "contact");
+                setAccountInput("");
+                setAccountResolved(null);
+                setSelectedContactKey("");
+              }}
+              disabled={isBusy}
+            >
+              <option value="manual">Enter manually</option>
+              <option value="contact">Select from contacts</option>
+            </select>
+            {accountMode === "manual" && (
+              <>
+                <input
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  placeholder="0x… or name.eth"
+                  value={accountInput}
+                  onChange={e => setAccountInput(e.target.value)}
+                  disabled={isBusy}
+                />
+                {accountResolving && <p className="text-xs text-muted-foreground">Resolving…</p>}
+                {accountResolved && !accountResolving && <p className="text-xs text-green-600 font-mono">Resolved: {accountResolved}</p>}
+                {accountError && <p className="text-xs text-red-600">{accountError}</p>}
+              </>
+            )}
+            {accountMode === "contact" && (
+              <select
+                className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                value={selectedContactKey}
+                onChange={e => {
+                  setSelectedContactKey(e.target.value);
+                  if (e.target.value) {
+                    const [cId, wIdxStr] = e.target.value.split(":");
+                    const c = contacts.find(ct => ct.id === cId);
+                    const w = c?.wallets?.[Number(wIdxStr)];
+                    setFolioName(w?.name ?? (c ? [c.name, c.surname].filter(Boolean).join(" ") : ""));
+                  }
+                }}
+                disabled={isBusy || !domain}
+              >
+                <option value="">{domain ? "Select contact wallet…" : "Select a domain first"}</option>
+                {contactsForChain.map(({ contact, wallet, walletIdx }) => (
+                  <option key={`${contact.id}:${walletIdx}`} value={`${contact.id}:${walletIdx}`}>
+                    {[contact.name, contact.surname].filter(Boolean).join(" ")}{wallet.name ? ` — ${wallet.name}` : ""} ({wallet.address.slice(0, 6)}…{wallet.address.slice(-4)})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Recoverable address */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Recoverable Contract Address</label>
+            <input
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+              placeholder="0x… or name.eth"
+              value={recoverableInput}
+              onChange={e => setRecoverableInput(e.target.value)}
+              disabled={isBusy}
+            />
+            {recoverableResolving && <p className="text-xs text-muted-foreground">Resolving…</p>}
+            {recoverableResolved && !recoverableResolving && <p className="text-xs text-green-600 font-mono">Resolved: {recoverableResolved}</p>}
+            {recoverableError && <p className="text-xs text-red-600">{recoverableError}</p>}
+          </div>
+
+          {/* Paymaster */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Paymaster <span className="text-red-500">*</span></label>
+            <input
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+              placeholder="0x…"
+              value={paymaster}
+              onChange={e => setPaymaster(e.target.value)}
+              disabled={isBusy}
+            />
+          </div>
+
+          {/* Falcon level */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Falcon Level</label>
+            <select
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              value={falconLevel}
+              onChange={e => { setFalconLevel(Number(e.target.value) as 512 | 1024); setKeypairId(""); }}
+              disabled={isBusy}
+            >
+              <option value={512}>Falcon-512</option>
+              <option value={1024}>Falcon-1024</option>
+            </select>
+          </div>
+
+          {/* Keypair */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Keypair (new key to sign with)</label>
+            <select
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              value={keypairId}
+              onChange={e => setKeypairId(e.target.value)}
+              disabled={isBusy}
+            >
+              <option value="">Select keypair…</option>
+              {filteredKeypairs.map(k => (
+                <option key={k.id} value={k.id}>
+                  Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                </option>
+              ))}
+            </select>
+            {filteredKeypairs.length === 0 && (
+              <p className="text-xs text-muted-foreground">No Falcon-{falconLevel} keys in keystore. Generate a key first.</p>
+            )}
+          </div>
+
+          {/* Folio name */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Account name</label>
+            <input
+              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              placeholder="e.g. My Main Account"
+              value={folioName}
+              onChange={e => setFolioName(e.target.value)}
+              disabled={isBusy}
+            />
+          </div>
+
+          {/* Warning */}
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            ⚠ This assumes the attestation threshold has been met on the Recoverable contract. The transaction will fail if it has not.
+          </div>
+
+          {/* TX status */}
+          {(txStatus.phase !== "idle" || error) && (
+            <div className={`rounded-md border px-3 py-2 text-xs ${txStatus.phase === "failed" || error ? "border-red-300 text-red-600" : "border-border"}`}>
+              {txStatus.phase === "preparing" && "Building recovery UserOp…"}
+              {txStatus.phase === "submitted" && `Confirming on-chain… tx: ${(txStatus.hash ?? txStatus.userOpHash ?? "").slice(0, 12)}…`}
+              {txStatus.phase === "failed" && (error ?? txStatus.message)}
+              {txStatus.phase !== "failed" && error && error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={isBusy}>Cancel</button>
+            <button
+              type="button"
+              className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              onClick={handleSubmit}
+              disabled={isBusy}
+            >
+              {isBusy ? "Submitting…" : "Initiate Recovery"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── MigrateAccountModal ───────────────────────────────────────────────────────
+
+function MigrateAccountModal({
+  domains,
+  contacts,
+  folios,
+  onClose,
+}: {
+  domains: Domain[];
+  contacts: Contact[];
+  folios: Folio[];
+  onClose: () => void;
+}) {
+  const [domain, setDomain] = React.useState<Domain | null>(null);
+  const [selectedContactKey, setSelectedContactKey] = React.useState("");
+  const [accountAddress, setAccountAddress] = React.useState<string | null>(null);
+  const [folioName, setFolioName] = React.useState("");
+  const [falconLevel, setFalconLevel] = React.useState<512 | 1024 | null>(null);
+  const [fetchingLevel, setFetchingLevel] = React.useState(false);
+  const [levelError, setLevelError] = React.useState<string | null>(null);
+  const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
+  const [formKeypairId, setFormKeypairId] = React.useState("");
+  const [creatingQr, setCreatingQr] = React.useState(false);
+  const [qrPayload, setQrPayload] = React.useState<string | null>(null);
+  const [qrCopied, setQrCopied] = React.useState(false);
+  const [finishing, setFinishing] = React.useState(false);
+  const [finishError, setFinishError] = React.useState<string | null>(null);
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    listKeypairs().then(setKeypairs).catch(() => {});
+  }, []);
+
+  const folioKeypairIds = React.useMemo(() => new Set(folios.map(f => f.keypairId)), [folios]);
+
+  const contactsForChain = React.useMemo(() =>
+    contacts.flatMap(c =>
+      (c.wallets ?? [])
+        .map((w, i) => ({ contact: c, wallet: w, walletIdx: i }))
+        .filter(({ wallet }) => wallet.chainId === domain?.chainId)
+    ),
+    [contacts, domain]
+  );
+
+  async function handleContactChange(key: string) {
+    setSelectedContactKey(key);
+    setFalconLevel(null);
+    setLevelError(null);
+    setFormKeypairId("");
+    setQrPayload(null);
+    setFinishError(null);
+
+    if (!key || !domain) return;
+    const [cId, wIdxStr] = key.split(":");
+    const contact = contacts.find(c => c.id === cId);
+    const wallet = contact?.wallets?.[Number(wIdxStr)];
+    if (!wallet) return;
+
+    const addr = wallet.address;
+    setAccountAddress(addr);
+    setFolioName(wallet.name ?? [contact!.name, contact!.surname].filter(Boolean).join(" "));
+
+    setFetchingLevel(true);
+    try {
+      const client = createPublicClient({ transport: http(domain.rpcUrl) });
+      const pkHex = await client.readContract({
+        address: addr as Address,
+        abi: quantumAccountAbi,
+        functionName: "getPublicKeyBytes",
+      }) as `0x${string}`;
+      const byteLen = (pkHex.length - 2) / 2;
+      if (byteLen === 1026) {
+        setFalconLevel(512);
+      } else if (byteLen === 2050) {
+        setFalconLevel(1024);
+      } else {
+        setLevelError("This address does not appear to be a Falcon-512 or Falcon-1024 QuantumAccount.");
+      }
+    } catch {
+      setLevelError("Unable to read public key from the account. Ensure the address is a QuantumAccount on this network.");
+    } finally {
+      setFetchingLevel(false);
+    }
+  }
+
+  const availableKeypairs = falconLevel
+    ? keypairs.filter(k => k.level === falconLevel && !folioKeypairIds.has(k.id))
+    : [];
+
+  async function handleCreateQr() {
+    if (!domain || !accountAddress || !falconLevel) return;
+    setCreatingQr(true);
+    setFinishError(null);
+    try {
+      let effectiveKeypairId = formKeypairId;
+      if (!effectiveKeypairId) {
+        const meta = await generateAndStoreKeypair(falconLevel);
+        effectiveKeypairId = meta.id;
+        setFormKeypairId(meta.id);
+        // refresh keypairs list so the generated key appears in the dropdown
+        listKeypairs().then(setKeypairs).catch(() => {});
+      }
+      const pkBytes = await getPublicKey(effectiveKeypairId);
+      if (!pkBytes) throw new Error("Keypair not found.");
+      const payload = encodeSharePayload({
+        v: 1,
+        t: "txrequest",
+        data: {
+          type: "contract",
+          chainId: domain.chainId,
+          contractAddress: accountAddress,
+          contractName: "QuantumAccount",
+          functionName: "updatePublicKey",
+          args: { "_publicKeyBytes": bytesToHex(pkBytes) },
+        },
+      });
+      setQrPayload(payload);
+    } catch (e: any) {
+      setFinishError(e?.message ?? "Failed to generate QR code.");
+    } finally {
+      setCreatingQr(false);
+    }
+  }
+
+  async function handleFinishMigration() {
+    if (!domain || !accountAddress || !formKeypairId) return;
+    setFinishing(true);
+    setFinishError(null);
+    try {
+      const client = createPublicClient({ transport: http(domain.rpcUrl) });
+      const onChainHex = await client.readContract({
+        address: accountAddress as Address,
+        abi: quantumAccountAbi,
+        functionName: "getPublicKeyBytes",
+      }) as `0x${string}`;
+
+      const localPkBytes = await getPublicKey(formKeypairId);
+      if (!localPkBytes) throw new Error("Local keypair not found.");
+
+      if (onChainHex !== bytesToHex(localPkBytes)) {
+        setFinishError("Public keys don't match yet — the transaction may not have been confirmed. Wait a few minutes and try again, or cancel.");
+        return;
+      }
+
+      const allCoins = await getAllCoins();
+      const walletArray: FolioWallet[] = allCoins
+        .filter(c => c.chainId === domain.chainId)
+        .map(c => ({ coin: c.id, balance: 0n }));
+
+      await addFolio({
+        address: accountAddress,
+        name: folioName || "Migrated Account",
+        chainId: domain.chainId,
+        paymaster: domain.paymaster?.[0]?.address ?? "",
+        type: 0,
+        bundler: domain.bundler,
+        keypairId: formKeypairId,
+        wallet: walletArray,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      setDone(true);
+    } catch (e: any) {
+      if (!finishError) setFinishError(e?.message ?? "Verification failed.");
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  const canCreateQr = !!domain && !!accountAddress && !!falconLevel && !fetchingLevel && !levelError;
+  const canFinish = !!qrPayload && !finishing;
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget && !creatingQr && !finishing) onClose(); }}
+    >
+      <div
+        className="bg-background rounded-xl border border-border shadow-xl w-full overflow-y-auto"
+        style={{ maxWidth: 480, maxHeight: "calc(100dvh - 32px)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5 space-y-4">
+          <h2 className="text-base font-semibold material-gold-text">Migrate Account</h2>
+
+          {done ? (
+            <>
+              <p className="text-sm text-muted-foreground">The account has been added to your portfolio. You can now use it on this device.</p>
+              <div className="flex justify-end">
+                <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Close</button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Domain */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Domain</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={domain?.chainId ?? 0}
+                  onChange={e => {
+                    const d = domains.find(dom => dom.chainId === Number(e.target.value)) ?? null;
+                    setDomain(d);
+                    setSelectedContactKey("");
+                    setAccountAddress(null);
+                    setFalconLevel(null);
+                    setLevelError(null);
+                    setFormKeypairId("");
+                    setQrPayload(null);
+                    setFinishError(null);
+                  }}
+                  disabled={creatingQr || finishing}
+                >
+                  <option value={0} disabled>Select domain…</option>
+                  {domains.map(d => (
+                    <option key={d.chainId} value={d.chainId}>{d.name} ({d.chainId})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Account from contacts */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Account (from contacts)</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={selectedContactKey}
+                  onChange={e => handleContactChange(e.target.value)}
+                  disabled={!domain || creatingQr || finishing}
+                >
+                  <option value="">{domain ? "Select contact wallet…" : "Select a domain first"}</option>
+                  {contactsForChain.map(({ contact, wallet, walletIdx }) => (
+                    <option key={`${contact.id}:${walletIdx}`} value={`${contact.id}:${walletIdx}`}>
+                      {[contact.name, contact.surname].filter(Boolean).join(" ")}{wallet.name ? ` — ${wallet.name}` : ""} ({wallet.address.slice(0, 6)}…{wallet.address.slice(-4)})
+                    </option>
+                  ))}
+                </select>
+                {fetchingLevel && <p className="text-xs text-muted-foreground">Checking account type…</p>}
+                {falconLevel && !levelError && <p className="text-xs text-green-600">Detected: Falcon-{falconLevel}</p>}
+                {levelError && <p className="text-xs text-red-600">{levelError}</p>}
+              </div>
+
+              {/* Keypair selector */}
+              {falconLevel && !levelError && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">New keypair for this device</label>
+                  <select
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    value={formKeypairId}
+                    onChange={e => { setFormKeypairId(e.target.value); setQrPayload(null); }}
+                    disabled={creatingQr || finishing}
+                  >
+                    <option value="">Generate new Falcon-{falconLevel} keypair</option>
+                    {availableKeypairs.map(k => (
+                      <option key={k.id} value={k.id}>
+                        Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* QR code */}
+              {qrPayload && (
+                <div className="flex flex-col items-center gap-3 pt-1">
+                  <div className="inline-block rounded-lg border border-border p-3 bg-white">
+                    <QRCode value={qrPayload} size={200} level="H" />
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">Scan this on your existing device to submit the key update transaction.</p>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border px-3 py-1.5 text-xs"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(qrPayload).catch(() => {});
+                      setQrCopied(true);
+                      setTimeout(() => setQrCopied(false), 2000);
+                    }}
+                  >
+                    {qrCopied ? "Copied!" : "Copy QR data"}
+                  </button>
+                </div>
+              )}
+
+              {/* Finish error */}
+              {finishError && (
+                <div className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-600">{finishError}</div>
+              )}
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={creatingQr || finishing}>Cancel</button>
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+                  onClick={handleCreateQr}
+                  disabled={!canCreateQr || creatingQr || finishing}
+                >
+                  {creatingQr ? "Generating…" : "Create QR Code"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                  onClick={handleFinishMigration}
+                  disabled={!canFinish || finishing}
+                >
+                  {finishing ? "Verifying…" : "Finish Migration"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── Main page component ───────────────────────────────────────────────────────
 
 export function RecoveryPage() {
@@ -1002,13 +2824,24 @@ export function RecoveryPage() {
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [sortMode, setSortMode] = React.useState<RecoverySortMode>("nameAsc");
 
+  const location = useLocation();
+
   // ── Modal state ──────────────────────────────────────────────────────────
   const [recoveryToDelete, setRecoveryToDelete] = React.useState<Recovery | null>(null);
   const [editingRecovery, setEditingRecovery] = React.useState<Recovery | null>(null);
   const [qrRecovery, setQrRecovery] = React.useState<Recovery | null>(null);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [isImportOpen, setIsImportOpen] = React.useState(
+    !!(location.state as any)?.importRecovery
+  );
+  const [importPrefill, setImportPrefill] = React.useState<ImportPrefill | null>(
+    (location.state as any)?.importRecovery ?? null
+  );
   const [isRecoverOpen, setIsRecoverOpen] = React.useState(false);
+  const [isInitiateOpen, setIsInitiateOpen] = React.useState(false);
+  const [isMigrateOpen, setIsMigrateOpen] = React.useState(false);
   const [isAttestationOpen, setIsAttestationOpen] = React.useState(false);
+  const [attestationPrefill, setAttestationPrefill] = React.useState<AttestationPrefill | null>(null);
   const [isFetchOpen, setIsFetchOpen] = React.useState(false);
 
   // ── Data hooks ───────────────────────────────────────────────────────────
@@ -1024,6 +2857,7 @@ export function RecoveryPage() {
   const { folios } = useFolios();
   const { domains } = useDomains();
   const { contacts } = useContactsList({ sortMode: "nameAsc" });
+  const { attestations } = useAttestations();
 
   // ── Derived maps ─────────────────────────────────────────────────────────
   const chainMap = React.useMemo(() => {
@@ -1128,6 +2962,13 @@ export function RecoveryPage() {
           </button>
 
           <button
+            className="h-11 sm:h-9 rounded-md border border-border bg-card px-3 text-sm"
+            onClick={() => setIsImportOpen(true)}
+          >
+            &nbsp;Import recovery&nbsp;
+          </button>
+
+          <button
             className="h-11 sm:h-9 rounded-md border border-border bg-card px-3 text-sm disabled:opacity-50"
             onClick={exportAllItems}
             disabled={recoveries.length === 0}
@@ -1151,7 +2992,7 @@ export function RecoveryPage() {
 
           <button
             className="h-11 sm:h-9 rounded-md border border-border bg-card px-3 text-sm"
-            onClick={() => setIsAttestationOpen(true)}
+            onClick={() => { setAttestationPrefill(null); setIsAttestationOpen(true); }}
           >
             &nbsp;Create attestation&nbsp;
           </button>
@@ -1258,6 +3099,22 @@ export function RecoveryPage() {
                           >
                             Export
                           </button>
+                          <div className="my-1 border-t border-border" />
+                          <button
+                            className="block w-full px-4 py-3 text-left text-sm sm:px-3 sm:py-2 sm:text-xs hover:bg-primary hover:text-primary-foreground"
+                            onClick={(e) => {
+                              (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                              setAttestationPrefill({
+                                chainId: r.chainId,
+                                accountAddress: r.name,
+                                recoverableAddress: r.recoverableAddress,
+                                paymaster: r.paymaster,
+                              });
+                              setIsAttestationOpen(true);
+                            }}
+                          >
+                            Create Attestation
+                          </button>
                         </div>
                       </details>
                     </div>
@@ -1336,10 +3193,23 @@ export function RecoveryPage() {
           folios={folios}
           contacts={contacts}
           chainMap={chainMap}
+          domains={domains}
           onClose={() => setIsCreateOpen(false)}
           onSubmit={async (input) => {
             await addRecovery(input);
           }}
+        />
+      )}
+
+      {/* ── Import modal ── */}
+      {isImportOpen && (
+        <ImportRecoveryModal
+          folios={folios}
+          contacts={contacts}
+          chainMap={chainMap}
+          prefill={importPrefill}
+          onClose={() => { setIsImportOpen(false); setImportPrefill(null); }}
+          onSubmit={async (input) => { await addRecovery(input); }}
         />
       )}
 
@@ -1350,6 +3220,8 @@ export function RecoveryPage() {
           contacts={contacts}
           contactMap={contactMap}
           folioName={folioAddressMap.get(`${editingRecovery.name.toLowerCase()}:${editingRecovery.chainId}`)?.name ?? null}
+          folio={folioAddressMap.get(`${editingRecovery.name.toLowerCase()}:${editingRecovery.chainId}`) ?? null}
+          domain={domains.find(d => d.chainId === editingRecovery.chainId) ?? null}
           onClose={() => setEditingRecovery(null)}
           onUpdate={async (patch) => {
             await updateRecovery(editingRecovery.id, patch);
@@ -1366,30 +3238,33 @@ export function RecoveryPage() {
         />
       )}
 
-      {/* ── Recover account modal (placeholder) ── */}
+      {/* ── Recover account chooser ── */}
       {isRecoverOpen && (
-        <PlaceholderModal
-          title="Recover Account"
-          description="Choose a recovery action below. Full implementation coming soon."
+        <RecoverAccountChooser
+          onInitiate={() => { setIsRecoverOpen(false); setIsInitiateOpen(true); }}
+          onMigrate={() => { setIsRecoverOpen(false); setIsMigrateOpen(true); }}
           onClose={() => setIsRecoverOpen(false)}
-        >
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              className="rounded-md border border-border bg-card px-4 py-3 text-sm text-left disabled:opacity-50"
-              disabled
-            >
-              Initiate recovery — coming soon
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-border bg-card px-4 py-3 text-sm text-left disabled:opacity-50"
-              disabled
-            >
-              Migrate account — coming soon
-            </button>
-          </div>
-        </PlaceholderModal>
+        />
+      )}
+
+      {/* ── Initiate recovery modal ── */}
+      {isInitiateOpen && (
+        <InitiateRecoveryModal
+          attestations={attestations}
+          domains={domains}
+          contacts={contacts}
+          onClose={() => setIsInitiateOpen(false)}
+        />
+      )}
+
+      {/* ── Migrate account modal ── */}
+      {isMigrateOpen && (
+        <MigrateAccountModal
+          domains={domains}
+          contacts={contacts}
+          folios={folios}
+          onClose={() => setIsMigrateOpen(false)}
+        />
       )}
 
       {/* ── Fetch recoverable details modal (placeholder) ── */}
@@ -1401,12 +3276,14 @@ export function RecoveryPage() {
         />
       )}
 
-      {/* ── Create attestation modal (placeholder) ── */}
+      {/* ── Create attestation modal ── */}
       {isAttestationOpen && (
-        <PlaceholderModal
-          title="Create Attestation"
-          description="This will build the raw transaction to attest to a recovery request. Coming soon."
-          onClose={() => setIsAttestationOpen(false)}
+        <CreateAttestationModal
+          prefill={attestationPrefill}
+          folios={folios}
+          contacts={contacts}
+          domains={domains}
+          onClose={() => { setIsAttestationOpen(false); setAttestationPrefill(null); }}
         />
       )}
     </div>

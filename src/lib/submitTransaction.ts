@@ -229,6 +229,9 @@ export const calculateUserOpHash = (
   });
 };
 
+// ADMIN_KEY from QuantumAccount.sol: used in nonce top-192-bits for admin ops (e.g. key rotation)
+export const ADMIN_KEY = 0x0ad9140ad914n;
+
 export function defaultAccountGasLimits(accountGasLimit: bigint, callGasLimit: bigint): `0x${string}` {
   // accountGasLimits: (verificationGasLimit << 128) | callGasLimit
   const v = accountGasLimit;
@@ -254,7 +257,7 @@ function packPaymasterAndDataV08(params: {
 interface TxStore {
   open: boolean;
   status: TxStatus;
-  startFlow: (input: { folio: Folio; encoded: string; domain: Domain; }) => Promise<void>;
+  startFlow: (input: { folio: Folio; encoded: string; domain: Domain; nonceKey?: bigint; }) => Promise<void>;
   close: () => void;
 }
 
@@ -262,7 +265,7 @@ export const useTx = create<TxStore>((set, get) => ({
   open: false,
   status: { phase: "idle" },
   close: () => set({ open: false, status: { phase: "idle" } }),
-  startFlow: async ({ folio, encoded, domain }) => {
+  startFlow: async ({ folio, encoded, domain, nonceKey }) => {
     set({ open: true, status: { phase: "preparing", message: "Building UserOp" } });
     const publicClient = createPublicClient({
           transport: http(domain.rpcUrl), 
@@ -272,7 +275,7 @@ export const useTx = create<TxStore>((set, get) => ({
         address: domain.entryPoint as `0x${string}`,
         abi: entryPointAbi,
         functionName: "getNonce",
-        args: [folio.address as `0x${string}`, 0n], // key = 0 for normal ops TODO: update for admin/large keys
+        args: [folio.address as `0x${string}`, nonceKey ?? 0n],
       }) as Promise<bigint>,
       publicClient.estimateFeesPerGas().catch(() => null),
       // Simulate EntryPoint → account to get real callGasLimit for this specific callData

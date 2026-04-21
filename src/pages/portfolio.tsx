@@ -6,8 +6,9 @@ import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
 import { listKeypairs, generateAndStoreKeypair, predictAddressFromKeypair, KeypairMeta } from "@/storage/keyStore";
 import { deriveFolioSalt } from "@/lib/salt";
-import { Address } from "viem";
+import { Address, createPublicClient, http } from "viem";
 import { useDomains } from "@/hooks/useDomains";
+import { isSimilarFolioName } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { refreshBalancesForFolios } from "@/lib/refreshBalances";
 import { useDisplayName } from "../hooks/useDisplayName";
@@ -209,6 +210,17 @@ export function Folios() {
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
   const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<any>(null);
+
+  // ── Account creation pre-flight warning state ──────────────────────────────
+  const [accountExistsWarning, setAccountExistsWarning] = React.useState<string | null>(null);
+  type SimilarNameWarning = {
+    trimmedName: string;
+    keypairId: string;
+    matchingFolioName: string;
+    sender: string;
+    salt: `0x${string}`;
+  };
+  const [similarNameWarning, setSimilarNameWarning] = React.useState<SimilarNameWarning | null>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -502,40 +514,90 @@ export function Folios() {
         const salt = deriveFolioSalt(uuid, trimmedName);
         const sender = await predictAddressFromKeypair(keypairId, salt, falconDomainForLevel);
 
-        setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
-
-        const ok = await createQuantumAccount({
-          sender: sender as Address,
-          domain: selectDomain,
-          salt,
-          keypairId,
-        });
-
-        if (!ok) {
-          setSubmitState({ status: "error", message: "Account creation failed." });
+        // Check if a contract is already deployed at this address on-chain
+        setSubmitState({ status: "pending", message: "Checking if account already exists…" });
+        const client = createPublicClient({ transport: http(selectDomain.rpcUrl) });
+        const code = await client.getCode({ address: sender as Address });
+        if (code && code !== "0x") {
+          closeModal();
+          setAccountExistsWarning(
+            `An account with that name already exists in ${selectDomain.name}. If it is on another device, use the Migrate Account option on the Recovery page.`
+          );
           return;
         }
 
-        setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
+        // Check for similar names across all existing folios
+        if (folios.length > 0) {
+          const match = folios.map(f => f.name).find(name => isSimilarFolioName(trimmedName, name));
+          if (match) {
+            setSimilarNameWarning({ trimmedName, keypairId, matchingFolioName: match, sender, salt });
+            setSubmitState({ status: "idle" });
+            return;
+          }
+        }
 
-        const chainCoins = coins.filter((c) => c.chainId === selectDomain.chainId);
-        const wallet: Wallet[] = chainCoins.map((c) => ({ coin: c.id, balance: 0n }));
-
-        await addFolio({
-          name: trimmedName,
-          address: sender,
-          chainId: selectDomain.chainId,
-          paymaster: selectDomain.paymaster?.[0]?.address ?? "",
-          type: 0,
-          bundler: selectDomain.bundler,
-          keypairId,
-          wallet,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
+        await proceedWithAccountCreation({ trimmedName, keypairId, sender, salt });
       }
 
       closeModal();
+    } catch (err: any) {
+      const msg = typeof err?.message === "string" ? err.message : "Something went wrong while creating the account.";
+      setSubmitState({ status: "error", message: msg });
+    }
+  }
+
+  async function proceedWithAccountCreation({
+    trimmedName,
+    keypairId,
+    sender,
+    salt,
+  }: {
+    trimmedName: string;
+    keypairId: string;
+    sender: string;
+    salt: `0x${string}`;
+  }) {
+    setSubmitState({ status: "pending", message: "Creating QuantumAccount (waiting for bundler)…" });
+
+    const ok = await createQuantumAccount({
+      sender: sender as Address,
+      domain: selectDomain,
+      salt,
+      keypairId,
+    });
+
+    if (!ok) {
+      setSubmitState({ status: "error", message: "Account creation failed." });
+      return;
+    }
+
+    setSubmitState({ status: "pending", message: "Finalising and saving to your portfolio…" });
+
+    const chainCoins = coins.filter((c) => c.chainId === selectDomain.chainId);
+    const wallet: Wallet[] = chainCoins.map((c) => ({ coin: c.id, balance: 0n }));
+
+    await addFolio({
+      name: trimmedName,
+      address: sender,
+      chainId: selectDomain.chainId,
+      paymaster: selectDomain.paymaster?.[0]?.address ?? "",
+      type: 0,
+      bundler: selectDomain.bundler,
+      keypairId,
+      wallet,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    closeModal();
+  }
+
+  async function handleProceedWithCreation() {
+    if (!similarNameWarning) return;
+    const snapshot = similarNameWarning;
+    setSimilarNameWarning(null);
+    try {
+      await proceedWithAccountCreation(snapshot);
     } catch (err: any) {
       const msg = typeof err?.message === "string" ? err.message : "Something went wrong while creating the account.";
       setSubmitState({ status: "error", message: msg });
@@ -978,6 +1040,106 @@ export function Folios() {
           payload={qrPayload}
           onClose={() => setQrPayload(null)}
         />
+      )}
+
+      {/* ── Account already exists info modal ── */}
+      {accountExistsWarning && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            background: "rgba(0,0,0,0.35)",
+            backdropFilter: "blur(6px)",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: 16,
+            minHeight: "100dvh",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(448px, calc(100dvw - 32px))",
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+              background: "#fff",
+              color: "#111",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
+            }}
+          >
+            <h2 className="text-base font-semibold material-gold-text">Account already exists</h2>
+            <p className="mt-2 text-sm text-muted">{accountExistsWarning}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 text-primary-foreground"
+                onClick={() => setAccountExistsWarning(null)}
+              >
+                &nbsp;Acknowledge&nbsp;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Similar name warning modal ── */}
+      {similarNameWarning && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            background: "rgba(0,0,0,0.35)",
+            backdropFilter: "blur(6px)",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: 16,
+            minHeight: "100dvh",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(448px, calc(100dvw - 32px))",
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+              background: "#fff",
+              color: "#111",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
+            }}
+          >
+            <h2 className="text-base font-semibold material-gold-text">Similar account name</h2>
+            <p className="mt-2 text-sm text-muted">
+              The name <strong>{similarNameWarning.trimmedName}</strong> is similar to
+              existing account <strong>{similarNameWarning.matchingFolioName}</strong>.
+              Is this variation intentional?
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-md border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                onClick={() => setSimilarNameWarning(null)}
+              >
+                &nbsp;Back&nbsp;
+              </button>&nbsp;
+              <button
+                className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 text-primary-foreground"
+                onClick={handleProceedWithCreation}
+              >
+                &nbsp;Proceed with account creation&nbsp;
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
