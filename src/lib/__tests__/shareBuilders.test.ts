@@ -234,6 +234,81 @@ describe("buildRecoveryShare", () => {
   });
 });
 
+// Generate non-repetitive pseudo-random hex using Knuth multiplicative hashing.
+// Avoids LZ-string's pattern-matching, which would otherwise compress repetitive
+// test data (e.g. "ab".repeat(N)) down to well under the QR limit.
+function nonRepetitiveHex(bytes: number): string {
+  let h = "0x";
+  for (let i = 1; i <= bytes; i++) {
+    h += ((Math.imul(i, 0x9E3779B9) >>> 24) & 0xFF).toString(16).padStart(2, "0");
+  }
+  return h;
+}
+
+function nonRepetitiveAddress(seed: number): string {
+  let h = "0x";
+  for (let i = 1; i <= 20; i++) {
+    h += ((Math.imul(seed * 20 + i, 0x9E3779B9) >>> 24) & 0xFF).toString(16).padStart(2, "0");
+  }
+  return h;
+}
+
+// ---------------------------------------------------------------------------
+// buildContactShare — size guard
+// ---------------------------------------------------------------------------
+
+describe("buildContactShare size guard", () => {
+  it("does not throw for a contact with a handful of wallets", () => {
+    const small = {
+      id: "c1",
+      name: "Alice",
+      wallets: [
+        { chainId: 1, address: ADDR },
+        { chainId: 11155111, address: ADDR },
+      ],
+      createdAt: 1000,
+    } as unknown as Contact;
+    expect(() => buildContactShare(small)).not.toThrow();
+  });
+
+  it("throws when contact has so many unique-address wallets that the payload exceeds QR capacity", () => {
+    // Use non-repetitive addresses so LZ-string cannot compress the payload.
+    const manyWallets = Array.from({ length: 80 }, (_, i) => ({
+      chainId: 11155111,
+      address: nonRepetitiveAddress(i),
+      name: `W${i}`,
+    }));
+    const big = {
+      id: "c2",
+      name: "BigContact",
+      wallets: manyWallets,
+      createdAt: 1000,
+    } as unknown as Contact;
+    expect(() => buildContactShare(big)).toThrow(/too many wallets/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTxRequestShare — size guard
+// ---------------------------------------------------------------------------
+
+describe("buildTxRequestShare size guard", () => {
+  it("throws when args make the payload exceed QR capacity", () => {
+    // Use non-repetitive hex so LZ-string cannot compress it below the QR limit.
+    const hugeArg = nonRepetitiveHex(2100);
+    expect(() =>
+      buildTxRequestShare({
+        type: "contract",
+        chainId: 11155111,
+        contractAddress: ADDR,
+        contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { _publicKeyBytes: hugeArg },
+      })
+    ).toThrow(/too large/i);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // buildTxRequestShare
 // ---------------------------------------------------------------------------

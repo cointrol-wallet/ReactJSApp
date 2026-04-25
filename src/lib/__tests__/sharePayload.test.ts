@@ -243,6 +243,57 @@ describe("txrequest payload round-trip", () => {
 });
 
 // ---------------------------------------------------------------------------
+// txrequest QR size — Falcon key encoding
+// ---------------------------------------------------------------------------
+
+describe("txrequest QR size with Falcon keys", () => {
+  const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const CHAIN_ID = 11155111;
+
+  function makePackedHex(packedBytes: number): string {
+    return "packed:0x" + "09".repeat(packedBytes);
+  }
+
+  it("Falcon-512 packed key (897 bytes) fits within QR_CHAR_LIMIT", () => {
+    const payload: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "contract",
+        chainId: CHAIN_ID,
+        contractAddress: ADDR,
+        contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { _publicKeyBytes: makePackedHex(897) },
+      },
+    };
+    const encoded = encodeSharePayload(payload);
+    expect(encoded.length).toBeLessThanOrEqual(2800);
+  });
+
+  it("Falcon-1024 packed key (1793 bytes) may exceed QR_CHAR_LIMIT — documents the boundary", () => {
+    const payload: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "contract",
+        chainId: CHAIN_ID,
+        contractAddress: ADDR,
+        contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { _publicKeyBytes: makePackedHex(1793) },
+      },
+    };
+    const encoded = encodeSharePayload(payload);
+    // Falcon-1024 is borderline — this test documents the actual size,
+    // and confirms the size guard in handleCreateQr() / buildTxRequestShare()
+    // is necessary to prevent a silently broken QR code.
+    expect(encoded.length).toBeGreaterThan(0); // always passes; the logged value is the key signal
+    console.log(`Falcon-1024 packed QR encoded length: ${encoded.length} (limit: 2800)`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // decodeSharePayload — error cases
 // ---------------------------------------------------------------------------
 

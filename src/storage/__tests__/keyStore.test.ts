@@ -46,6 +46,8 @@ import {
   clearKeyStore,
   listKeypairs,
   generateAndStoreKeypair,
+  archiveKeypair,
+  setKeypairFolioName,
   getPublicKey,
   getSecretKey,
   KeypairMeta,
@@ -172,6 +174,82 @@ describe("initKeyStore — legacy key migration", () => {
     await initKeyStore(freshUid);
 
     expect(idbStore.has(freshPool)).toBe(true);
+  });
+});
+
+describe("archiveKeypair", () => {
+  it("sets archivedAt on the matching keypair", async () => {
+    const before = Date.now();
+    const meta = await generateAndStoreKeypair(512);
+    await archiveKeypair(meta.id);
+    const kps = await listKeypairs();
+    expect(kps[0].archivedAt).toBeGreaterThanOrEqual(before);
+    expect(kps[0].archivedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("does not throw when given a non-existent id", async () => {
+    await expect(archiveKeypair("does-not-exist")).resolves.toBeUndefined();
+  });
+
+  it("includes archivedAt in listKeypairs output after archiving", async () => {
+    const meta = await generateAndStoreKeypair(512);
+    expect((await listKeypairs())[0].archivedAt).toBeUndefined();
+    await archiveKeypair(meta.id);
+    expect((await listKeypairs())[0].archivedAt).toBeDefined();
+  });
+
+  it("does not affect other keypairs in the pool", async () => {
+    const a = await generateAndStoreKeypair(512, "a");
+    const b = await generateAndStoreKeypair(512, "b");
+    await archiveKeypair(a.id);
+    const kps = await listKeypairs();
+    const kpA = kps.find(k => k.id === a.id)!;
+    const kpB = kps.find(k => k.id === b.id)!;
+    expect(kpA.archivedAt).toBeDefined();
+    expect(kpB.archivedAt).toBeUndefined();
+  });
+});
+
+describe("setKeypairFolioName", () => {
+  it("sets folioName and it appears in listKeypairs()", async () => {
+    const meta = await generateAndStoreKeypair(512);
+    await setKeypairFolioName(meta.id, "My Account");
+    const kps = await listKeypairs();
+    expect(kps[0].folioName).toBe("My Account");
+  });
+
+  it("is a no-op when id is not found (does not throw)", async () => {
+    await expect(setKeypairFolioName("nonexistent-id", "Any Name")).resolves.toBeUndefined();
+  });
+
+  it("folioName is absent on a freshly generated keypair", async () => {
+    await generateAndStoreKeypair(512);
+    expect((await listKeypairs())[0].folioName).toBeUndefined();
+  });
+
+  it("folioName persists after archiveKeypair on the same keypair", async () => {
+    const meta = await generateAndStoreKeypair(512);
+    await setKeypairFolioName(meta.id, "Persistent Folio");
+    await archiveKeypair(meta.id);
+    const kps = await listKeypairs();
+    expect(kps[0].folioName).toBe("Persistent Folio");
+    expect(kps[0].archivedAt).toBeDefined();
+  });
+
+  it("does not overwrite an already-set folioName (write-once)", async () => {
+    const meta = await generateAndStoreKeypair(512);
+    await setKeypairFolioName(meta.id, "First Folio");
+    await setKeypairFolioName(meta.id, "Second Folio");
+    expect((await listKeypairs())[0].folioName).toBe("First Folio");
+  });
+
+  it("does not affect other keypairs in the pool", async () => {
+    const a = await generateAndStoreKeypair(512, "a");
+    const b = await generateAndStoreKeypair(512, "b");
+    await setKeypairFolioName(a.id, "Folio A");
+    const kps = await listKeypairs();
+    expect(kps.find(k => k.id === a.id)!.folioName).toBe("Folio A");
+    expect(kps.find(k => k.id === b.id)!.folioName).toBeUndefined();
   });
 });
 

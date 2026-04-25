@@ -4,7 +4,7 @@ import { PortfolioStore, Folio, Wallet } from "@/storage/folioStore";
 import { sortPortfolio } from "@/lib/folioSorting";
 import { useCoinList } from "@/hooks/useCoinList";
 import { createQuantumAccount } from "@/lib/wallets";
-import { listKeypairs, generateAndStoreKeypair, predictAddressFromKeypair, KeypairMeta } from "@/storage/keyStore";
+import { listKeypairs, generateAndStoreKeypair, predictAddressFromKeypair, setKeypairFolioName, KeypairMeta } from "@/storage/keyStore";
 import { deriveFolioSalt } from "@/lib/salt";
 import { Address, createPublicClient, http } from "viem";
 import { useDomains } from "@/hooks/useDomains";
@@ -273,6 +273,7 @@ export function Folios() {
 
   const [nameOpen, setNameOpen] = React.useState(false);
   const [qrPayload, setQrPayload] = React.useState<any>(null);
+  const [shareProfileError, setShareProfileError] = React.useState<string | null>(null);
   const [copiedFolioId, setCopiedFolioId] = React.useState<string | null>(null);
 
   async function handleShareProfile() {
@@ -282,9 +283,12 @@ export function Folios() {
       return;
     }
 
-    const payload = buildProfileShareFromFolios(name, folios);
-
-    setQrPayload(payload);
+    try {
+      const payload = buildProfileShareFromFolios(name, folios);
+      setQrPayload(payload);
+    } catch (err: any) {
+      setShareProfileError(err?.message ?? "Profile too large to share via QR code");
+    }
   }
 
   // Combine folios and coins into portfolio view
@@ -588,6 +592,8 @@ export function Folios() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    await setKeypairFolioName(keypairId, trimmedName);
 
     closeModal();
   }
@@ -1003,7 +1009,7 @@ export function Folios() {
             <h2 className="text-base font-semibold material-gold-text">Delete account?</h2>
             <p className="mt-2 text-sm text-muted">
               This will remove the entire portfolio account <strong>{folioNameToDelete || "unnamed"}</strong> and its balances from your list.
-              This action cannot be undone and you could lose access to your assets.
+              This action cannot be undone and you could lose access to your assets.  This feature should only be used if you have migrated the account to another device.
               If you just want to remove the coin balance then go to the coin page and delete the coin.
             </p>
 
@@ -1040,6 +1046,23 @@ export function Folios() {
           payload={qrPayload}
           onClose={() => setQrPayload(null)}
         />
+      )}
+
+      {/* Share profile error (e.g. too many accounts for QR) */}
+      {shareProfileError && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setShareProfileError(null)}
+        >
+          <div className="bg-background rounded-xl border border-border shadow-xl p-5 space-y-3 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium">Cannot share via QR code</p>
+            <p className="text-xs text-muted-foreground">{shareProfileError}</p>
+            <div className="flex justify-end">
+              <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={() => setShareProfileError(null)}>OK</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Account already exists info modal ── */}

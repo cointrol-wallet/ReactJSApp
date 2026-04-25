@@ -13,7 +13,8 @@ vi.mock("idb-keyval", () => ({
   del: vi.fn((k: string) => { idbStore.delete(k); return Promise.resolve(); }),
 }));
 
-import { importSharePayload } from "../shareImporters";
+import { importSharePayload, applyAddNewContact, applyContactUpdate } from "../shareImporters";
+import type { ContactImportReview, ContactMatchInfo } from "../shareImporters";
 import { getAllContacts, addContact } from "@/storage/contactStore";
 import { getAllContracts, addContract } from "@/storage/contractStore";
 import { getAllCoins, addCoin } from "@/storage/coinStore";
@@ -30,9 +31,10 @@ afterEach(() => {
 
 const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as `0x${string}`;
 const ADDR2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as `0x${string}`;
+const ADDR3 = "0xcccccccccccccccccccccccccccccccccccccccc" as `0x${string}`;
 
 // ---------------------------------------------------------------------------
-// contact
+// contact — importSharePayload always returns mode:"review"
 // ---------------------------------------------------------------------------
 
 describe("importSharePayload — contact", () => {
@@ -46,43 +48,215 @@ describe("importSharePayload — contact", () => {
     },
   };
 
-  it("creates a new contact when none exists", async () => {
-    const result = await importSharePayload(payload);
-    expect(result.mode).toBe("created");
-    const contacts = await getAllContacts();
-    expect(contacts).toHaveLength(1);
-    expect(contacts[0].name).toBe("Alice");
+  it("returns mode:review even when no existing contact matches", async () => {
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.mode).toBe("review");
+    expect(result.matches).toHaveLength(0);
+    // nothing written to store
+    expect(await getAllContacts()).toHaveLength(0);
   });
 
-  it("returns matched and merges wallets when contact already exists", async () => {
+  it("includes incoming name and wallets in the review result", async () => {
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.incoming.name).toBe("Alice");
+    expect(result.incoming.surname).toBe("Smith");
+    expect(result.incoming.wallets).toHaveLength(1);
+  });
+
+  it("returns one match with matchReason:name when name+surname match exists", async () => {
     await addContact({ name: "Alice", surname: "Smith", wallets: null });
-
-    const result = await importSharePayload(payload);
-    expect(result.mode).toBe("matched");
-    expect((result as any).mergedWallets).toHaveLength(1);
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.mode).toBe("review");
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].matchReason).toBe("name");
   });
 
-  it("deduplicates wallets by chainId:address on merge", async () => {
+  it("match is case-insensitive on name and surname", async () => {
+    await addContact({ name: "ALICE", surname: "SMITH", wallets: null });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(1);
+  });
+
+  it("walletRelationship is overlap when incoming wallet exists in existing contact", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches[0].walletRelationship).toBe("overlap");
+  });
+
+  it("walletRelationship is none when no wallets are shared", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR2 }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches[0].walletRelationship).toBe("none");
+  });
+
+  it("deduplicates wallets by chainId:address in mergedWallets (not doubled)", async () => {
     await addContact({
       name: "Alice",
       surname: "Smith",
       wallets: [{ chainId: 1, address: ADDR }],
     });
-
-    const result = await importSharePayload(payload); // same wallet
-    expect(result.mode).toBe("matched");
-    expect((result as any).mergedWallets).toHaveLength(1); // not doubled
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches[0].mergedWallets).toHaveLength(1);
   });
 
-  it("match is case-insensitive on name and surname", async () => {
-    await addContact({ name: "ALICE", surname: "SMITH", wallets: null });
-    const result = await importSharePayload(payload);
-    expect(result.mode).toBe("matched");
+  it("includes new wallets in mergedWallets for overlap match", async () => {
+    await addContact({
+      name: "Alice",
+      surname: "Smith",
+      wallets: [{ chainId: 1, address: ADDR }],
+    });
+    const withExtra: SharePayload = {
+      v: 1,
+      t: "contact",
+      data: { name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR }, { chainId: 1, address: ADDR2 }] },
+    };
+    const result = await importSharePayload(withExtra) as ContactImportReview;
+    expect(result.matches[0].mergedWallets).toHaveLength(2);
+  });
+
+  it("smart merge: incoming wallet name fills blank existing wallet name", async () => {
+    await addContact({
+      name: "Alice",
+      surname: "Smith",
+      wallets: [{ chainId: 1, address: ADDR }], // no name
+    });
+    const withName: SharePayload = {
+      v: 1,
+      t: "contact",
+      data: { name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR, name: "Main" }] },
+    };
+    const result = await importSharePayload(withName) as ContactImportReview;
+    const merged = result.matches[0].mergedWallets;
+    expect(merged).toHaveLength(1);
+    expect(merged[0].name).toBe("Main");
+  });
+
+  it("does not overwrite an existing wallet name with incoming", async () => {
+    await addContact({
+      name: "Alice",
+      surname: "Smith",
+      wallets: [{ chainId: 1, address: ADDR, name: "Primary" }],
+    });
+    const withDifferentName: SharePayload = {
+      v: 1,
+      t: "contact",
+      data: { name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR, name: "Renamed" }] },
+    };
+    const result = await importSharePayload(withDifferentName) as ContactImportReview;
+    expect(result.matches[0].mergedWallets[0].name).toBe("Primary");
+  });
+
+  it("returns multiple matches when multiple contacts share the same name+surname", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: null });
+    await addContact({ name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR2 }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(2);
+    expect(result.matches.every(m => m.matchReason === "name")).toBe(true);
+  });
+
+  it("does not write to store when matches are found", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: null });
+    const before = (await getAllContacts()).length;
+    await importSharePayload(payload);
+    expect((await getAllContacts()).length).toBe(before);
   });
 });
 
 // ---------------------------------------------------------------------------
-// profile (treated as contact)
+// contact — address match across different names
+// ---------------------------------------------------------------------------
+
+describe("importSharePayload — contact address-based match", () => {
+  const payload: SharePayload = {
+    v: 1,
+    t: "contact",
+    data: {
+      name: "Alice",
+      surname: "Smith",
+      wallets: [{ chainId: 1, address: ADDR }],
+    },
+  };
+
+  it("surfaces a contact with a different name that shares a wallet address", async () => {
+    await addContact({ name: "Bob", surname: "Jones", wallets: [{ chainId: 1, address: ADDR }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].matchReason).toBe("address");
+    expect(result.matches[0].walletRelationship).toBe("overlap");
+  });
+
+  it("address match does not duplicate a contact already found by name", async () => {
+    // Same contact matches BOTH by name AND wallet — should appear only once (name match wins)
+    await addContact({ name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].matchReason).toBe("name");
+  });
+
+  it("returns both a name match and an address match when they are different contacts", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: [{ chainId: 1, address: ADDR2 }] });
+    await addContact({ name: "Bob", surname: "Jones", wallets: [{ chainId: 1, address: ADDR }] });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(2);
+    const reasons = result.matches.map(m => m.matchReason).sort();
+    expect(reasons).toEqual(["address", "name"]);
+  });
+
+  it("does not surface address matches when incoming has no wallets", async () => {
+    await addContact({ name: "Bob", surname: "Jones", wallets: [{ chainId: 1, address: ADDR }] });
+    const noWallets: SharePayload = {
+      v: 1,
+      t: "contact",
+      data: { name: "Alice", surname: "Smith", wallets: [] },
+    };
+    const result = await importSharePayload(noWallets) as ContactImportReview;
+    expect(result.matches).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// contact — applyAddNewContact helper
+// ---------------------------------------------------------------------------
+
+describe("applyAddNewContact", () => {
+  it("writes a new contact to the store", async () => {
+    await applyAddNewContact({ name: "Alice", surname: "Smith", wallets: [] });
+    const contacts = await getAllContacts();
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0].name).toBe("Alice");
+  });
+
+  it("creates two separate contacts when called twice (no duplicate guard)", async () => {
+    await applyAddNewContact({ name: "Alice", surname: "Smith", wallets: [] });
+    await applyAddNewContact({ name: "Alice", surname: "Smith", wallets: [] });
+    expect(await getAllContacts()).toHaveLength(2);
+  });
+
+  it("stores wallets when provided", async () => {
+    await applyAddNewContact({ name: "Alice", wallets: [{ chainId: 1, address: ADDR }] });
+    const contacts = await getAllContacts();
+    expect(contacts[0].wallets).toHaveLength(1);
+    expect(contacts[0].wallets![0].address).toBe(ADDR);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// contact — applyContactUpdate helper
+// ---------------------------------------------------------------------------
+
+describe("applyContactUpdate", () => {
+  it("updates the wallets on the target contact", async () => {
+    await addContact({ name: "Alice", surname: "Smith", wallets: null });
+    const [contact] = await getAllContacts();
+    await applyContactUpdate(contact.id, [{ chainId: 1, address: ADDR }]);
+    const [updated] = await getAllContacts();
+    expect(updated.wallets).toHaveLength(1);
+    expect(updated.wallets![0].address).toBe(ADDR);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// profile (treated as contact) — always returns review
 // ---------------------------------------------------------------------------
 
 describe("importSharePayload — profile", () => {
@@ -95,11 +269,17 @@ describe("importSharePayload — profile", () => {
     },
   };
 
-  it("creates a new contact from profile payload", async () => {
-    const result = await importSharePayload(payload);
-    expect(result.mode).toBe("created");
-    const contacts = await getAllContacts();
-    expect(contacts[0].name).toBe("Bob");
+  it("returns mode:review for a profile payload", async () => {
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.mode).toBe("review");
+    expect(result.incoming.name).toBe("Bob");
+  });
+
+  it("returns a name match for a profile payload when an existing contact matches", async () => {
+    await addContact({ name: "Bob", wallets: null });
+    const result = await importSharePayload(payload) as ContactImportReview;
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].matchReason).toBe("name");
   });
 });
 

@@ -14,7 +14,9 @@ export type KeypairMeta = {
   id: string;           // crypto.randomUUID()
   level: FalconLevel;
   label?: string;
+  folioName?: string;   // name of the QuantumAccount folio this key controls; set once on first assignment
   createdAt: number;
+  archivedAt?: number;  // set when keypair is retired after key rotation
 };
 
 type CipherRecord = {
@@ -191,7 +193,26 @@ async function savePool(pool: StoredKeypair[]): Promise<void> {
 /** Return metadata for all keypairs (no decryption). */
 export async function listKeypairs(): Promise<KeypairMeta[]> {
   const pool = await loadPool();
-  return pool.map(({ id, level, label, createdAt }) => ({ id, level, label, createdAt }));
+  return pool.map(({ id, level, label, folioName, createdAt, archivedAt }) => ({ id, level, label, folioName, createdAt, archivedAt }));
+}
+
+/** Record which folio this keypair is controlling. No-op if id not found or folioName already set. */
+export async function setKeypairFolioName(id: string, folioName: string): Promise<void> {
+  const pool = await loadPool();
+  const idx = pool.findIndex(k => k.id === id);
+  if (idx === -1) return;
+  if (pool[idx].folioName !== undefined) return;
+  pool[idx] = { ...pool[idx], folioName };
+  await savePool(pool);
+}
+
+/** Mark a keypair as archived so it can no longer be used for signing new operations. */
+export async function archiveKeypair(id: string): Promise<void> {
+  const pool = await loadPool();
+  const idx = pool.findIndex(k => k.id === id);
+  if (idx === -1) return;
+  pool[idx] = { ...pool[idx], archivedAt: Date.now() };
+  await savePool(pool);
 }
 
 /**

@@ -21,7 +21,10 @@ import { initWallet } from "./lib/wallets";
 import { FalconProvider } from "./crypto/falconProvider";
 import { QrScanner } from "./components/ui/QrScanner";
 import { decodeSharePayload } from "./lib/sharePayload";
-import { importSharePayload } from "./lib/shareImporters";
+import { importSharePayload, applyAddNewContact, applyContactUpdate } from "./lib/shareImporters";
+import type { ContactImportReview, ContactMatchInfo } from "./lib/shareImporters";
+import type { Wallet } from "./storage/contactStore";
+import { ContactImportResolutionModal } from "./components/ui/ContactImportResolutionModal";
 import { useFolios } from "./hooks/useFolios";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
@@ -333,6 +336,10 @@ function AppShell({ children, onOpenScan }: {
 function AppContainer() {
   const [error, setError] = React.useState<string | null>(null);
   const [scanOpen, setScanOpen] = React.useState(false);
+  const [pendingContactImport, setPendingContactImport] = React.useState<{
+    incoming: ContactImportReview["incoming"];
+    matches: ContactMatchInfo[];
+  } | null>(null);
   const [onboardingDismissed, setOnboardingDismissed] = React.useState(
     () => localStorage.getItem("cointrol_onboarding_seen") === "1"
   );
@@ -355,6 +362,11 @@ function AppContainer() {
         return;
       }
       const result = await importSharePayload(payload, { folios, updateFolio });
+      if (result.mode === "review") {
+        setScanOpen(false);
+        setPendingContactImport({ incoming: result.incoming, matches: result.matches });
+        return;
+      }
       console.log("[QR] import result:", result);
     } catch (e) {
       console.error("[QR] import failed:", e);
@@ -450,6 +462,23 @@ function AppContainer() {
         onClose={() => setScanOpen(false)}
         onDecoded={handleDecoded}
       />
+      {pendingContactImport && (
+        <ContactImportResolutionModal
+          incoming={pendingContactImport.incoming}
+          matches={pendingContactImport.matches}
+          onUpdate={async (matchId, mergedWallets) => {
+            await applyContactUpdate(matchId, mergedWallets);
+          }}
+          onCombine={async (matchId, mergedWallets) => {
+            await applyContactUpdate(matchId, mergedWallets);
+          }}
+          onAddAsNew={async () => {
+            await applyAddNewContact(pendingContactImport.incoming);
+            setPendingContactImport(null);
+          }}
+          onCancel={() => setPendingContactImport(null)}
+        />
+      )}
       <OnboardingModal
         open={showOnboarding}
         onDismiss={handleOnboardingDismiss}

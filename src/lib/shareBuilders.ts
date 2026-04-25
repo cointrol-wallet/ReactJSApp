@@ -19,7 +19,7 @@ function uniqWallets(wallets: { chainId: number; address: string; name?: string 
  * Contact: include addresses for all chains
  */
 export function buildContactShare(contact: Contact): SharePayload {
-  return {
+  const payload: SharePayload = {
     v: 1,
     t: "contact",
     data: {
@@ -29,6 +29,9 @@ export function buildContactShare(contact: Contact): SharePayload {
     },
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };
+  if (encodeSharePayload(payload).length > QR_CHAR_LIMIT)
+    throw new Error("Contact has too many wallets to fit in a QR code");
+  return payload;
 }
 
 /**
@@ -92,14 +95,13 @@ export function buildContractShare(contract: Contract): SharePayload {
  */
 export function buildProfileShareFromFolios(
   displayName: string,
-  folios: Folio[],
-  tags?: string[]
+  folios: Folio[]
 ): SharePayload {
   const wallets = uniqWallets(
     folios.map(f => ({ chainId: f.chainId, address: f.address, name: f.name }))
   );
 
-  return {
+  const payload: SharePayload = {
     v: 1,
     t: "profile",
     data: {
@@ -108,6 +110,9 @@ export function buildProfileShareFromFolios(
     },
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };
+  if (encodeSharePayload(payload).length > QR_CHAR_LIMIT)
+    throw new Error("Profile has too many accounts to fit in a QR code");
+  return payload;
 }
 
 /**
@@ -176,10 +181,13 @@ export type TxRequestInput = {
 };
 
 export function buildTxRequestShare(input: TxRequestInput): SharePayload {
-  return {
+  const payload: SharePayload = {
     v: 1,
     t: "txrequest",
     data: { ...input },
     meta: { createdAt: Date.now(), source: "Cointrol" },
   };
+  if (encodeSharePayload(payload).length > QR_CHAR_LIMIT)
+    throw new Error("Transaction request payload too large for QR code");
+  return payload;
 }

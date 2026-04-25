@@ -1,4 +1,7 @@
 // utils/parseAbiArg.ts
+import { packedToRaw } from "@/crypto/falconUtils";
+import { hexToBytes } from "viem";
+
 export function parseAbiArg(type: string, raw: string): any {
   const value = raw.trim();
 
@@ -12,6 +15,13 @@ export function parseAbiArg(type: string, raw: string): any {
   }
 
   if (type.startsWith("bytes") && !type.endsWith("[]")) {
+    // Falcon packed key from QR share — convert back to raw uint16 format
+    if (value.startsWith("packed:0x")) {
+      const bytes = hexToBytes(value.slice(7) as `0x${string}`);
+      const level = bytes.length === 897 ? 512 : bytes.length === 1793 ? 1024 : null;
+      if (!level) throw new Error("Unrecognised Falcon packed key length");
+      return packedToRaw(bytes, level);
+    }
     // assume hex string 0x...
     return value;
   }

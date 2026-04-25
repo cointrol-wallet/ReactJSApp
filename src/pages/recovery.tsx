@@ -16,12 +16,13 @@ import { buildRecoveryShare } from "@/lib/shareBuilders";
 import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
 import { encodeFunctionData, createPublicClient, http, keccak256, bytesToHex, type Hex, type Address } from "viem";
 import { paymasterAbi, quantumAccountAbi, recoverableAbi } from "@/lib/abiTypes";
-import { listKeypairs, getPublicKey, generateAndStoreKeypair, KeypairMeta } from "@/storage/keyStore";
+import { listKeypairs, getPublicKey, generateAndStoreKeypair, setKeypairFolioName, KeypairMeta } from "@/storage/keyStore";
 import { addAttestation, AttestationRecord } from "@/storage/attestationStore";
 import { addFolio, Wallet as FolioWallet } from "@/storage/folioStore";
 import { getAllCoins } from "@/storage/coinStore";
 import { useAttestations } from "@/hooks/useAttestations";
-import { encodeSharePayload } from "@/lib/sharePayload";
+import { encodeSharePayload, QR_CHAR_LIMIT } from "@/lib/sharePayload";
+import { rawToPacked } from "@/crypto/falconUtils";
 import QRCode from "react-qr-code";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1751,6 +1752,10 @@ function CreateAttestationModal({
         falconLevel,
         paymaster: prefill?.paymaster,
       });
+      const matchedFolio = folios.find(
+        f => f.address.toLowerCase() === account.toLowerCase() && f.chainId === chainId
+      );
+      await setKeypairFolioName(effectiveKeypairId, matchedFolio?.name ?? account);
       onClose();
     } catch (e: any) {
       setSaveError(e?.message ?? "Failed to save attestation record.");
@@ -2524,6 +2529,8 @@ function MigrateAccountModal({
   const [creatingQr, setCreatingQr] = React.useState(false);
   const [qrPayload, setQrPayload] = React.useState<string | null>(null);
   const [qrCopied, setQrCopied] = React.useState(false);
+  const [pkTooLargeRawHex, setPkTooLargeRawHex] = React.useState<string | null>(null);
+  const [pkCopied, setPkCopied] = React.useState(false);
   const [finishing, setFinishing] = React.useState(false);
   const [finishError, setFinishError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
@@ -2592,6 +2599,7 @@ function MigrateAccountModal({
     if (!domain || !accountAddress || !falconLevel) return;
     setCreatingQr(true);
     setFinishError(null);
+    setPkTooLargeRawHex(null);
     try {
       let effectiveKeypairId = formKeypairId;
       if (!effectiveKeypairId) {
@@ -2603,6 +2611,7 @@ function MigrateAccountModal({
       }
       const pkBytes = await getPublicKey(effectiveKeypairId);
       if (!pkBytes) throw new Error("Keypair not found.");
+      const packed = rawToPacked(pkBytes, falconLevel);
       const payload = encodeSharePayload({
         v: 1,
         t: "txrequest",
@@ -2612,9 +2621,13 @@ function MigrateAccountModal({
           contractAddress: accountAddress,
           contractName: "QuantumAccount",
           functionName: "updatePublicKey",
-          args: { "_publicKeyBytes": bytesToHex(pkBytes) },
+          args: { "_publicKeyBytes": `packed:${bytesToHex(packed)}` },
         },
       });
+      if (payload.length > QR_CHAR_LIMIT) {
+        setPkTooLargeRawHex(bytesToHex(pkBytes));
+        return;
+      }
       setQrPayload(payload);
     } catch (e: any) {
       setFinishError(e?.message ?? "Failed to generate QR code.");
@@ -2747,7 +2760,7 @@ function MigrateAccountModal({
                   <select
                     className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
                     value={formKeypairId}
-                    onChange={e => { setFormKeypairId(e.target.value); setQrPayload(null); }}
+                    onChange={e => { setFormKeypairId(e.target.value); setQrPayload(null); setPkTooLargeRawHex(null); }}
                     disabled={creatingQr || finishing}
                   >
                     <option value="">Generate new Falcon-{falconLevel} keypair</option>
@@ -2777,6 +2790,25 @@ function MigrateAccountModal({
                     }}
                   >
                     {qrCopied ? "Copied!" : "Copy QR data"}
+                  </button>
+                </div>
+              )}
+
+              {/* Key-too-large fallback (Falcon-1024 may exceed QR capacity) */}
+              {pkTooLargeRawHex && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 space-y-2">
+                  <p className="text-xs text-amber-800 font-medium">Key too large for QR code</p>
+                  <p className="text-xs text-amber-700">This Falcon-1024 key exceeds the QR code capacity. Copy the key data below and paste it manually into the <strong>_publicKeyBytes</strong> field on your existing device.</p>
+                  <button
+                    type="button"
+                    className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(pkTooLargeRawHex).catch(() => {});
+                      setPkCopied(true);
+                      setTimeout(() => setPkCopied(false), 2000);
+                    }}
+                  >
+                    {pkCopied ? "Copied!" : "Copy public key data"}
                   </button>
                 </div>
               )}

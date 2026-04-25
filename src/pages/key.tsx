@@ -4,16 +4,21 @@ import {
   listKeypairs,
   generateAndStoreKeypair,
   deleteKeypair,
+  archiveKeypair,
+  setKeypairFolioName,
+  getPublicKey,
+  getSecretKey,
   KeypairMeta,
-  FalconLevel,
 } from "@/storage/keyStore";
 import { getAllFolios, Folio } from "@/storage/folioStore";
 import { getAllDomains, Domain } from "@/storage/domainStore";
 import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
-import { encodeFunctionData, bytesToHex, keccak256, type Hex } from "viem";
-import { quantumAccountAbi } from "@/lib/abiTypes";
+import { encodeFunctionData, bytesToHex, keccak256, parseEther, type Hex } from "viem";
+import { quantumAccountAbi, extractAbi, getFunctions, AbiFunctionFragment } from "@/lib/abiTypes";
 import { notifyBundlerPublicKeyUpdate } from "@/lib/wallets";
-import { getPublicKey } from "@/storage/keyStore";
+import { createFalconWorkerClient } from "@/crypto/falconInterface";
+import { Contract, getAllContracts } from "@/storage/contractStore";
+import { parseAbiArg } from "@/lib/parseAbiArgs";
 import { updateFolio } from "@/storage/folioStore";
 import { useNavigate } from "react-router-dom";
 
@@ -110,12 +115,20 @@ function RotateKeyModal({
   const [localPhase, setLocalPhase] = React.useState<"idle" | "notifying" | "done">("idle");
   const [error, setError] = React.useState<string | null>(null);
 
-  const available = keypairs.filter(k => k.id !== folio.keypairId && k.level !== "ECC");
+  const currentKeypair = keypairs.find(k => k.id === folio.keypairId);
+  const available = keypairs.filter(
+    k => k.id !== folio.keypairId &&
+         k.level !== "ECC" &&
+         !k.archivedAt &&
+         k.level === currentKeypair?.level
+  );
 
   async function handleRotate() {
     if (!newKeypairId) return;
     setError(null);
     setLocalPhase("idle");
+
+    const oldKeypairId = folio.keypairId;
 
     const newPK = await getPublicKey(newKeypairId);
     if (!newPK) { setError("New keypair not found"); return; }
@@ -139,6 +152,9 @@ function RotateKeyModal({
     try {
       await notifyBundlerPublicKeyUpdate({ folio, domain, newKeypairId });
       await updateFolio(folio.id, { keypairId: newKeypairId });
+      await setKeypairFolioName(oldKeypairId, folio.name);
+      await archiveKeypair(oldKeypairId);
+      await setKeypairFolioName(newKeypairId, folio.name);
       setLocalPhase("done");
       onDone();
     } catch (e: any) {
@@ -163,7 +179,7 @@ function RotateKeyModal({
         <div className="space-y-1 mb-4">
           <label className="text-xs font-medium">New keypair</label>
           {available.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No other keypairs available. Generate one first on the Keys page.</p>
+            <p className="text-xs text-muted-foreground">No other Falcon-{currentKeypair?.level} keypairs available. Generate one first.</p>
           ) : (
             <select
               className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
@@ -213,6 +229,367 @@ function RotateKeyModal({
   );
 }
 
+// ─── Archived Key Sign Modal ──────────────────────────────────────────────────
+
+function ArchivedKeySignModal({
+  keypair,
+  folios,
+  onClose,
+}: {
+  keypair: KeypairMeta;
+  folios: Folio[];
+  onClose: () => void;
+}) {
+  type Tab = "raw" | "sendCoins" | "smartContract";
+
+  const [activeTab, setActiveTab] = React.useState<Tab>("raw");
+  const [selectedFolioId, setSelectedFolioId] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Raw tab
+  const [rawInput, setRawInput] = React.useState("");
+
+  // Send coins tab
+  const [recipient, setRecipient] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+
+  // Smart contract tab
+  const [contracts, setContracts] = React.useState<Contract[]>([]);
+  const [selectedContractId, setSelectedContractId] = React.useState("");
+  const [selectedFnName, setSelectedFnName] = React.useState("");
+  const [argValues, setArgValues] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    getAllContracts().then(setContracts);
+  }, []);
+
+  const selectedFolio = folios.find(f => f.id === selectedFolioId);
+  const chainContracts = contracts.filter(c => !selectedFolio || c.chainId === selectedFolio.chainId);
+  const selectedContract = contracts.find(c => c.id === selectedContractId);
+  const contractAbi = selectedContract ? extractAbi(selectedContract.metadata) : null;
+  const writeFns: AbiFunctionFragment[] = contractAbi
+    ? getFunctions(contractAbi).filter(f => f.stateMutability !== "view" && f.stateMutability !== "pure")
+    : [];
+  const selectedFn = writeFns.find(f => f.name === selectedFnName) ?? null;
+
+  function safeName(s: string) {
+    return s.replace(/[^a-z0-9 _-]/gi, "_").trim();
+  }
+
+  function downloadTextFile(filename: string, content: string) {
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function buildFilename() {
+    const folioSafe = safeName(selectedFolio?.name || keypair.folioName || keypair.label || keypair.id.slice(0, 8));
+    const date = new Date().toISOString().slice(0, 10);
+    return `${folioSafe} - archived key - ${date}.txt`;
+  }
+
+  async function signBytes(bytes: Uint8Array): Promise<Uint8Array> {
+    const sk = await getSecretKey(keypair.id);
+    if (!sk) throw new Error("Secret key not found");
+    const falcon = createFalconWorkerClient();
+    try {
+      return await falcon.sign(keypair.level as 512 | 1024, bytes, sk);
+    } finally {
+      sk.fill(0);
+      falcon.terminate();
+    }
+  }
+
+  async function handleRawSign() {
+    setBusy(true);
+    setError(null);
+    try {
+      const inputBytes = new TextEncoder().encode(rawInput);
+      const sig = await signBytes(inputBytes);
+      const now = new Date().toISOString();
+      const archivedDate = keypair.archivedAt ? new Date(keypair.archivedAt).toISOString() : "unknown";
+      const content = [
+        "Archived Key Signature Report",
+        "==============================",
+        `Keypair ID:    ${keypair.id}`,
+        `Falcon Level:  Falcon-${keypair.level}`,
+        `Archived At:   ${archivedDate}`,
+        `Generated At:  ${now}`,
+        "",
+        "--- Input (UTF-8) ---",
+        rawInput,
+        "",
+        "--- Signature (hex) ---",
+        bytesToHex(sig),
+      ].join("\n");
+      const folioSafe = safeName(keypair.label || keypair.id.slice(0, 8));
+      downloadTextFile(`${folioSafe} - archived key - ${new Date().toISOString().slice(0, 10)}.txt`, content);
+    } catch (e: any) {
+      setError(e?.message ?? "Signing failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSendCoinsSign() {
+    if (!selectedFolio) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (!recipient.startsWith("0x") || recipient.length !== 42) {
+        setError("Invalid recipient address — must be 0x followed by 40 hex characters");
+        return;
+      }
+      let amountWei: bigint;
+      try {
+        amountWei = parseEther(amount.trim());
+      } catch {
+        setError("Invalid amount");
+        return;
+      }
+      const calldata = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "execute",
+        args: [recipient as Hex, amountWei, "0x"],
+      }) as Hex;
+      const sig = await signBytes(new TextEncoder().encode(calldata));
+      const now = new Date().toISOString();
+      const content = [
+        "Archived Key — Send Coins",
+        "==========================",
+        `Folio:         ${selectedFolio.name} (${selectedFolio.address})`,
+        `Recipient:     ${recipient}`,
+        `Amount:        ${amount} ETH`,
+        `Generated At:  ${now}`,
+        "",
+        "--- Encoded Calldata (execute) ---",
+        calldata,
+        "",
+        "--- Falcon Signature (hex) ---",
+        bytesToHex(sig),
+      ].join("\n");
+      downloadTextFile(buildFilename(), content);
+    } catch (e: any) {
+      setError(e?.message ?? "Signing failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSmartContractSign() {
+    if (!selectedFolio || !selectedContract || !selectedFn || !contractAbi) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const parsedArgs = selectedFn.inputs.map((inp, i) => parseAbiArg(inp.type, argValues[i] ?? ""));
+      const innerData = encodeFunctionData({
+        abi: contractAbi,
+        functionName: selectedFn.name,
+        args: parsedArgs,
+      }) as Hex;
+      const calldata = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "execute",
+        args: [selectedContract.address as Hex, 0n, innerData],
+      }) as Hex;
+      const sig = await signBytes(new TextEncoder().encode(calldata));
+      const now = new Date().toISOString();
+      const content = [
+        "Archived Key — Smart Contract",
+        "==============================",
+        `Folio:         ${selectedFolio.name} (${selectedFolio.address})`,
+        `Contract:      ${selectedContract.name} (${selectedContract.address})`,
+        `Function:      ${selectedFn.name}`,
+        `Arguments:     ${argValues.join(", ") || "(none)"}`,
+        `Generated At:  ${now}`,
+        "",
+        "--- Inner Calldata ---",
+        innerData,
+        "",
+        "--- Execute Calldata ---",
+        calldata,
+        "",
+        "--- Falcon Signature (hex) ---",
+        bytesToHex(sig),
+      ].join("\n");
+      downloadTextFile(buildFilename(), content);
+    } catch (e: any) {
+      setError(e?.message ?? "Signing failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canGenerate =
+    !busy &&
+    (activeTab === "raw"
+      ? rawInput.trim().length > 0
+      : activeTab === "sendCoins"
+      ? !!selectedFolioId && recipient.trim().length > 0 && amount.trim().length > 0
+      : !!selectedFolioId && !!selectedContractId && !!selectedFnName);
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+    >
+      <div className="bg-background rounded-xl border border-border shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-base font-semibold mb-1 material-gold-text">Generate Signature</h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Archived key: Falcon-{keypair.level}{keypair.label ? ` — ${keypair.label}` : ""}
+        </p>
+
+        {/* Tab bar */}
+        <div className="flex border-b border-border mb-4">
+          {(["raw", "sendCoins", "smartContract"] as Tab[]).map(tab => (
+            <button
+              key={tab}
+              className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px ${activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { setActiveTab(tab); setError(null); }}
+              disabled={busy}
+            >
+              {tab === "raw" ? "Raw" : tab === "sendCoins" ? "Send coins" : "Smart contract"}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          {/* Folio selector (not needed for Raw) */}
+          {activeTab !== "raw" && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Account</label>
+              <select
+                className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                value={selectedFolioId}
+                onChange={e => setSelectedFolioId(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">Select an account…</option>
+                {folios.map(f => (
+                  <option key={f.id} value={f.id}>{f.name} ({f.address.slice(0, 10)}…)</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Raw tab */}
+          {activeTab === "raw" && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Data to sign</label>
+              <textarea
+                className="w-full rounded-md border border-border px-2 py-1.5 text-xs font-mono resize-y"
+                rows={10}
+                placeholder="Paste any text or hex bytes to sign…"
+                value={rawInput}
+                onChange={e => setRawInput(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+          )}
+
+          {/* Send coins tab */}
+          {activeTab === "sendCoins" && (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Recipient address</label>
+                <input
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  placeholder="0x…"
+                  value={recipient}
+                  onChange={e => setRecipient(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Amount (ETH)</label>
+                <input
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  placeholder="0.01"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Smart contract tab */}
+          {activeTab === "smartContract" && (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Contract</label>
+                <select
+                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  value={selectedContractId}
+                  onChange={e => { setSelectedContractId(e.target.value); setSelectedFnName(""); setArgValues([]); }}
+                  disabled={busy}
+                >
+                  <option value="">Select a contract…</option>
+                  {chainContracts.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              {writeFns.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Function</label>
+                  <select
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    value={selectedFnName}
+                    onChange={e => { setSelectedFnName(e.target.value); setArgValues([]); }}
+                    disabled={busy}
+                  >
+                    <option value="">Select a function…</option>
+                    {writeFns.map(f => (
+                      <option key={f.name} value={f.name}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {selectedFn?.inputs.map((inp, i) => (
+                <div key={i} className="space-y-1">
+                  <label className="text-xs font-medium">
+                    {inp.name || `arg${i}`} <span className="text-muted-foreground">({inp.type})</span>
+                  </label>
+                  <input
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                    placeholder={inp.type}
+                    value={argValues[i] ?? ""}
+                    onChange={e => setArgValues(prev => { const next = [...prev]; next[i] = e.target.value; return next; })}
+                    disabled={busy}
+                  />
+                </div>
+              ))}
+            </>
+          )}
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            disabled={!canGenerate}
+            onClick={activeTab === "raw" ? handleRawSign : activeTab === "sendCoins" ? handleSendCoinsSign : handleSmartContractSign}
+          >
+            {busy ? "Signing…" : "Generate signature"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function Keys() {
@@ -222,8 +599,14 @@ export function Keys() {
   const [domains, setDomains] = React.useState<Domain[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showGenerate, setShowGenerate] = React.useState(false);
+  const [showArchived, setShowArchived] = React.useState(false);
   const [rotatingFolio, setRotatingFolio] = React.useState<{ folio: Folio; domain: Domain } | null>(null);
+  const [signingKey, setSigningKey] = React.useState<KeypairMeta | null>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+
+  const activeKeypairs   = React.useMemo(() => keypairs.filter(k => !k.archivedAt), [keypairs]);
+  const archivedKeypairs = React.useMemo(() => keypairs.filter(k =>  k.archivedAt), [keypairs]);
+  const visibleKeypairs  = showArchived ? archivedKeypairs : activeKeypairs;
 
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -286,72 +669,114 @@ export function Keys() {
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold leading-tight material-charcoal-text material-gold-text">Key Management</h1>
-        <button
-          className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium"
-          onClick={() => setShowGenerate(true)}
-        >
-          Generate New Key
-        </button>
+        <div className="flex items-center gap-2">
+          {archivedKeypairs.length > 0 && (
+            <button
+              className="rounded-md border border-border px-3 py-1.5 text-sm"
+              onClick={() => setShowArchived(v => !v)}
+            >
+              {showArchived ? "Show active keys" : `Show archived (${archivedKeypairs.length})`}
+            </button>
+          )}
+          {!showArchived && (
+            <button
+              className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium"
+              onClick={() => setShowGenerate(true)}
+            >
+              Generate New Key
+            </button>
+          )}
+        </div>
       </div>
 
-      {keypairs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No keypairs yet. Generate one to get started.</p>
+      {visibleKeypairs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {showArchived ? "No archived keypairs." : "No keypairs yet. Generate one to get started."}
+        </p>
       ) : (
         <ul className="space-y-3">
-          {keypairs.map(k => {
+          {visibleKeypairs.map(k => {
+            const isArchived = !!k.archivedAt;
             const assigned = assignedTo.get(k.id) ?? [];
             const isAssigned = assigned.length > 0;
 
             return (
-              <li key={k.id} className="rounded-lg border border-border bg-card px-4 py-3 space-y-2">
+              <li key={k.id} className={`rounded-lg border border-border px-4 py-3 space-y-2 ${isArchived ? "bg-muted opacity-75" : "bg-card"}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="text-sm font-medium">
-                      Falcon-{k.level}{k.label ? ` — ${k.label}` : ""}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        Falcon-{k.level}{k.label ? ` — ${k.label}` : ""}
+                      </span>
+                      {isArchived && (
+                        <span className="rounded-full bg-muted-foreground/20 px-2 py-0.5 text-xs text-muted-foreground">
+                          Archived
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Created {new Date(k.createdAt).toLocaleDateString()}
+                      {k.archivedAt && ` · Archived ${new Date(k.archivedAt).toLocaleDateString()}`}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono break-all">{k.id}</div>
                   </div>
                   <div className="flex gap-2 shrink-0 items-center">
-                    {!isAssigned && (
-                      <button
-                        className="rounded-md border border-border px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
-                        onClick={() => navigate("/dashboard")}
-                        title="Create account using this key"
-                      >
-                        Create account
-                      </button>
-                    )}
-                    <button
-                      className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                      disabled={isAssigned}
-                      title={isAssigned ? "Cannot delete a keypair assigned to an account" : "Delete keypair"}
-                      onClick={() => handleDelete(k.id)}
-                    >
-                      Delete
-                    </button>
-                    <details className="relative inline-block">
-                      <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-2 py-1 text-xs">
-                        Actions
-                      </summary>
-                      <div className="absolute right-0 mt-1 w-44 rounded-md border border-border bg-background shadow-lg z-50">
+                    {isArchived ? (
+                      <>
                         <button
-                          className="block w-full px-3 py-2 text-left text-xs hover:bg-primary hover:text-primary-foreground"
-                          onClick={(e) => {
-                            (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                            handleCopyRecoveryCode(k.id);
-                          }}
+                          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
+                          onClick={() => setSigningKey(k)}
                         >
-                          {copiedId === k.id ? "Copied!" : "Copy recovery code"}
+                          Generate signature
                         </button>
-                      </div>
-                    </details>
+                        <button
+                          className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                          onClick={() => handleDelete(k.id)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {!isAssigned && (
+                          <button
+                            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => navigate("/dashboard")}
+                            title="Create account using this key"
+                          >
+                            Create account
+                          </button>
+                        )}
+                        <button
+                          className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          disabled={isAssigned}
+                          title={isAssigned ? "Cannot delete a keypair assigned to an account" : "Delete keypair"}
+                          onClick={() => handleDelete(k.id)}
+                        >
+                          Delete
+                        </button>
+                        <details className="relative inline-block">
+                          <summary className="cursor-pointer list-none rounded-md border border-border bg-background px-2 py-1 text-xs">
+                            Actions
+                          </summary>
+                          <div className="absolute right-0 mt-1 w-44 rounded-md border border-border bg-background shadow-lg z-50">
+                            <button
+                              className="block w-full px-3 py-2 text-left text-xs hover:bg-primary hover:text-primary-foreground"
+                              onClick={(e) => {
+                                (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                                handleCopyRecoveryCode(k.id);
+                              }}
+                            >
+                              {copiedId === k.id ? "Copied!" : "Copy recovery code"}
+                            </button>
+                          </div>
+                        </details>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {assigned.length > 0 && (
+                {!isArchived && assigned.length > 0 && (
                   <div className="space-y-1 pt-1 border-t border-border">
                     <div className="text-xs font-medium text-muted-foreground">Assigned to:</div>
                     {assigned.map(f => {
@@ -392,6 +817,14 @@ export function Keys() {
           keypairs={keypairs}
           onClose={() => setRotatingFolio(null)}
           onDone={() => { reload(); setRotatingFolio(null); }}
+        />
+      )}
+
+      {signingKey && (
+        <ArchivedKeySignModal
+          keypair={signingKey}
+          folios={folios}
+          onClose={() => setSigningKey(null)}
         />
       )}
     </div>

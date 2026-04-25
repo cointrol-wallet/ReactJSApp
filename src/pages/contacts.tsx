@@ -23,6 +23,7 @@ export function Contacts() {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingContact, setEditingContact] = React.useState<Contact | null>(null);
   const [qrPayload, setQrPayload] = React.useState<any>(null);
+  const [shareError, setShareError] = React.useState<string | null>(null);
 
   // Form state for modal
   const [formName, setFormName] = React.useState("");
@@ -390,7 +391,11 @@ export function Contacts() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setQrPayload(buildContactShare(c));
+                            try {
+                              setQrPayload(buildContactShare(c));
+                            } catch (err: any) {
+                              setShareError(err?.message ?? "Contact too large to share via QR code");
+                            }
                           }}
                         >
                           Share
@@ -667,6 +672,23 @@ export function Contacts() {
           payload={qrPayload}
           onClose={() => setQrPayload(null)}
         />
+      )}
+
+      {/* Share error (e.g. contact too large for QR) */}
+      {shareError && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setShareError(null)}
+        >
+          <div className="bg-background rounded-xl border border-border shadow-xl p-5 space-y-3 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium">Cannot share via QR code</p>
+            <p className="text-xs text-muted-foreground">{shareError}</p>
+            <div className="flex justify-end">
+              <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={() => setShareError(null)}>OK</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>
