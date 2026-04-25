@@ -23,7 +23,6 @@ import { QrScanner } from "./components/ui/QrScanner";
 import { decodeSharePayload } from "./lib/sharePayload";
 import { importSharePayload, applyAddNewContact, applyContactUpdate } from "./lib/shareImporters";
 import type { ContactImportReview, ContactMatchInfo } from "./lib/shareImporters";
-import type { Wallet } from "./storage/contactStore";
 import { ContactImportResolutionModal } from "./components/ui/ContactImportResolutionModal";
 import { useFolios } from "./hooks/useFolios";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -233,12 +232,12 @@ function NavDropdown() {
               onClick={(e) => e.stopPropagation()}
             >
               <NavDropItem to="/dashboard" label="Home" onSelect={() => setOpen(false)} />
-              <NavDropItem to="/keys" label="Keys" onSelect={() => setOpen(false)} />
               <NavDropItem to="/transactions" label="Transactions" onSelect={() => setOpen(false)} />
               <NavDropItem to="/addressbook" label="Address Book" onSelect={() => setOpen(false)} />
               <NavDropItem to="/contacts" label="Contacts" onSelect={() => setOpen(false)} />
               <NavDropItem to="/contracts" label="Smart Contracts" onSelect={() => setOpen(false)} />
               <NavDropItem to="/coins" label="Coins" onSelect={() => setOpen(false)} />
+              <NavDropItem to="/keys" label="Keys" onSelect={() => setOpen(false)} />
               <NavDropItem to="/recovery" label="Recoverables" onSelect={() => setOpen(false)} />
               <NavDropItem to="/legal/terms" label="Terms" onSelect={() => setOpen(false)} />
               <NavDropItem to="/legal/privacy" label="Privacy" onSelect={() => setOpen(false)} />
@@ -494,12 +493,12 @@ function AppContainer() {
           <Routes>
             <Route index element={<Folios />} />
             <Route path="dashboard" element={<Folios />} />
-            <Route path="keys" element={<Keys />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="contacts" element={<Contacts />} />
             <Route path="contracts" element={<Contracts />} />
             <Route path="coins" element={<Coins />} />
             <Route path="addressbook" element={<AddressBook />} />
+            <Route path="keys" element={<Keys />} />
             <Route path="recovery" element={<Recovery />} />
             <Route path="legal/terms" element={<Terms />} />
             <Route path="legal/privacy" element={<Privacy />} />
