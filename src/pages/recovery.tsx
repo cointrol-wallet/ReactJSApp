@@ -2561,7 +2561,9 @@ function MigrateAccountModal({
     setFinishError(null);
 
     if (!key || !domain) return;
-    const [cId, wIdxStr] = key.split(":");
+    const lastColon = key.lastIndexOf(":");
+    const cId = key.slice(0, lastColon);
+    const wIdxStr = key.slice(lastColon + 1);
     const contact = contacts.find(c => c.id === cId);
     const wallet = contact?.wallets?.[Number(wIdxStr)];
     if (!wallet) return;
