@@ -77,7 +77,7 @@ export function Contacts() {
         isVisible: isVisible,
         group: contact.tags ?? [],
         isContact: true,
-        indexOrder: 0,
+        indexOrder: address.reduce((max, a) => Math.max(max, a.indexOrder), -1) + 1,
       });
     }
   }

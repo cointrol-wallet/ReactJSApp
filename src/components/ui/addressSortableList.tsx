@@ -26,6 +26,8 @@ type AddressSortableListProps = {
   sortMode: AddressSortMode;
   onReorder: (items: Address[]) => void;
   onHide: (id: string) => void;
+  onMoveToTop: (id: string) => void;
+  isFilterActive: boolean;
   coins: Coin[];
   contacts: Contact[];
   contracts: Contract[];
@@ -39,6 +41,8 @@ export function AddressSortableList({
   sortMode,
   onReorder,
   onHide,
+  onMoveToTop,
+  isFilterActive,
   coins,
   contacts,
   contracts,
@@ -46,11 +50,8 @@ export function AddressSortableList({
   onApproveCoins,
   onUseContract,
 }: AddressSortableListProps) {
-  // Only show visible items, then sort them
-  const sortedItems = useMemo(() => {
-    const visible = items.filter((a) => a.isVisible !== false);
-    return sortAddresses(visible, sortMode);
-  }, [items, sortMode]);
+  // Sort the already-visible items (parent pre-filters isVisible)
+  const sortedItems = useMemo(() => sortAddresses(items, sortMode), [items, sortMode]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -59,8 +60,8 @@ export function AddressSortableList({
   );
 
   function handleDragEnd(event: DragEndEvent) {
-    // Only allow reordering when mode === "custom"
-    if (sortMode !== "custom") return;
+    // Only allow reordering when mode === "custom" and no filter is active
+    if (sortMode !== "custom" || isFilterActive) return;
 
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -72,7 +73,7 @@ export function AddressSortableList({
     const reordered = arrayMove(sortedItems, oldIndex, newIndex).map(
       (item, idx) => ({
         ...item,
-        indexOrder: idx, 
+        indexOrder: idx,
       })
     );
 
@@ -94,8 +95,10 @@ export function AddressSortableList({
             <SortableAddressCard
               key={addr.id}
               item={addr}
-              draggable={sortMode === "custom"}
+              sortMode={sortMode}
+              draggable={sortMode === "custom" && !isFilterActive}
               onHide={onHide}
+              onMoveToTop={onMoveToTop}
               coins={coins}
               contacts={contacts}
               onSendCoins={onSendCoins}
@@ -112,8 +115,10 @@ export function AddressSortableList({
 
 type SortableAddressCardProps = {
   item: Address;
+  sortMode: AddressSortMode;
   draggable: boolean;
   onHide: (id: string) => void;
+  onMoveToTop: (id: string) => void;
   coins: Coin[];
   contacts: Contact[];
   contracts: Contract[];
@@ -124,8 +129,10 @@ type SortableAddressCardProps = {
 
 function SortableAddressCard({
   item,
+  sortMode,
   draggable,
   onHide,
+  onMoveToTop,
   coins,
   contacts,
   contracts,
@@ -135,6 +142,7 @@ function SortableAddressCard({
 }: SortableAddressCardProps) {
   const [selectedCoinId, setSelectedCoinId] = React.useState("");
   const [selectedFnName, setSelectedFnName] = React.useState("");
+  const [actionsOpen, setActionsOpen] = React.useState(false);
 
   const entryId = item.id.replace(/^address:/, '');
 
@@ -243,7 +251,7 @@ function SortableAddressCard({
               </>
             )}
 
-            {/* Drag handle – only active in custom mode */}
+            {/* Drag handle – only active in custom mode with no filter */}
             <button
               type="button"
               {...(draggable ? { ...attributes, ...listeners } : {})}
@@ -253,13 +261,39 @@ function SortableAddressCard({
               ☰
             </button>
 
-            {/* Hide button */}
-            <button
-              onClick={() => onHide(item.id)}
-              className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
-            >
-              Hide
-            </button>
+            {/* Actions dropdown: Move to top (custom mode) + Hide */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setActionsOpen((v) => !v)}
+                className="rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-primary hover:text-primary-foreground"
+              >
+                ···
+              </button>
+              {actionsOpen && (
+                <div
+                  className="absolute right-0 top-full z-10 mt-1 min-w-32.5 rounded-md border border-border bg-card shadow-md"
+                  onMouseLeave={() => setActionsOpen(false)}
+                >
+                  {sortMode === "custom" && (
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-xs hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => { onMoveToTop(item.id); setActionsOpen(false); }}
+                    >
+                      ↑ Move to top
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-xs hover:bg-primary hover:text-primary-foreground"
+                    onClick={() => { onHide(item.id); setActionsOpen(false); }}
+                  >
+                    Hide
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

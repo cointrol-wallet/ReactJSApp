@@ -12,6 +12,7 @@ export type FiltersDropdownProps = {
   setTags: (tags: string[]) => void;
   tagMode: "any" | "all";
   setTagSearchMode: (v: "any" | "all") => void;
+  customSortDisabled?: boolean;
 };
 
 export function FiltersDropdown({
@@ -23,6 +24,7 @@ export function FiltersDropdown({
   setTags,
   tagMode,
   setTagSearchMode,
+  customSortDisabled,
 }: FiltersDropdownProps) {
   const [open, setOpen] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
@@ -124,6 +126,12 @@ export function FiltersDropdown({
                   </option>
                 ))}
               </select>
+
+              {customSortDisabled && (
+                <p className="mt-2 rounded-md border border-amber-400 bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  Custom sorting is disabled while filters are active. Clear filters to re-enable drag reordering.
+                </p>
+              )}
 
               <div className="my-3 border-t border-border" />
 

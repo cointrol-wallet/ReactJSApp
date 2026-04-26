@@ -2522,6 +2522,7 @@ function MigrateAccountModal({
   const [accountAddress, setAccountAddress] = React.useState<string | null>(null);
   const [folioName, setFolioName] = React.useState("");
   const [falconLevel, setFalconLevel] = React.useState<512 | 1024 | null>(null);
+  const [manualFalconLevel, setManualFalconLevel] = React.useState<512 | 1024 | null>(null);
   const [fetchingLevel, setFetchingLevel] = React.useState(false);
   const [levelError, setLevelError] = React.useState<string | null>(null);
   const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
@@ -2553,6 +2554,7 @@ function MigrateAccountModal({
   async function handleContactChange(key: string) {
     setSelectedContactKey(key);
     setFalconLevel(null);
+    setManualFalconLevel(null);
     setLevelError(null);
     setFormKeypairId("");
     setQrPayload(null);
@@ -2591,19 +2593,20 @@ function MigrateAccountModal({
     }
   }
 
-  const availableKeypairs = falconLevel
-    ? keypairs.filter(k => k.level === falconLevel && !folioKeypairIds.has(k.id))
+  const effectiveFalconLevel = falconLevel ?? manualFalconLevel;
+  const availableKeypairs = effectiveFalconLevel
+    ? keypairs.filter(k => k.level === effectiveFalconLevel && !folioKeypairIds.has(k.id))
     : [];
 
   async function handleCreateQr() {
-    if (!domain || !accountAddress || !falconLevel) return;
+    if (!domain || !accountAddress || !effectiveFalconLevel) return;
     setCreatingQr(true);
     setFinishError(null);
     setPkTooLargeRawHex(null);
     try {
       let effectiveKeypairId = formKeypairId;
       if (!effectiveKeypairId) {
-        const meta = await generateAndStoreKeypair(falconLevel);
+        const meta = await generateAndStoreKeypair(effectiveFalconLevel);
         effectiveKeypairId = meta.id;
         setFormKeypairId(meta.id);
         // refresh keypairs list so the generated key appears in the dropdown
@@ -2611,7 +2614,7 @@ function MigrateAccountModal({
       }
       const pkBytes = await getPublicKey(effectiveKeypairId);
       if (!pkBytes) throw new Error("Keypair not found.");
-      const packed = rawToPacked(pkBytes, falconLevel);
+      const packed = rawToPacked(pkBytes, effectiveFalconLevel);
       const payload = encodeSharePayload({
         v: 1,
         t: "txrequest",
@@ -2681,7 +2684,7 @@ function MigrateAccountModal({
     }
   }
 
-  const canCreateQr = !!domain && !!accountAddress && !!falconLevel && !fetchingLevel && !levelError;
+  const canCreateQr = !!domain && !!accountAddress && !!effectiveFalconLevel && !fetchingLevel;
   const canFinish = !!qrPayload && !finishing;
 
   return createPortal(
@@ -2750,11 +2753,34 @@ function MigrateAccountModal({
                 </select>
                 {fetchingLevel && <p className="text-xs text-muted-foreground">Checking account type…</p>}
                 {falconLevel && !levelError && <p className="text-xs text-green-600">Detected: Falcon-{falconLevel}</p>}
-                {levelError && <p className="text-xs text-red-600">{levelError}</p>}
+                {levelError && <p className="text-xs text-amber-600">{levelError}</p>}
               </div>
 
+              {/* Manual Falcon level picker — shown when auto-detection fails */}
+              {levelError && accountAddress && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Falcon level (manual)</label>
+                  <select
+                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    value={manualFalconLevel ?? ""}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setManualFalconLevel(v === "512" ? 512 : v === "1024" ? 1024 : null);
+                      setFormKeypairId("");
+                      setQrPayload(null);
+                      setPkTooLargeRawHex(null);
+                    }}
+                    disabled={creatingQr || finishing}
+                  >
+                    <option value="">Select Falcon level…</option>
+                    <option value="512">Falcon-512</option>
+                    <option value="1024">Falcon-1024</option>
+                  </select>
+                </div>
+              )}
+
               {/* Keypair selector */}
-              {falconLevel && !levelError && (
+              {effectiveFalconLevel && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium">New keypair for this device</label>
                   <select
@@ -2763,7 +2789,7 @@ function MigrateAccountModal({
                     onChange={e => { setFormKeypairId(e.target.value); setQrPayload(null); setPkTooLargeRawHex(null); }}
                     disabled={creatingQr || finishing}
                   >
-                    <option value="">Generate new Falcon-{falconLevel} keypair</option>
+                    <option value="">Generate new Falcon-{effectiveFalconLevel} keypair</option>
                     {availableKeypairs.map(k => (
                       <option key={k.id} value={k.id}>
                         Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})

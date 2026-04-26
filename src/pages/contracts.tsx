@@ -74,7 +74,7 @@ export function Contracts() {
         isVisible: isVisible,
         group: contract.tags ?? [],
         isContact: false,
-        indexOrder: 0,
+        indexOrder: address.reduce((max, a) => Math.max(max, a.indexOrder), -1) + 1,
       });
     }
   }

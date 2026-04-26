@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { useAddress } from "@/hooks/useAddresses";
 import { useAddressList } from "../hooks/useAddressList";
 import { AddressSortableList } from "../components/ui/addressSortableList"
 import { Address } from "@/storage/addressStore";
@@ -7,6 +8,7 @@ import { FiltersDropdown } from "@/components/ui/FiltersDropdown";
 import { useCoinList } from "@/hooks/useCoinList";
 import { useContacts } from "@/hooks/useContacts";
 import { useContracts } from "@/hooks/useContracts";
+import { computeNormalizedOrderAfterHide } from "@/lib/addressOrderHelpers";
 
 export function AddressBook() {
   const navigate = useNavigate();
@@ -26,6 +28,13 @@ export function AddressBook() {
     deleteAddress,
     updateAddress,
   } = useAddressList({ query, sortMode, tags, tagMode });
+
+  // Unfiltered list — needed for operations that must consider all visible items
+  const { address: allAddresses } = useAddress();
+  const allVisibleAddresses = React.useMemo(
+    () => allAddresses.filter((a) => a.isVisible !== false),
+    [allAddresses]
+  );
 
   const { coins } = useCoinList({ query: "", sortMode: "nameAsc", standard: "", chainId: 0 });
   const { contacts } = useContacts();
@@ -49,6 +58,8 @@ export function AddressBook() {
     [address]
   );
 
+  const isFilterActive = query.trim().length > 0 || tags.length > 0;
+
   async function handleReorder(updated: Address[]) {
     // updated is the *visible* list in the new order
     // assign indexOrder based on new position
@@ -57,12 +68,22 @@ export function AddressBook() {
         updateAddress(addr.id, { indexOrder: idx })
       )
     );
-    // useAddressList should re-emit state after updates
   }
 
   async function handleHide(id: string) {
     await updateAddress(id, { isVisible: false });
-    // On next render, visibleAddresses will filter it out
+    // Renumber remaining visible items to close the gap, using the full unfiltered list
+    const patches = computeNormalizedOrderAfterHide(allVisibleAddresses, id);
+    await Promise.all(patches.map((p) => updateAddress(p.id, { indexOrder: p.indexOrder })));
+  }
+
+  async function handleMoveToTop(id: string) {
+    // Operates on the full visible list regardless of any active filter
+    const inOrder = [...allVisibleAddresses].sort((a, b) => a.indexOrder - b.indexOrder);
+    const item = inOrder.find((a) => a.id === id);
+    if (!item) return;
+    const rest = inOrder.filter((a) => a.id !== id);
+    await handleReorder([item, ...rest]);
   }
 
   if (loading) return <div className="p-4">Loading Address…</div>;
@@ -85,10 +106,11 @@ export function AddressBook() {
         <div className="flex flex-wrap items-center justify-center gap-2">
           <FiltersDropdown
             sortOptions={[
-              { value: "nameAsc", label: "Name (A \u2192 Z)" },
-              { value: "nameDesc", label: "Name (Z \u2192 A)" },
+              { value: "nameAsc", label: "Name (A → Z)" },
+              { value: "nameDesc", label: "Name (Z → A)" },
               { value: "createdDesc", label: "Newest first" },
               { value: "createdAsc", label: "Oldest first" },
+              { value: "custom", label: "Custom order" },
             ]}
             sortMode={sortMode}
             setSortMode={setSortMode}
@@ -97,22 +119,25 @@ export function AddressBook() {
             setTags={setTags}
             tagMode={tagMode as "any" | "all"}
             setTagSearchMode={setTagSearchMode}
+            customSortDisabled={sortMode === "custom" && isFilterActive}
           />
         </div>
       </div>
 
-      {/*sortMode !== "custom" && (
+      {sortMode !== "custom" && (
         <p className="text-xs text-muted">
           Switch to <span className="font-semibold">Custom</span> to drag and
           reorder addresses manually.
         </p>
-      )*/}
+      )}
 
       <AddressSortableList
         items={visibleAddresses}
         sortMode={sortMode}
         onReorder={handleReorder}
         onHide={handleHide}
+        onMoveToTop={handleMoveToTop}
+        isFilterActive={isFilterActive}
         coins={coins}
         contacts={contacts}
         contracts={contracts}
