@@ -2535,6 +2535,7 @@ function MigrateAccountModal({
   const [finishing, setFinishing] = React.useState(false);
   const [finishError, setFinishError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
+  const qrContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     listKeypairs().then(setKeypairs).catch(() => {});
@@ -2804,7 +2805,7 @@ function MigrateAccountModal({
               {/* QR code */}
               {qrPayload && (
                 <div className="flex flex-col items-center gap-3 pt-1">
-                  <div className="inline-block rounded-lg border border-border p-3 bg-white">
+                  <div ref={qrContainerRef} className="inline-block rounded-lg border border-border p-3 bg-white">
                     <QRCode value={qrPayload} size={220} level="L" />
                   </div>
                   <p className="text-xs text-muted-foreground text-center">Scan this on your existing device to submit the key update transaction.</p>
@@ -2812,12 +2813,44 @@ function MigrateAccountModal({
                     type="button"
                     className="rounded-md border border-border px-3 py-1.5 text-xs"
                     onClick={async () => {
-                      await navigator.clipboard.writeText(qrPayload).catch(() => {});
+                      const svgEl = qrContainerRef.current?.querySelector("svg");
+                      if (svgEl) {
+                        try {
+                          const svgStr = new XMLSerializer().serializeToString(svgEl);
+                          const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+                          const url = URL.createObjectURL(blob);
+                          await new Promise<void>((resolve, reject) => {
+                            const img = new Image();
+                            img.onload = () => {
+                              const pad = 20;
+                              const canvas = document.createElement("canvas");
+                              canvas.width = img.width + pad * 2;
+                              canvas.height = img.height + pad * 2;
+                              const ctx = canvas.getContext("2d")!;
+                              ctx.fillStyle = "#ffffff";
+                              ctx.fillRect(0, 0, canvas.width, canvas.height);
+                              ctx.drawImage(img, pad, pad);
+                              URL.revokeObjectURL(url);
+                              canvas.toBlob((pngBlob) => {
+                                if (!pngBlob) { reject(new Error("blob failed")); return; }
+                                navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })])
+                                  .then(resolve).catch(reject);
+                              }, "image/png");
+                            };
+                            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("svg load failed")); };
+                            img.src = url;
+                          });
+                        } catch {
+                          await navigator.clipboard.writeText(qrPayload).catch(() => {});
+                        }
+                      } else {
+                        await navigator.clipboard.writeText(qrPayload).catch(() => {});
+                      }
                       setQrCopied(true);
                       setTimeout(() => setQrCopied(false), 2000);
                     }}
                   >
-                    {qrCopied ? "Copied!" : "Copy QR data"}
+                    {qrCopied ? "Copied!" : "Copy QR image"}
                   </button>
                 </div>
               )}
