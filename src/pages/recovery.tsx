@@ -2805,7 +2805,7 @@ function MigrateAccountModal({
               {qrPayload && (
                 <div className="flex flex-col items-center gap-3 pt-1">
                   <div className="inline-block rounded-lg border border-border p-3 bg-white">
-                    <QRCode value={qrPayload} size={200} level="H" />
+                    <QRCode value={qrPayload} size={220} level="L" />
                   </div>
                   <p className="text-xs text-muted-foreground text-center">Scan this on your existing device to submit the key update transaction.</p>
                   <button
