@@ -34,10 +34,12 @@ function QrScanModal({
   open,
   onClose,
   onDecoded,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
   onDecoded: (payload: string) => void;
+  error?: string | null;
 }) {
   React.useEffect(() => {
     if (!open) return;
@@ -99,6 +101,9 @@ function QrScanModal({
                 onClose();
               }}
             />
+            {error && (
+              <p className="mt-1 px-2 pb-2 text-xs text-red-600">{error}</p>
+            )}
           </div>
         </div>
       </div>
@@ -335,6 +340,7 @@ function AppShell({ children, onOpenScan }: {
 function AppContainer() {
   const [error, setError] = React.useState<string | null>(null);
   const [scanOpen, setScanOpen] = React.useState(false);
+  const [scanError, setScanError] = React.useState<string | null>(null);
   const [pendingContactImport, setPendingContactImport] = React.useState<{
     incoming: ContactImportReview["incoming"];
     matches: ContactMatchInfo[];
@@ -350,8 +356,9 @@ function AppContainer() {
   const navigate = useNavigate();
 
   const handleDecoded = React.useCallback(async (qrText: string) => {
+    setScanError(null);
     try {
-      const payload = decodeSharePayload(qrText);
+      const payload = decodeSharePayload(qrText.trim());
       if (payload.t === "recovery") {
         navigate("/recovery", { state: { importRecovery: payload.data } });
         return;
@@ -367,8 +374,9 @@ function AppContainer() {
         return;
       }
       console.log("[QR] import result:", result);
-    } catch (e) {
+    } catch (e: any) {
       console.error("[QR] import failed:", e);
+      setScanError(e?.message ?? "Could not recognise QR code");
     }
   }, [folios, updateFolio, navigate]);
 
@@ -458,8 +466,9 @@ function AppContainer() {
       )}
       <QrScanModal
         open={scanOpen}
-        onClose={() => setScanOpen(false)}
+        onClose={() => { setScanOpen(false); setScanError(null); }}
         onDecoded={handleDecoded}
+        error={scanError}
       />
       {pendingContactImport && (
         <ContactImportResolutionModal

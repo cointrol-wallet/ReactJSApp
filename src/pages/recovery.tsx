@@ -2806,7 +2806,7 @@ function MigrateAccountModal({
               {qrPayload && (
                 <div className="flex flex-col items-center gap-3 pt-1">
                   <div ref={qrContainerRef} className="inline-block rounded-lg border border-border p-3 bg-white">
-                    <QRCode value={qrPayload} size={220} level="L" />
+                    <QRCode value={qrPayload} size={300} level="L" />
                   </div>
                   <p className="text-xs text-muted-foreground text-center">Scan this on your existing device to submit the key update transaction.</p>
                   <button
@@ -2822,14 +2822,14 @@ function MigrateAccountModal({
                           await new Promise<void>((resolve, reject) => {
                             const img = new Image();
                             img.onload = () => {
-                              const pad = 20;
+                              const EXPORT = 640, PAD = 30;
                               const canvas = document.createElement("canvas");
-                              canvas.width = img.width + pad * 2;
-                              canvas.height = img.height + pad * 2;
+                              canvas.width = EXPORT;
+                              canvas.height = EXPORT;
                               const ctx = canvas.getContext("2d")!;
                               ctx.fillStyle = "#ffffff";
-                              ctx.fillRect(0, 0, canvas.width, canvas.height);
-                              ctx.drawImage(img, pad, pad);
+                              ctx.fillRect(0, 0, EXPORT, EXPORT);
+                              ctx.drawImage(img, PAD, PAD, EXPORT - PAD * 2, EXPORT - PAD * 2);
                               URL.revokeObjectURL(url);
                               canvas.toBlob((pngBlob) => {
                                 if (!pngBlob) { reject(new Error("blob failed")); return; }
