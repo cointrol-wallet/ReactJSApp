@@ -6,8 +6,9 @@ export function QrScanner({
 }: {
   onDecoded: (payload: string) => void;
 }) {
-  const [mode, setMode] = React.useState<"camera" | "image">("camera");
+  const [mode, setMode] = React.useState<"camera" | "image" | "file">("camera");
   const [imageError, setImageError] = React.useState<string | null>(null);
+  const [fileError, setFileError] = React.useState<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const controlsRef = React.useRef<IScannerControls | null>(null);
   const stoppedRef = React.useRef(false);
@@ -71,6 +72,20 @@ export function QrScanner({
     e.target.value = "";
   }
 
+  async function handleTextFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError(null);
+    try {
+      const text = await file.text();
+      if (!text.trim()) throw new Error("File is empty");
+      onDecoded(text.trim());
+    } catch (err: any) {
+      setFileError(err?.message ?? "Could not read file.");
+    }
+    e.target.value = "";
+  }
+
   return (
     <div className="p-4 space-y-3">
       {/* Mode toggle */}
@@ -78,16 +93,23 @@ export function QrScanner({
         <button
           type="button"
           className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${mode === "camera" ? "bg-primary text-primary-foreground border-primary" : "border-border bg-background"}`}
-          onClick={() => { setMode("camera"); setImageError(null); }}
+          onClick={() => { setMode("camera"); setImageError(null); setFileError(null); }}
         >
           Use camera
         </button>
         <button
           type="button"
           className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${mode === "image" ? "bg-primary text-primary-foreground border-primary" : "border-border bg-background"}`}
-          onClick={() => { setMode("image"); setImageError(null); }}
+          onClick={() => { setMode("image"); setImageError(null); setFileError(null); }}
         >
           Scan image
+        </button>
+        <button
+          type="button"
+          className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${mode === "file" ? "bg-primary text-primary-foreground border-primary" : "border-border bg-background"}`}
+          onClick={() => { setMode("file"); setImageError(null); setFileError(null); }}
+        >
+          Load file
         </button>
       </div>
 
@@ -112,6 +134,24 @@ export function QrScanner({
           </label>
           {imageError && (
             <div className="text-xs text-red-600">{imageError}</div>
+          )}
+        </>
+      )}
+
+      {mode === "file" && (
+        <>
+          <label className="flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed border-border bg-background p-6 cursor-pointer hover:bg-muted text-center gap-2">
+            <span className="text-sm text-foreground">Choose a transaction file</span>
+            <span className="text-xs text-muted-foreground">.txt files exported from the app</span>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              className="sr-only"
+              onChange={handleTextFile}
+            />
+          </label>
+          {fileError && (
+            <div className="text-xs text-red-600">{fileError}</div>
           )}
         </>
       )}

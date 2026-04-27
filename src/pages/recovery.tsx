@@ -21,7 +21,9 @@ import { addAttestation, AttestationRecord } from "@/storage/attestationStore";
 import { addFolio, Wallet as FolioWallet } from "@/storage/folioStore";
 import { getAllCoins } from "@/storage/coinStore";
 import { useAttestations } from "@/hooks/useAttestations";
-import { encodeSharePayload, QR_CHAR_LIMIT } from "@/lib/sharePayload";
+import { encodeSharePayload } from "@/lib/sharePayload";
+import { downloadShareTextFile, downloadTextFile } from "@/lib/shareTextFormat";
+import type { SharePayload } from "@/lib/sharePayload";
 import { rawToPacked } from "@/crypto/falconUtils";
 import QRCode from "react-qr-code";
 
@@ -81,15 +83,6 @@ function buildRecoveryExportText(
   return lines.join("\n");
 }
 
-function downloadTextFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 // ── Import prefill type ───────────────────────────────────────────────────────
 
@@ -1595,6 +1588,7 @@ function CreateAttestationModal({
   const [effectiveKeypairId, setEffectiveKeypairId] = React.useState("");
   const [keyHash, setKeyHash] = React.useState<`0x${string}`>("0x");
   const [qrPayload, setQrPayload] = React.useState("");
+  const [step3SharePayload, setStep3SharePayload] = React.useState<SharePayload | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
@@ -1714,7 +1708,7 @@ function CreateAttestationModal({
       if (!pkBytes) throw new Error("Failed to load public key from keyStore.");
 
       const hash = keccak256(bytesToHex(pkBytes));
-      const payload = encodeSharePayload({
+      const sp: SharePayload = {
         v: 1,
         t: "txrequest",
         data: {
@@ -1725,11 +1719,12 @@ function CreateAttestationModal({
           functionName: "recoverWallet",
           args: { "_newKey": hash },
         },
-      });
+      };
 
       setEffectiveKeypairId(kpId);
       setKeyHash(hash);
-      setQrPayload(payload);
+      setQrPayload(encodeSharePayload(sp));
+      setStep3SharePayload(sp);
       setStep(3);
     } catch (e: any) {
       setStep2Error(e?.message ?? "Failed to prepare key.");
@@ -1965,13 +1960,20 @@ function CreateAttestationModal({
                 </div>
               </div>
 
-              <div className="flex justify-center">
+              <div className="flex justify-center gap-2 flex-wrap">
                 <button
                   type="button"
                   className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
                   onClick={handleCopyQrData}
                 >
                   {copied ? "Copied!" : "Copy QR data"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-3 text-sm sm:px-3 sm:py-1"
+                  onClick={() => step3SharePayload && downloadShareTextFile(step3SharePayload)}
+                >
+                  Download file
                 </button>
               </div>
 
@@ -2527,15 +2529,13 @@ function MigrateAccountModal({
   const [levelError, setLevelError] = React.useState<string | null>(null);
   const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
   const [formKeypairId, setFormKeypairId] = React.useState("");
-  const [creatingQr, setCreatingQr] = React.useState(false);
-  const [qrPayload, setQrPayload] = React.useState<string | null>(null);
-  const [qrCopied, setQrCopied] = React.useState(false);
-  const [pkTooLargeRawHex, setPkTooLargeRawHex] = React.useState<string | null>(null);
-  const [pkCopied, setPkCopied] = React.useState(false);
+  const [generating, setGenerating] = React.useState(false);
+  const [exportSharePayload, setExportSharePayload] = React.useState<SharePayload | null>(null);
+  const [exportKeyHex, setExportKeyHex] = React.useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = React.useState(false);
   const [finishing, setFinishing] = React.useState(false);
   const [finishError, setFinishError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
-  const qrContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     listKeypairs().then(setKeypairs).catch(() => {});
@@ -2558,7 +2558,8 @@ function MigrateAccountModal({
     setManualFalconLevel(null);
     setLevelError(null);
     setFormKeypairId("");
-    setQrPayload(null);
+    setExportSharePayload(null);
+    setExportKeyHex(null);
     setFinishError(null);
 
     if (!key || !domain) return;
@@ -2601,24 +2602,23 @@ function MigrateAccountModal({
     ? keypairs.filter(k => k.level === effectiveFalconLevel && !folioKeypairIds.has(k.id))
     : [];
 
-  async function handleCreateQr() {
+  async function handleGenerateKey() {
     if (!domain || !accountAddress || !effectiveFalconLevel) return;
-    setCreatingQr(true);
+    setGenerating(true);
     setFinishError(null);
-    setPkTooLargeRawHex(null);
     try {
       let effectiveKeypairId = formKeypairId;
       if (!effectiveKeypairId) {
         const meta = await generateAndStoreKeypair(effectiveFalconLevel);
         effectiveKeypairId = meta.id;
         setFormKeypairId(meta.id);
-        // refresh keypairs list so the generated key appears in the dropdown
         listKeypairs().then(setKeypairs).catch(() => {});
       }
       const pkBytes = await getPublicKey(effectiveKeypairId);
       if (!pkBytes) throw new Error("Keypair not found.");
       const packed = rawToPacked(pkBytes, effectiveFalconLevel);
-      const payload = encodeSharePayload({
+      const packedHex = `packed:${bytesToHex(packed)}`;
+      const sp: SharePayload = {
         v: 1,
         t: "txrequest",
         data: {
@@ -2627,18 +2627,15 @@ function MigrateAccountModal({
           contractAddress: accountAddress,
           contractName: "QuantumAccount",
           functionName: "updatePublicKey",
-          args: { "_publicKeyBytes": `packed:${bytesToHex(packed)}` },
+          args: { "_publicKeyBytes": packedHex },
         },
-      });
-      if (payload.length > QR_CHAR_LIMIT) {
-        setPkTooLargeRawHex(bytesToHex(pkBytes));
-        return;
-      }
-      setQrPayload(payload);
+      };
+      setExportSharePayload(sp);
+      setExportKeyHex(packedHex);
     } catch (e: any) {
-      setFinishError(e?.message ?? "Failed to generate QR code.");
+      setFinishError(e?.message ?? "Failed to generate key.");
     } finally {
-      setCreatingQr(false);
+      setGenerating(false);
     }
   }
 
@@ -2687,13 +2684,13 @@ function MigrateAccountModal({
     }
   }
 
-  const canCreateQr = !!domain && !!accountAddress && !!effectiveFalconLevel && !fetchingLevel;
-  const canFinish = !!qrPayload && !finishing;
+  const canGenerate = !!domain && !!accountAddress && !!effectiveFalconLevel && !fetchingLevel;
+  const canFinish = !!exportSharePayload && !finishing;
 
   return createPortal(
     <div
       style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget && !creatingQr && !finishing) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !generating && !finishing) onClose(); }}
     >
       <div
         className="bg-background rounded-xl border border-border shadow-xl w-full overflow-y-auto"
@@ -2726,10 +2723,11 @@ function MigrateAccountModal({
                     setFalconLevel(null);
                     setLevelError(null);
                     setFormKeypairId("");
-                    setQrPayload(null);
+                    setExportSharePayload(null);
+                    setExportKeyHex(null);
                     setFinishError(null);
                   }}
-                  disabled={creatingQr || finishing}
+                  disabled={generating || finishing}
                 >
                   <option value={0} disabled>Select domain…</option>
                   {domains.map(d => (
@@ -2745,7 +2743,7 @@ function MigrateAccountModal({
                   className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
                   value={selectedContactKey}
                   onChange={e => handleContactChange(e.target.value)}
-                  disabled={!domain || creatingQr || finishing}
+                  disabled={!domain || generating || finishing}
                 >
                   <option value="">{domain ? "Select contact wallet…" : "Select a domain first"}</option>
                   {contactsForChain.map(({ contact, wallet, walletIdx }) => (
@@ -2770,10 +2768,10 @@ function MigrateAccountModal({
                       const v = e.target.value;
                       setManualFalconLevel(v === "512" ? 512 : v === "1024" ? 1024 : null);
                       setFormKeypairId("");
-                      setQrPayload(null);
-                      setPkTooLargeRawHex(null);
+                      setExportSharePayload(null);
+                      setExportKeyHex(null);
                     }}
-                    disabled={creatingQr || finishing}
+                    disabled={generating || finishing}
                   >
                     <option value="">Select Falcon level…</option>
                     <option value="512">Falcon-512</option>
@@ -2789,8 +2787,8 @@ function MigrateAccountModal({
                   <select
                     className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
                     value={formKeypairId}
-                    onChange={e => { setFormKeypairId(e.target.value); setQrPayload(null); setPkTooLargeRawHex(null); }}
-                    disabled={creatingQr || finishing}
+                    onChange={e => { setFormKeypairId(e.target.value); setExportSharePayload(null); setExportKeyHex(null); }}
+                    disabled={generating || finishing}
                   >
                     <option value="">Generate new Falcon-{effectiveFalconLevel} keypair</option>
                     {availableKeypairs.map(k => (
@@ -2802,75 +2800,35 @@ function MigrateAccountModal({
                 </div>
               )}
 
-              {/* QR code */}
-              {qrPayload && (
-                <div className="flex flex-col items-center gap-3 pt-1">
-                  <div ref={qrContainerRef} className="inline-block rounded-lg border border-border p-3 bg-white">
-                    <QRCode value={qrPayload} size={300} level="L" />
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center">Scan this on your existing device to submit the key update transaction.</p>
-                  <button
-                    type="button"
-                    className="rounded-md border border-border px-3 py-1.5 text-xs"
-                    onClick={async () => {
-                      const svgEl = qrContainerRef.current?.querySelector("svg");
-                      if (svgEl) {
-                        try {
-                          const svgStr = new XMLSerializer().serializeToString(svgEl);
-                          const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-                          const url = URL.createObjectURL(blob);
-                          await new Promise<void>((resolve, reject) => {
-                            const img = new Image();
-                            img.onload = () => {
-                              const EXPORT = 640, PAD = 30;
-                              const canvas = document.createElement("canvas");
-                              canvas.width = EXPORT;
-                              canvas.height = EXPORT;
-                              const ctx = canvas.getContext("2d")!;
-                              ctx.fillStyle = "#ffffff";
-                              ctx.fillRect(0, 0, EXPORT, EXPORT);
-                              ctx.drawImage(img, PAD, PAD, EXPORT - PAD * 2, EXPORT - PAD * 2);
-                              URL.revokeObjectURL(url);
-                              canvas.toBlob((pngBlob) => {
-                                if (!pngBlob) { reject(new Error("blob failed")); return; }
-                                navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })])
-                                  .then(resolve).catch(reject);
-                              }, "image/png");
-                            };
-                            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("svg load failed")); };
-                            img.src = url;
-                          });
-                        } catch {
-                          await navigator.clipboard.writeText(qrPayload).catch(() => {});
+              {/* Export section — shown after Generate Key */}
+              {exportSharePayload && (
+                <div className="rounded-md border border-border px-3 py-3 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    On your existing device, open the QR scanner → <strong>Load file</strong> and select the downloaded file.
+                    The transaction form will open pre-filled. Alternatively, copy the key bytes and paste them manually into <strong>_publicKeyBytes</strong>.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      className="flex-1 rounded-md border border-border px-3 py-1.5 text-xs"
+                      onClick={async () => {
+                        if (exportKeyHex) {
+                          await navigator.clipboard.writeText(exportKeyHex).catch(() => {});
+                          setKeyCopied(true);
+                          setTimeout(() => setKeyCopied(false), 2000);
                         }
-                      } else {
-                        await navigator.clipboard.writeText(qrPayload).catch(() => {});
-                      }
-                      setQrCopied(true);
-                      setTimeout(() => setQrCopied(false), 2000);
-                    }}
-                  >
-                    {qrCopied ? "Copied!" : "Copy QR image"}
-                  </button>
-                </div>
-              )}
-
-              {/* Key-too-large fallback (Falcon-1024 may exceed QR capacity) */}
-              {pkTooLargeRawHex && (
-                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 space-y-2">
-                  <p className="text-xs text-amber-800 font-medium">Key too large for QR code</p>
-                  <p className="text-xs text-amber-700">This Falcon-1024 key exceeds the QR code capacity. Copy the key data below and paste it manually into the <strong>_publicKeyBytes</strong> field on your existing device.</p>
-                  <button
-                    type="button"
-                    className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(pkTooLargeRawHex).catch(() => {});
-                      setPkCopied(true);
-                      setTimeout(() => setPkCopied(false), 2000);
-                    }}
-                  >
-                    {pkCopied ? "Copied!" : "Copy public key data"}
-                  </button>
+                      }}
+                    >
+                      {keyCopied ? "Copied!" : "Copy key bytes"}
+                    </button>
+                    <button
+                      type="button"
+                      className="flex-1 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium"
+                      onClick={() => downloadShareTextFile(exportSharePayload)}
+                    >
+                      Download transaction file
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2881,14 +2839,14 @@ function MigrateAccountModal({
 
               {/* Buttons */}
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={creatingQr || finishing}>Cancel</button>
+                <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose} disabled={generating || finishing}>Cancel</button>
                 <button
                   type="button"
                   className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50"
-                  onClick={handleCreateQr}
-                  disabled={!canCreateQr || creatingQr || finishing}
+                  onClick={handleGenerateKey}
+                  disabled={!canGenerate || generating || finishing}
                 >
-                  {creatingQr ? "Generating…" : "Create QR Code"}
+                  {generating ? "Generating…" : "Generate Key"}
                 </button>
                 <button
                   type="button"

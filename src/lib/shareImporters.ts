@@ -147,52 +147,95 @@ export async function applyContactUpdate(
   await updateContact(existingId, { wallets: mergedWallets });
 }
 
-async function upsertContractByChainAndAddress(payload: Extract<SharePayload, { t: "contract" }>) {
+export type ContractImportReview = {
+  mode: "review";
+  incoming: {
+    name: string;
+    address: string;
+    chainId: number;
+    metadata?: Record<string, any>;
+  };
+  existingId: string | null;
+};
+
+export type CoinImportReview = {
+  mode: "review";
+  incoming: {
+    name: string;
+    symbol: string;
+    decimals: number;
+    chainId: number;
+    address: string;
+    type: string;
+  };
+  existingId: string | null;
+};
+
+async function reviewContractImport(payload: Extract<SharePayload, { t: "contract" }>): Promise<ContractImportReview> {
   const contracts = await getAllContracts();
   const addr = normAddr(payload.data.address);
-
   const existing = contracts.find(
     (c) => c.chainId === payload.data.chainId && normAddr(c.address) === addr
   );
-
-  if (existing) return { mode: "matched" as const, existingId: existing.id };
-
-  await addContract({
-    name: payload.data.name,
-    address: payload.data.address,
-    chainId: payload.data.chainId,
-    metadata: payload.data.metadata,
-  });
-
-  return { mode: "created" as const, abiOmitted: payload.data.abiOmitted === true };
+  return {
+    mode: "review",
+    incoming: {
+      name: payload.data.name,
+      address: payload.data.address,
+      chainId: payload.data.chainId,
+      metadata: payload.data.metadata,
+    },
+    existingId: existing?.id ?? null,
+  };
 }
 
-async function upsertCoinByChainAndAddress(
-  payload: Extract<SharePayload, { t: "coin" }>,
-  deps?: ImportDeps
-) {
+async function reviewCoinImport(payload: Extract<SharePayload, { t: "coin" }>): Promise<CoinImportReview> {
   const coins = await getAllCoins();
   const addr = normAddr(payload.data.address);
-
   const existing = coins.find(
     (c) => c.chainId === payload.data.chainId && normAddr(c.address) === addr
   );
-  if (existing) return { mode: "matched" as const, existingId: existing.id };
+  return {
+    mode: "review",
+    incoming: {
+      name: payload.data.name,
+      symbol: payload.data.symbol,
+      decimals: payload.data.decimals,
+      chainId: payload.data.chainId,
+      address: payload.data.address,
+      type: payload.data.type,
+    },
+    existingId: existing?.id ?? null,
+  };
+}
 
+export async function applyAddContract(incoming: ContractImportReview["incoming"]): Promise<void> {
+  await addContract({
+    name: incoming.name,
+    address: incoming.address,
+    chainId: incoming.chainId,
+    metadata: incoming.metadata,
+  });
+}
+
+export async function applyAddCoin(
+  incoming: CoinImportReview["incoming"],
+  deps?: ImportDeps
+): Promise<void> {
   const updatedCoins = await addCoin({
-    name: payload.data.name,
-    symbol: payload.data.symbol,
-    decimals: payload.data.decimals,
-    chainId: payload.data.chainId,
-    address: payload.data.address,
-    type: payload.data.type,
+    name: incoming.name,
+    symbol: incoming.symbol,
+    decimals: incoming.decimals,
+    chainId: incoming.chainId,
+    address: incoming.address,
+    type: incoming.type,
   });
 
   const newCoin = updatedCoins[updatedCoins.length - 1];
 
   if (deps?.folios && deps?.updateFolio) {
     for (const folio of deps.folios) {
-      if (folio.chainId === Number(payload.data.chainId)) {
+      if (folio.chainId === Number(incoming.chainId)) {
         const existingWallet = folio.wallet ?? [];
         await deps.updateFolio(folio.id, {
           wallet: [...existingWallet, { coin: newCoin.id, balance: 0n }],
@@ -200,14 +243,12 @@ async function upsertCoinByChainAndAddress(
       }
     }
   }
-
-  return { mode: "created" as const };
 }
 
-export async function importSharePayload(payload: SharePayload, deps?: ImportDeps) {
+export async function importSharePayload(payload: SharePayload) {
   if (payload.t === "contact" || payload.t === "profile") return reviewContactImport(payload);
-  if (payload.t === "contract") return upsertContractByChainAndAddress(payload);
-  if (payload.t === "coin") return upsertCoinByChainAndAddress(payload, deps);
+  if (payload.t === "contract") return reviewContractImport(payload);
+  if (payload.t === "coin") return reviewCoinImport(payload);
   // Recovery and txrequest payloads are returned as prefill data for the caller
   // to handle — they do not write to any store directly.
   if (payload.t === "recovery") return { mode: "prefill" as const, data: payload.data };

@@ -20,11 +20,14 @@ const Recovery     = React.lazy(() => import("./pages/recovery").then(m => ({ de
 import { initWallet } from "./lib/wallets";
 import { FalconProvider } from "./crypto/falconProvider";
 import { QrScanner } from "./components/ui/QrScanner";
-import { decodeSharePayload } from "./lib/sharePayload";
-import { importSharePayload, applyAddNewContact, applyContactUpdate } from "./lib/shareImporters";
-import type { ContactImportReview, ContactMatchInfo } from "./lib/shareImporters";
+import { decodeShareAny } from "./lib/shareTextFormat";
+import { importSharePayload, applyAddNewContact, applyContactUpdate, applyAddContract, applyAddCoin } from "./lib/shareImporters";
+import type { ContactImportReview, ContactMatchInfo, ContractImportReview, CoinImportReview } from "./lib/shareImporters";
 import { ContactImportResolutionModal } from "./components/ui/ContactImportResolutionModal";
+import { ContractImportReviewModal } from "./components/ui/ContractImportReviewModal";
+import { CoinImportReviewModal } from "./components/ui/CoinImportReviewModal";
 import { useFolios } from "./hooks/useFolios";
+import { useDomains } from "./hooks/useDomains";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { OnboardingModal } from "./components/OnboardingModal";
@@ -345,6 +348,8 @@ function AppContainer() {
     incoming: ContactImportReview["incoming"];
     matches: ContactMatchInfo[];
   } | null>(null);
+  const [pendingContractImport, setPendingContractImport] = React.useState<ContractImportReview | null>(null);
+  const [pendingCoinImport, setPendingCoinImport] = React.useState<CoinImportReview | null>(null);
   const [onboardingDismissed, setOnboardingDismissed] = React.useState(
     () => localStorage.getItem("cointrol_onboarding_seen") === "1"
   );
@@ -353,24 +358,33 @@ function AppContainer() {
   );
 
   const { folios, loading: foliosLoading, updateFolio, clearFolios } = useFolios();
+  const { domains } = useDomains();
   const navigate = useNavigate();
 
   const handleDecoded = React.useCallback(async (qrText: string) => {
     setScanError(null);
     try {
-      const payload = decodeSharePayload(qrText.trim());
+      const payload = decodeShareAny(qrText.trim());
       if (payload.t === "recovery") {
+        setScanOpen(false);
         navigate("/recovery", { state: { importRecovery: payload.data } });
         return;
       }
       if (payload.t === "txrequest") {
+        setScanOpen(false);
         navigate("/transactions", { state: { txQr: payload.data } });
         return;
       }
-      const result = await importSharePayload(payload, { folios, updateFolio });
+      const result = await importSharePayload(payload);
       if (result.mode === "review") {
         setScanOpen(false);
-        setPendingContactImport({ incoming: result.incoming, matches: result.matches });
+        if (payload.t === "contact" || payload.t === "profile") {
+          setPendingContactImport({ incoming: (result as any).incoming, matches: (result as any).matches });
+        } else if (payload.t === "contract") {
+          setPendingContractImport(result as ContractImportReview);
+        } else if (payload.t === "coin") {
+          setPendingCoinImport(result as CoinImportReview);
+        }
         return;
       }
       console.log("[QR] import result:", result);
@@ -378,7 +392,7 @@ function AppContainer() {
       console.error("[QR] import failed:", e);
       setScanError(e?.message ?? "Could not recognise QR code");
     }
-  }, [folios, updateFolio, navigate]);
+  }, [navigate]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -485,6 +499,32 @@ function AppContainer() {
             setPendingContactImport(null);
           }}
           onCancel={() => setPendingContactImport(null)}
+        />
+      )}
+      {pendingContractImport && (
+        <ContractImportReviewModal
+          incoming={pendingContractImport.incoming}
+          existingId={pendingContractImport.existingId}
+          onConfirm={async () => {
+            await applyAddContract(pendingContractImport.incoming);
+            setPendingContractImport(null);
+          }}
+          onCancel={() => setPendingContractImport(null)}
+        />
+      )}
+      {pendingCoinImport && (
+        <CoinImportReviewModal
+          incoming={pendingCoinImport.incoming}
+          existingId={pendingCoinImport.existingId}
+          domains={domains}
+          onConfirm={async (override) => {
+            await applyAddCoin(
+              override ? { ...pendingCoinImport.incoming, ...override } : pendingCoinImport.incoming,
+              { folios, updateFolio }
+            );
+            setPendingCoinImport(null);
+          }}
+          onCancel={() => setPendingCoinImport(null)}
         />
       )}
       <OnboardingModal

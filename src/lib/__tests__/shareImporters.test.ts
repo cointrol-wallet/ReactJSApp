@@ -299,33 +299,36 @@ describe("importSharePayload — contract", () => {
     },
   };
 
-  it("creates a new contract", async () => {
+  it("returns review mode for a new contract (no existing)", async () => {
     const result = await importSharePayload(payload);
-    expect(result.mode).toBe("created");
-    const contracts = await getAllContracts();
-    expect(contracts[0].name).toBe("MyToken");
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).toBeNull();
+    expect((result as any).incoming.name).toBe("MyToken");
   });
 
-  it("returns matched when contract with same chainId+address exists", async () => {
+  it("returns review mode with non-null existingId when contract already exists", async () => {
     await addContract({ name: "MyToken", address: ADDR, chainId: 1 });
     const result = await importSharePayload(payload);
-    expect(result.mode).toBe("matched");
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).not.toBeNull();
   });
 
-  it("reports abiOmitted when flag is set", async () => {
+  it("returns review mode even when abiOmitted flag is set", async () => {
     const noAbi: SharePayload = {
       v: 1,
       t: "contract",
       data: { name: "NFT", address: ADDR2, chainId: 137, abiOmitted: true },
     };
     const result = await importSharePayload(noAbi);
-    expect((result as any).abiOmitted).toBe(true);
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).toBeNull();
   });
 
   it("match uses normalized address (case-insensitive)", async () => {
     await addContract({ name: "MyToken", address: ADDR.toUpperCase() as any, chainId: 1 });
     const result = await importSharePayload(payload);
-    expect(result.mode).toBe("matched");
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).not.toBeNull();
   });
 });
 
@@ -347,18 +350,18 @@ describe("importSharePayload — coin", () => {
     },
   };
 
-  it("creates a new coin", async () => {
+  it("returns review mode for a new coin (no existing)", async () => {
     const result = await importSharePayload(payload);
-    expect(result.mode).toBe("created");
-    const coins = await getAllCoins();
-    const found = coins.find(c => c.symbol === "USDC");
-    expect(found).toBeDefined();
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).toBeNull();
+    expect((result as any).incoming.symbol).toBe("USDC");
   });
 
-  it("returns matched when coin with same chainId+address exists", async () => {
+  it("returns review mode with non-null existingId when coin already exists", async () => {
     await addCoin({ name: "USDC", symbol: "USDC", decimals: 6, chainId: 1, address: ADDR, type: "ERC20" });
     const result = await importSharePayload(payload);
-    expect(result.mode).toBe("matched");
+    expect(result.mode).toBe("review");
+    expect((result as any).existingId).not.toBeNull();
   });
 });
 
