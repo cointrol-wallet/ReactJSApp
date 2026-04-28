@@ -1,10 +1,10 @@
-import { SiFacebook, SiGoogle, SiX, SiGithub } from "react-icons/si";
+import { SiFacebook, SiGoogle, /*SiX,*/ SiGithub } from "react-icons/si"; // SiX removed: Twitter free tier no longer available
 import { FaApple, FaMicrosoft } from "react-icons/fa";
 
 /**
  * Props are intentionally simple; wire them to NextAuth/Supabase/etc.
  */
-type Provider = "google" | "apple" | "microsoft" | "facebook" | "github" | "x";
+type Provider = "google" | "apple" | "microsoft" | "facebook" | "github"; // | "x" — Twitter free tier no longer available
 
 type SocialButtonsProps = {
   disabled?: boolean;
@@ -85,7 +85,7 @@ export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
         <span>Continue with GitHub</span>
       </button>
 
-      {/* X: black background (brand commonly uses black/white) */}
+      {/* X: disabled — Twitter free tier no longer available
       <button
         type="button"
         disabled={disabled}
@@ -100,6 +100,7 @@ export function SocialButtons({ disabled, onSignIn }: SocialButtonsProps) {
         <SiX className={iconCls} aria-hidden="true" />
         <span>Continue with X</span>
       </button>
+      */}
 
       {/* Facebook: blue background */}
       <button

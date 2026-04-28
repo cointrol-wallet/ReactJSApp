@@ -9,7 +9,7 @@ import {
   auth,
   googleProvider,
   facebookProvider,
-  twitterProvider,
+  // twitterProvider, // Twitter free tier no longer available
   githubProvider,
   appleProvider,
   microsoftProvider,
@@ -38,7 +38,7 @@ export function LoginPage() {
     apple: appleProvider,
     microsoft: microsoftProvider,
     github: githubProvider,
-    x: twitterProvider,
+    // x: twitterProvider, // Twitter free tier no longer available
     facebook: facebookProvider,
   } as const;
 
