@@ -1668,7 +1668,7 @@ export function Transactions() {
                 <label className="text-xs font-medium">Domain</label>
               </div>
               <select
-                className="w-full rounded-md border px-2 py-1 text-sm"
+                className="w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
                 value={modalChainId}
                 onChange={(e) => {
                   const id = Number(e.target.value);
@@ -1690,7 +1690,7 @@ export function Transactions() {
                 <label className="text-xs font-medium">Folio</label>
               </div>
               <select
-                className="w-full rounded-md border px-2 py-1 text-sm"
+                className="w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
                 disabled={!modalChainId}
                 value={selectFolio?.id ?? ""}
                 onChange={(e) => {
