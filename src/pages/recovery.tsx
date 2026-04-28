@@ -1717,7 +1717,7 @@ function CreateAttestationModal({
           contractAddress: recoverableResolved!,
           contractName: "Recoverable",
           functionName: "recoverWallet",
-          args: { "_newKey": hash },
+          args: { "newKey": hash },
         },
       };
 
@@ -2627,7 +2627,7 @@ function MigrateAccountModal({
           contractAddress: accountAddress,
           contractName: "QuantumAccount",
           functionName: "updatePublicKey",
-          args: { "_publicKeyBytes": packedHex },
+          args: { "publicKeyBytes": packedHex },
         },
       };
       setExportSharePayload(sp);
