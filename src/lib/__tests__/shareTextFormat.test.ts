@@ -280,6 +280,42 @@ describe("txrequest text round-trip — transfer", () => {
     };
     expect(roundTrip(p)).toEqual(p);
   });
+
+  it("preserves underscore-prefixed arg keys verbatim (normalization is the consumer's responsibility)", () => {
+    // The text format must not silently strip or rename arg keys.
+    // Keys like "_publicKeyBytes" written by legacy builders survive encode→decode unchanged.
+    const p: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "contract",
+        chainId: 11155111,
+        contractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { _publicKeyBytes: "0xdeadbeef" },
+      },
+    };
+    const decoded = roundTrip(p) as Extract<SharePayload, { t: "txrequest" }>;
+    expect(decoded.data.args!["_publicKeyBytes"]).toBe("0xdeadbeef");
+    expect(decoded.data.args!["publicKeyBytes"]).toBeUndefined();
+  });
+
+  it("arg keys with multiple leading underscores are preserved verbatim", () => {
+    const p: SharePayload = {
+      v: 1,
+      t: "txrequest",
+      data: {
+        type: "contract",
+        chainId: 1,
+        contractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        functionName: "foo",
+        args: { __newKey: "0xabcd" },
+      },
+    };
+    const decoded = roundTrip(p) as Extract<SharePayload, { t: "txrequest" }>;
+    expect(decoded.data.args!["__newKey"]).toBe("0xabcd");
+  });
 });
 
 // ---------------------------------------------------------------------------

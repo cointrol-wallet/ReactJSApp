@@ -360,6 +360,10 @@ export function Transactions() {
         setRecoverableAddressInput(txQr.contractAddress);
         if (txQr.chainId) setModalChainId(txQr.chainId);
         if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+        if (!selectFolio && txQr.chainId) {
+          const chainFolios = folios.filter(f => f.chainId === txQr.chainId);
+          if (chainFolios.length === 1) { setSelectFolio(chainFolios[0]); setModalChainId(chainFolios[0].chainId); }
+        }
         setTransferOrTransaction(false);
         setCardTitle("Use a Smart Contract");
         setCardDescription("Select any contract and then choose a function");
@@ -397,6 +401,10 @@ export function Transactions() {
           if (contract) setSelectContract(contract);
           if (txQr.chainId) setModalChainId(txQr.chainId);
           if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+          if (!selectFolio && txQr.chainId) {
+            const chainFolios = folios.filter(f => f.chainId === txQr.chainId);
+            if (chainFolios.length === 1) { setSelectFolio(chainFolios[0]); setModalChainId(chainFolios[0].chainId); }
+          }
           setTransferOrTransaction(false);
           setCardTitle("Use a Smart Contract");
           setCardDescription("Select any contract and then choose a function");
@@ -410,6 +418,10 @@ export function Transactions() {
       if (coin) setSelectCoin(coin);
       if (txQr.chainId) setModalChainId(txQr.chainId);
       if (txQr.functionName) pendingPrefillFnRef.current = txQr.functionName;
+      if (!selectFolio && txQr.chainId) {
+        const chainFolios = folios.filter(f => f.chainId === txQr.chainId);
+        if (chainFolios.length === 1) { setSelectFolio(chainFolios[0]); setModalChainId(chainFolios[0].chainId); }
+      }
       setTransferOrTransaction(true);
       setCardTitle("Send or Approve Coins");
       setCardDescription("Select any coin and then choose an option.");
@@ -989,6 +1001,11 @@ export function Transactions() {
     }
 
     if (isReading) return;
+
+    if (!selectFolio) {
+      setError("Please select a folio account to send from");
+      return;
+    }
 
     try {
       setIsReading(true);

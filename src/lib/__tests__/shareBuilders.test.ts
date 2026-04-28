@@ -313,6 +313,44 @@ describe("buildTxRequestShare size guard", () => {
 // buildTxRequestShare
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Arg key regression: builders must use stripped keys (no leading underscores)
+// ---------------------------------------------------------------------------
+
+describe("buildTxRequestShare — arg key format", () => {
+  it("migrate-account payload uses 'publicKeyBytes' not '_publicKeyBytes'", () => {
+    // Regression guard for MigrateAccountModal.handleGenerateKey fix.
+    // getInputName strips leading underscores, so keys in txrequest args must
+    // match the stripped form or the import pre-fill will silently fail.
+    const p = buildTxRequestShare({
+      type: "contract",
+      chainId: 11155111,
+      contractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      contractName: "QuantumAccount",
+      functionName: "updatePublicKey",
+      args: { publicKeyBytes: "0xdeadbeef" },
+    });
+    const args = (p.data as any).args ?? {};
+    expect(args["publicKeyBytes"]).toBe("0xdeadbeef");
+    expect(args["_publicKeyBytes"]).toBeUndefined();
+  });
+
+  it("recover-wallet payload uses 'newKey' not '_newKey'", () => {
+    // Regression guard for InitiateRecoveryModal fix.
+    const p = buildTxRequestShare({
+      type: "contract",
+      chainId: 11155111,
+      contractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      contractName: "Recoverable",
+      functionName: "recoverWallet",
+      args: { newKey: "0xcafe" },
+    });
+    const args = (p.data as any).args ?? {};
+    expect(args["newKey"]).toBe("0xcafe");
+    expect(args["_newKey"]).toBeUndefined();
+  });
+});
+
 describe("buildTxRequestShare", () => {
   it("sets v=1 and t=txrequest", () => {
     const p = buildTxRequestShare({ type: "transfer", chainId: 1 });
