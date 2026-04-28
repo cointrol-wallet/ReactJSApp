@@ -24,7 +24,6 @@ import { useAttestations } from "@/hooks/useAttestations";
 import { encodeSharePayload } from "@/lib/sharePayload";
 import { downloadShareTextFile, downloadTextFile } from "@/lib/shareTextFormat";
 import type { SharePayload } from "@/lib/sharePayload";
-import { rawToPacked } from "@/crypto/falconUtils";
 import QRCode from "react-qr-code";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2616,8 +2615,7 @@ function MigrateAccountModal({
       }
       const pkBytes = await getPublicKey(effectiveKeypairId);
       if (!pkBytes) throw new Error("Keypair not found.");
-      const packed = rawToPacked(pkBytes, effectiveFalconLevel);
-      const packedHex = `packed:${bytesToHex(packed)}`;
+      const keyHex = bytesToHex(pkBytes);
       const sp: SharePayload = {
         v: 1,
         t: "txrequest",
@@ -2627,11 +2625,11 @@ function MigrateAccountModal({
           contractAddress: accountAddress,
           contractName: "QuantumAccount",
           functionName: "updatePublicKey",
-          args: { "publicKeyBytes": packedHex },
+          args: { "publicKeyBytes": keyHex },
         },
       };
       setExportSharePayload(sp);
-      setExportKeyHex(packedHex);
+      setExportKeyHex(keyHex);
     } catch (e: any) {
       setFinishError(e?.message ?? "Failed to generate key.");
     } finally {
@@ -2805,7 +2803,7 @@ function MigrateAccountModal({
                 <div className="rounded-md border border-border px-3 py-3 space-y-3">
                   <p className="text-xs text-muted-foreground">
                     On your existing device, open the QR scanner → <strong>Load file</strong> and select the downloaded file.
-                    The transaction form will open pre-filled. Alternatively, copy the key bytes and paste them manually into <strong>_publicKeyBytes</strong>.
+                    The transaction form will open pre-filled. Alternatively, copy the key bytes and paste them manually into the <strong>publicKeyBytes</strong> field.
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <button

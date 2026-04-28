@@ -869,9 +869,10 @@ export function Transactions() {
 
 
   React.useEffect(() => {
-    // Whenever contract changes, reset function selection
+    // Whenever contract changes, reset function selection.
+    // Preserve argValues if a QR prefill is waiting to be applied.
     setSelectedFnName("");
-    setArgValues({});
+    if (!pendingArgValuesRef.current) setArgValues({});
     setPayableValue("");
     setReadResult(null);
     setError(null);

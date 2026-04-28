@@ -303,7 +303,7 @@ describe("buildTxRequestShare size guard", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: hugeArg },
+        args: { publicKeyBytes: hugeArg },
       })
     ).toThrow(/too large/i);
   });

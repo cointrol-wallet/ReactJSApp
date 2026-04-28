@@ -250,11 +250,16 @@ describe("txrequest QR size with Falcon keys", () => {
   const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   const CHAIN_ID = 11155111;
 
-  function makePackedHex(packedBytes: number): string {
-    return "packed:0x" + "09".repeat(packedBytes);
+  // Non-repetitive hex simulates real Falcon key entropy so LZ-string cannot compress it.
+  function nonRepetitiveHex(bytes: number): string {
+    let h = "0x";
+    for (let i = 1; i <= bytes; i++) {
+      h += ((Math.imul(i, 0x9E3779B9) >>> 24) & 0xFF).toString(16).padStart(2, "0");
+    }
+    return h;
   }
 
-  it("Falcon-512 packed key (897 bytes) fits within QR_CHAR_LIMIT", () => {
+  it("Falcon-512 raw key (1026 bytes, non-repetitive) fits within QR_CHAR_LIMIT", () => {
     const payload: SharePayload = {
       v: 1,
       t: "txrequest",
@@ -264,14 +269,15 @@ describe("txrequest QR size with Falcon keys", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: makePackedHex(897) },
+        args: { publicKeyBytes: nonRepetitiveHex(1026) },
       },
     };
     const encoded = encodeSharePayload(payload);
+    // LZ-string compression keeps Falcon-512 raw keys within the QR limit.
     expect(encoded.length).toBeLessThanOrEqual(2800);
   });
 
-  it("Falcon-1024 packed key (1793 bytes) may exceed QR_CHAR_LIMIT — documents the boundary", () => {
+  it("Falcon-1024 raw key (2050 bytes, non-repetitive) exceeds QR_CHAR_LIMIT — text file is the required transport", () => {
     const payload: SharePayload = {
       v: 1,
       t: "txrequest",
@@ -281,15 +287,12 @@ describe("txrequest QR size with Falcon keys", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: makePackedHex(1793) },
+        args: { publicKeyBytes: nonRepetitiveHex(2050) },
       },
     };
     const encoded = encodeSharePayload(payload);
-    // Falcon-1024 is borderline — this test documents the actual size,
-    // and confirms the size guard in handleCreateQr() / buildTxRequestShare()
-    // is necessary to prevent a silently broken QR code.
-    expect(encoded.length).toBeGreaterThan(0); // always passes; the logged value is the key signal
-    console.log(`Falcon-1024 packed QR encoded length: ${encoded.length} (limit: 2800)`);
+    expect(encoded.length).toBeGreaterThan(2800);
+    console.log(`Falcon-1024 raw QR encoded length: ${encoded.length} (limit: 2800)`);
   });
 });
 

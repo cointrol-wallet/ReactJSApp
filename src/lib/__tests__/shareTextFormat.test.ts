@@ -179,18 +179,19 @@ describe("recovery text round-trip", () => {
 });
 
 // ---------------------------------------------------------------------------
-// txrequest — contract type with Falcon packed keys
+// txrequest — contract type with Falcon raw hex keys
 // ---------------------------------------------------------------------------
 
 describe("txrequest text round-trip — contract with Falcon keys", () => {
   const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   const CHAIN_ID = 11155111;
 
-  function makePackedHex(bytes: number): string {
-    return "packed:0x" + "09".repeat(bytes);
+  // Raw hex: Falcon-512 public key is 1026 bytes, Falcon-1024 is 2050 bytes
+  function makeRawHex(bytes: number): string {
+    return "0x" + "09".repeat(bytes);
   }
 
-  it("Falcon-512 packed key (897 bytes) survives encode → file → trim → decode", () => {
+  it("Falcon-512 raw key (1026 bytes) survives encode → file → trim → decode", () => {
     const p: SharePayload = {
       v: 1,
       t: "txrequest",
@@ -200,13 +201,13 @@ describe("txrequest text round-trip — contract with Falcon keys", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: makePackedHex(897) },
+        args: { publicKeyBytes: makeRawHex(1026) },
       },
     };
     expect(decodeShareText(encodeShareText(p).trim())).toEqual(p);
   });
 
-  it("Falcon-1024 packed key (1793 bytes) survives encode → file → trim → decode", () => {
+  it("Falcon-1024 raw key (2050 bytes) survives encode → file → trim → decode", () => {
     const p: SharePayload = {
       v: 1,
       t: "txrequest",
@@ -216,7 +217,7 @@ describe("txrequest text round-trip — contract with Falcon keys", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: makePackedHex(1793) },
+        args: { publicKeyBytes: makeRawHex(2050) },
       },
     };
     expect(decodeShareText(encodeShareText(p).trim())).toEqual(p);
@@ -232,28 +233,11 @@ describe("txrequest text round-trip — contract with Falcon keys", () => {
         contractAddress: ADDR,
         contractName: "QuantumAccount",
         functionName: "updatePublicKey",
-        args: { _publicKeyBytes: makePackedHex(897) },
+        args: { publicKeyBytes: makeRawHex(1026) },
       },
     };
     const fileContent = encodeShareText(p) + "\n";
     expect(decodeShareText(fileContent.trim())).toEqual(p);
-  });
-
-  it("Arg values containing ':' decode correctly (packed:0x prefix)", () => {
-    const p: SharePayload = {
-      v: 1,
-      t: "txrequest",
-      data: {
-        type: "contract",
-        chainId: CHAIN_ID,
-        contractAddress: ADDR,
-        contractName: "QuantumAccount",
-        functionName: "updatePublicKey",
-        args: { _publicKeyBytes: "packed:0x1a2b3c4d5e6f" },
-      },
-    };
-    const decoded = roundTrip(p) as Extract<SharePayload, { t: "txrequest" }>;
-    expect(decoded.data.args!["_publicKeyBytes"]).toBe("packed:0x1a2b3c4d5e6f");
   });
 });
 
