@@ -1,0 +1,1 @@
+function n(r,i){const t=i.trim();if(r==="string"||r==="address")return t;if(r==="bool")return t.toLowerCase()==="true";if(r.startsWith("uint")||r.startsWith("int"))return BigInt(t||"0");if(r.startsWith("bytes")&&!r.endsWith("[]"))return t;if(r.endsWith("[]"))try{return JSON.parse(t||"[]")}catch{throw new Error(`Invalid array JSON for type ${r}`)}return t}export{n as p};
