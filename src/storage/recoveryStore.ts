@@ -137,7 +137,7 @@ export async function addRecovery(input: {
 
 export async function updateRecovery(
   id: string,
-  patch: Partial<Omit<Recovery, "id" | "createdAt" | "paymaster" | "chainId" | "recoverableAddress" | "name">>
+  patch: Partial<Omit<Recovery, "id" | "createdAt" | "paymaster" | "chainId" | "name">>
 ): Promise<Recovery[]> {
   const recoveries = await loadRecoveryRaw();
   const now = Date.now();

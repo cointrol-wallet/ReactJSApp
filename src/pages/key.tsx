@@ -12,7 +12,7 @@ import {
 } from "@/storage/keyStore";
 import { getAllFolios, Folio } from "@/storage/folioStore";
 import { getAllDomains, Domain } from "@/storage/domainStore";
-import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
+import { useTx, ADMIN_KEY, BundlerAPI } from "@/lib/submitTransaction";
 import { encodeFunctionData, bytesToHex, keccak256, parseEther, type Hex } from "viem";
 import { quantumAccountAbi, extractAbi, getFunctions, AbiFunctionFragment } from "@/lib/abiTypes";
 import { notifyBundlerPublicKeyUpdate } from "@/lib/wallets";
@@ -603,6 +603,8 @@ export function Keys() {
   const [rotatingFolio, setRotatingFolio] = React.useState<{ folio: Folio; domain: Domain } | null>(null);
   const [signingKey, setSigningKey] = React.useState<KeypairMeta | null>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [syncingFolioId, setSyncingFolioId] = React.useState<string | null>(null);
+  const [syncResult, setSyncResult] = React.useState<{ folioId: string; ok: boolean } | null>(null);
 
   const activeKeypairs   = React.useMemo(() => keypairs.filter(k => !k.archivedAt), [keypairs]);
   const archivedKeypairs = React.useMemo(() => keypairs.filter(k =>  k.archivedAt), [keypairs]);
@@ -656,6 +658,19 @@ export function Keys() {
 
   function domainForFolio(folio: Folio): Domain | undefined {
     return domains.find(d => d.chainId === folio.chainId);
+  }
+
+  async function handleSyncBundlerKey(folio: Folio, domain: Domain) {
+    setSyncingFolioId(folio.id);
+    setSyncResult(null);
+    try {
+      await BundlerAPI.syncPublicKey(folio.address as `0x${string}`, domain.name);
+      setSyncResult({ folioId: folio.id, ok: true });
+    } catch {
+      setSyncResult({ folioId: folio.id, ok: false });
+    } finally {
+      setSyncingFolioId(null);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -782,16 +797,31 @@ export function Keys() {
                     {assigned.map(f => {
                       const dom = domainForFolio(f);
                       return (
-                        <div key={f.id} className="flex items-center justify-between text-xs">
-                          <span className="font-medium">{f.name}</span>
-                          <button
-                            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
-                            disabled={!dom}
-                            title={dom ? "Rotate key for this account" : "Domain not found"}
-                            onClick={() => dom && setRotatingFolio({ folio: f, domain: dom })}
-                          >
-                            Rotate key
-                          </button>
+                        <div key={f.id} className="flex items-center justify-between text-xs gap-1">
+                          <span className="font-medium truncate">{f.name}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+                              disabled={!dom || syncingFolioId === f.id}
+                              title={dom ? "Sync bundler's stored key with on-chain key" : "Domain not found"}
+                              onClick={() => dom && handleSyncBundlerKey(f, dom)}
+                            >
+                              {syncingFolioId === f.id ? "Syncing…" : "Sync bundler key"}
+                            </button>
+                            {syncResult?.folioId === f.id && (
+                              <span className={syncResult.ok ? "text-green-600" : "text-red-500"}>
+                                {syncResult.ok ? "✓" : "✗"}
+                              </span>
+                            )}
+                            <button
+                              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+                              disabled={!dom}
+                              title={dom ? "Rotate key for this account" : "Domain not found"}
+                              onClick={() => dom && setRotatingFolio({ folio: f, domain: dom })}
+                            >
+                              Rotate key
+                            </button>
+                          </div>
                         </div>
                       );
                     })}

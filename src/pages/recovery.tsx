@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRecoveryList } from "@/hooks/useRecoveryList";
-import { Recovery } from "@/storage/recoveryStore";
+import { Recovery, getAllRecoveries } from "@/storage/recoveryStore";
 import { useFolios } from "@/hooks/useFolios";
 import { useDomains } from "@/hooks/useDomains";
 import { useContactsList } from "@/hooks/useContactList";
@@ -13,8 +13,9 @@ import { resolveEnsAddress } from "@/lib/ens";
 import { RecoverySortMode } from "@/lib/recoverySorting";
 import { ShareQrModal } from "@/components/ui/ShareQrModal";
 import { buildRecoveryShare } from "@/lib/shareBuilders";
-import { useTx, ADMIN_KEY } from "@/lib/submitTransaction";
-import { encodeFunctionData, createPublicClient, http, keccak256, bytesToHex, type Hex, type Address } from "viem";
+import { useTx, ADMIN_KEY, BundlerAPI } from "@/lib/submitTransaction";
+import { encodeFunctionData, createPublicClient, http, keccak256, toHex, bytesToHex, type Hex, type Address } from "viem";
+import { fetchRecoverableDetails } from "@/lib/fetchRecoverableDetails";
 import { paymasterAbi, quantumAccountAbi, recoverableAbi } from "@/lib/abiTypes";
 import { listKeypairs, getPublicKey, generateAndStoreKeypair, setKeypairFolioName, KeypairMeta } from "@/storage/keyStore";
 import { addAttestation, AttestationRecord } from "@/storage/attestationStore";
@@ -559,14 +560,35 @@ function CreateRecoveryModal({
         return;
       }
 
+      // Discover the new recoverable address by diffing on-chain list with local store
+      let newAddress: string | null = null;
+      try {
+        const publicClient = createPublicClient({ transport: http(domain.rpcUrl) });
+        const onChainAddresses = await publicClient.readContract({
+          address: selectedFolio.address as Address,
+          abi: quantumAccountAbi,
+          functionName: "getRecoverables",
+          account: domain.entryPoint as Address,
+        }) as Address[];
+        const localRecoveries = await getAllRecoveries();
+        const existingAddresses = new Set(
+          localRecoveries
+            .filter(r => r.name.toLowerCase() === selectedFolio.address.toLowerCase() && r.chainId === selectedFolio.chainId)
+            .map(r => r.recoverableAddress.toLowerCase())
+        );
+        newAddress = onChainAddresses.find(a => !existingAddresses.has(a.toLowerCase())) ?? null;
+      } catch {
+        // Non-fatal — store with empty address; user can sync via "Fetch recoverable details"
+      }
+
       await onSubmit({
         name: selectedFolio.address,
         paymaster: selectedFolio.paymaster,
-        recoverableAddress: null,
+        recoverableAddress: newAddress,
         participants: resolvedParticipants,
         threshold,
         chainId: selectedFolio.chainId,
-        status: false,
+        status: newAddress !== null,
       });
       onClose();
     } catch (err: any) {
@@ -2530,6 +2552,7 @@ function MigrateAccountModal({
   const [keyCopied, setKeyCopied] = React.useState(false);
   const [finishing, setFinishing] = React.useState(false);
   const [finishError, setFinishError] = React.useState<string | null>(null);
+  const [bundlerSyncWarning, setBundlerSyncWarning] = React.useState(false);
   const [done, setDone] = React.useState(false);
 
   React.useEffect(() => {
@@ -2670,6 +2693,14 @@ function MigrateAccountModal({
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
+
+      // Notify bundler of the new key (no old-key signature needed — reads from chain)
+      try {
+        await BundlerAPI.syncPublicKey(accountAddress as Address, domain.name);
+      } catch {
+        setBundlerSyncWarning(true);
+      }
+
       setDone(true);
     } catch (e: any) {
       if (!finishError) setFinishError(e?.message ?? "Verification failed.");
@@ -2697,7 +2728,12 @@ function MigrateAccountModal({
           {done ? (
             <>
               <p className="text-sm text-muted-foreground">The account has been added to your portfolio. You can now use it on this device.</p>
-              <div className="flex justify-end">
+              {bundlerSyncWarning && (
+                <p className="mt-2 text-xs text-amber-600">
+                  The bundler could not be notified of your new key. Use "Sync key with bundler" on the key management page to retry.
+                </p>
+              )}
+              <div className="flex justify-end mt-3">
                 <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Close</button>
               </div>
             </>
@@ -2854,6 +2890,258 @@ function MigrateAccountModal({
             </>
           )}
         </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── FetchRecoverableModal ─────────────────────────────────────────────────────
+
+type FetchRecoverableTarget =
+  | { kind: "folio"; folio: Folio }
+  | { kind: "contact"; contactName: string; address: string; chainId: number };
+
+type SyncResult = {
+  address: string;
+  isActive: boolean;
+  action: "updated" | "addressPatched" | "created";
+};
+
+function FetchRecoverableModal({
+  folios,
+  contacts,
+  domains,
+  recoveries,
+  updateRecovery,
+  addRecovery,
+  onClose,
+}: {
+  folios: Folio[];
+  contacts: Contact[];
+  domains: Domain[];
+  recoveries: Recovery[];
+  updateRecovery: (id: string, patch: Partial<Recovery>) => Promise<unknown>;
+  addRecovery: (input: {
+    name: string; paymaster: string | null; recoverableAddress: string | null;
+    participants: string[] | null; threshold: number | null; chainId: number | null; status: boolean | null;
+  }) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const [selectedKey, setSelectedKey] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [results, setResults] = React.useState<SyncResult[] | null>(null);
+
+  // Build combined option list: folios + contact wallets
+  const options = React.useMemo(() => {
+    const items: Array<{ key: string; label: string; target: FetchRecoverableTarget }> = [];
+    for (const folio of folios) {
+      const domain = domains.find(d => d.chainId === folio.chainId);
+      if (!domain) continue;
+      items.push({
+        key: `folio:${folio.id}`,
+        label: `${folio.name || folio.address.slice(0, 10)} (${folio.address.slice(0, 8)}…) — ${domain.name}`,
+        target: { kind: "folio", folio },
+      });
+    }
+    for (const contact of contacts) {
+      for (const wallet of contact.wallets ?? []) {
+        const domain = domains.find(d => d.chainId === wallet.chainId);
+        if (!domain) continue;
+        const contactName = [contact.name, contact.surname].filter(Boolean).join(" ");
+        items.push({
+          key: `contact:${contact.id}:${wallet.address}`,
+          label: `${contactName} (${wallet.address.slice(0, 8)}…) — ${domain.name}`,
+          target: { kind: "contact", contactName, address: wallet.address, chainId: wallet.chainId },
+        });
+      }
+    }
+    return items;
+  }, [folios, contacts, domains]);
+
+  const selectedOption = options.find(o => o.key === selectedKey) ?? null;
+
+  async function handleFetch() {
+    if (!selectedOption) return;
+    setBusy(true);
+    setError(null);
+    setResults(null);
+
+    const target = selectedOption.target;
+    const accountAddress = target.kind === "folio" ? target.folio.address : target.address;
+    const chainId = target.kind === "folio" ? target.folio.chainId : target.chainId;
+    const domain = domains.find(d => d.chainId === chainId);
+    if (!domain) { setError("No domain found for this chain."); setBusy(false); return; }
+
+    // Determine keypair level for folios; default to 512 for contact wallets
+    let keypairLevel: 512 | 1024 = 512;
+    if (target.kind === "folio") {
+      try {
+        const kps = await listKeypairs();
+        const kp = kps.find(k => k.id === target.folio.keypairId);
+        keypairLevel = kp?.level === 1024 ? 1024 : 512;
+      } catch { /* default 512 */ }
+    }
+
+    try {
+      const onChainEntries = await fetchRecoverableDetails({
+        accountAddress: accountAddress as Address,
+        rpcUrl: domain.rpcUrl,
+        entryPoint: domain.entryPoint as Address,
+        keypairLevel,
+      });
+
+      if (onChainEntries.length === 0) {
+        setResults([]);
+        setBusy(false);
+        return;
+      }
+
+      const synced: SyncResult[] = [];
+
+      for (const entry of onChainEntries) {
+        const addrLower = entry.recoverableAddress.toLowerCase();
+
+        // 1. Find a local record that already has this recoverable address
+        const matched = recoveries.find(
+          r => r.name.toLowerCase() === accountAddress.toLowerCase()
+            && r.chainId === chainId
+            && r.recoverableAddress.toLowerCase() === addrLower
+        );
+        if (matched) {
+          await updateRecovery(matched.id, { status: entry.isActive });
+          synced.push({ address: entry.recoverableAddress, isActive: entry.isActive, action: "updated" });
+          continue;
+        }
+
+        // 2. Find a local record for this account with no address yet
+        const unaddressed = recoveries.find(
+          r => r.name.toLowerCase() === accountAddress.toLowerCase()
+            && r.chainId === chainId
+            && !r.recoverableAddress
+        );
+        if (unaddressed) {
+          await updateRecovery(unaddressed.id, { recoverableAddress: entry.recoverableAddress, status: entry.isActive });
+          synced.push({ address: entry.recoverableAddress, isActive: entry.isActive, action: "addressPatched" });
+          continue;
+        }
+
+        // 3. Create a new minimal record
+        await addRecovery({
+          name: accountAddress,
+          paymaster: target.kind === "folio" ? target.folio.paymaster : "",
+          recoverableAddress: entry.recoverableAddress,
+          participants: [],
+          threshold: 0,
+          chainId,
+          status: entry.isActive,
+        });
+        synced.push({ address: entry.recoverableAddress, isActive: entry.isActive, action: "created" });
+      }
+
+      setResults(synced);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to fetch on-chain details.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actionLabel: Record<SyncResult["action"], string> = {
+    updated: "Status updated",
+    addressPatched: "Address discovered",
+    created: "New record created",
+  };
+
+  return createPortal(
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 2147483647,
+        background: "rgba(0,0,0,0.35)", backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div
+        className="bg-background text-foreground"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "min(480px, calc(100vw - 32px))", borderRadius: 12, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
+      >
+        <h2 className="mb-3 text-base font-semibold material-gold-text">Fetch Recoverable Details</h2>
+
+        {results === null ? (
+          <>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select an account to query. The on-chain recoverable list will be synced into your local store.
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Account</label>
+                <select
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
+                  value={selectedKey}
+                  onChange={e => setSelectedKey(e.target.value)}
+                  disabled={busy}
+                >
+                  <option value="">— Select account —</option>
+                  {options.map(o => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              {error && <p className="text-xs text-red-500">{error}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-1.5 text-sm"
+                  onClick={onClose}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                  onClick={handleFetch}
+                  disabled={!selectedKey || busy}
+                >
+                  {busy ? "Fetching…" : "Fetch"}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {results.length === 0 ? (
+              <p className="text-sm text-muted-foreground mb-4">No recoverables found on-chain for this account.</p>
+            ) : (
+              <div className="mb-4 space-y-2">
+                <p className="text-sm font-medium">{results.length} recoverable{results.length !== 1 ? "s" : ""} synced:</p>
+                {results.map(r => (
+                  <div key={r.address} className="rounded-md border border-border px-3 py-2 text-xs font-mono">
+                    <div className="truncate text-muted-foreground">{r.address}</div>
+                    <div className="mt-0.5 flex gap-2">
+                      <span className={r.isActive ? "text-green-600" : "text-gray-500"}>
+                        {r.isActive ? "Enabled" : "Disabled"}
+                      </span>
+                      <span className="text-muted-foreground">— {actionLabel[r.action]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium"
+                onClick={onClose}
+              >
+                Done
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>,
     document.body
@@ -3313,9 +3601,13 @@ export function RecoveryPage() {
 
       {/* ── Fetch recoverable details modal (placeholder) ── */}
       {isFetchOpen && (
-        <PlaceholderModal
-          title="Fetch Recoverable Details"
-          description="This will read the current status, threshold, and participants from the on-chain recoverable contract and sync them into your local store. Coming soon."
+        <FetchRecoverableModal
+          folios={folios}
+          contacts={contacts}
+          domains={domains}
+          recoveries={recoveries}
+          updateRecovery={updateRecovery}
+          addRecovery={addRecovery}
           onClose={() => setIsFetchOpen(false)}
         />
       )}

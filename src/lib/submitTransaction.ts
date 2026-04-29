@@ -141,6 +141,9 @@ export const BundlerAPI = {
   async updatePublicKey(sender: Address, domain: string, oldKey: string, newKey: string, signature: string): Promise<GenericResponse> {
     return j<GenericResponse>(`${BUNDLER}/updatePublicKey`, { method: "POST", body: JSON.stringify({ sender, domain, oldKey, newKey, signature }) });
   },
+  async syncPublicKey(sender: Address, domain: string): Promise<GenericResponse> {
+    return j<GenericResponse>(`${BUNDLER}/syncPublicKey`, { method: "POST", body: JSON.stringify({ sender, domain }) });
+  },
   async getAllDomains(): Promise<GetAllDomainsResponse> {
     return j<GetAllDomainsResponse>(`${BUNDLER}/domain`);
   },
