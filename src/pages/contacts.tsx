@@ -445,7 +445,7 @@ export function Contacts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Name</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   required
@@ -455,7 +455,7 @@ export function Contacts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Surname (optional)</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formSurname}
                   onChange={e => setFormSurname(e.target.value)}
                 />
@@ -466,7 +466,7 @@ export function Contacts() {
                 <label className="text-xs font-medium">Tags</label>
                 <div className="flex gap-2">
                   <input
-                    className="flex-1 rounded-md border px-2 py-1 text-sm"
+                    className="flex-1 rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                     placeholder="Type a tag and press Enter or comma…"
                     value={tagInput}
                     onChange={e => setTagInput(e.target.value)}
@@ -523,7 +523,7 @@ export function Contacts() {
                       {/* Row 1: chain + remove */}
                       <div className="flex items-center justify-between gap-2">
                         <select
-                          className="h-11 sm:h-8 w-28 rounded-md border px-2 text-sm sm:text-xs"
+                          className="h-11 sm:h-8 w-28 rounded-md border bg-background text-foreground px-2 text-sm sm:text-xs"
                           value={w.chainId}
                           onChange={(e) => handleWalletChange(idx, "chainId", Number(e.target.value))}
                         >
@@ -545,7 +545,7 @@ export function Contacts() {
 
                       {/* Row 2: address */}
                       <input
-                        className="w-full rounded-md border px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs font-mono"
+                        className="w-full rounded-md border bg-background text-foreground px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs font-mono"
                         placeholder="0x..."
                         value={w.address}
                         onChange={(e) => handleWalletChange(idx, "address", e.target.value)}
@@ -553,7 +553,7 @@ export function Contacts() {
 
                       {/* Row 3: name (optional) */}
                       <input
-                        className="w-full rounded-md border px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs"
+                        className="w-full rounded-md border bg-background text-foreground px-3 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-xs"
                         placeholder="Label (optional)"
                         value={w.name ?? ""}
                         onChange={(e) => handleWalletChange(idx, "name", e.target.value)}
@@ -620,18 +620,14 @@ export function Contacts() {
             alignItems: "center",
           }}
         >
-          <div onClick={(e) => e.stopPropagation()}
+          <div
+            className="bg-background text-foreground"
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-
-              // Ensure it’s visible even if theme classes are missing
-              background: "#fff",
-              color: "#111",
-
-              // Don’t exceed viewport
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}

@@ -374,7 +374,7 @@ export function Contracts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Name</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   required
@@ -384,7 +384,7 @@ export function Contracts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Address or ENS</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formAddress}
                   onChange={e => {
                     const trimmed = e.target.value.trim();
@@ -402,7 +402,7 @@ export function Contracts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Chain</label>
                 <select
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formChainId}
                   onChange={e => setFormChainId(Number(e.target.value))}
                 >
@@ -418,7 +418,7 @@ export function Contracts() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">ABI (JSON)</label>
                 <textarea
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   rows={6}
                   value={metaDataInput}
                   onChange={e => {
@@ -537,18 +537,14 @@ export function Contracts() {
             alignItems: "center",
           }}
         >
-          <div onClick={(e) => e.stopPropagation()}
+          <div
+            className="bg-background text-foreground"
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-
-              // Ensure it’s visible even if theme classes are missing
-              background: "#fff",
-              color: "#111",
-
-              // Don’t exceed viewport
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}

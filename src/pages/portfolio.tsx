@@ -860,7 +860,7 @@ export function Folios() {
               <div className="space-y-1">
                 <label className="text-xs font-medium">Name</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   required
@@ -872,7 +872,7 @@ export function Folios() {
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Domain</label>
                   <select
-                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                     value={selectDomain?.name ?? ""}
                     onChange={e => {
                       const d = domains.find(d => d.name === e.target.value);
@@ -895,7 +895,7 @@ export function Folios() {
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Account type</label>
                   <select
-                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                     value={String(formFalconLevel)}
                     onChange={e => {
                       setFormFalconLevel(e.target.value === "ECC" ? "ECC" : Number(e.target.value));
@@ -916,7 +916,7 @@ export function Folios() {
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Keypair</label>
                   <select
-                    className="w-full rounded-md border px-2 py-1 text-sm"
+                    className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                     value={formKeypairId}
                     onChange={e => setFormKeypairId(e.target.value)}
                     disabled={isPending}
@@ -990,18 +990,14 @@ export function Folios() {
             alignItems: "center",
           }}
         >
-          <div onClick={(e) => e.stopPropagation()}
+          <div
+            className="bg-background text-foreground"
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-
-              // Ensure it’s visible even if theme classes are missing
-              background: "#fff",
-              color: "#111",
-
-              // Don’t exceed viewport
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}
@@ -1084,14 +1080,13 @@ export function Folios() {
           }}
         >
           <div
+            className="bg-background text-foreground"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-              background: "#fff",
-              color: "#111",
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}
@@ -1129,14 +1124,13 @@ export function Folios() {
           }}
         >
           <div
+            className="bg-background text-foreground"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-              background: "#fff",
-              color: "#111",
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}

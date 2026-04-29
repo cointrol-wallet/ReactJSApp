@@ -62,7 +62,7 @@ function GenerateKeyModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Level</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={level}
               onChange={e => setLevel(Number(e.target.value) as 512 | 1024)}
               disabled={busy}
@@ -74,7 +74,7 @@ function GenerateKeyModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Label (optional)</label>
             <input
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               placeholder="e.g. Main key"
               value={label}
               onChange={e => setLabel(e.target.value)}
@@ -182,7 +182,7 @@ function RotateKeyModal({
             <p className="text-xs text-muted-foreground">No other Falcon-{currentKeypair?.level} keypairs available. Generate one first.</p>
           ) : (
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={newKeypairId}
               onChange={e => setNewKeypairId(e.target.value)}
               disabled={busy}
@@ -464,7 +464,7 @@ function ArchivedKeySignModal({
             <div className="space-y-1">
               <label className="text-xs font-medium">Account</label>
               <select
-                className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                 value={selectedFolioId}
                 onChange={e => setSelectedFolioId(e.target.value)}
                 disabled={busy}
@@ -482,7 +482,7 @@ function ArchivedKeySignModal({
             <div className="space-y-1">
               <label className="text-xs font-medium">Data to sign</label>
               <textarea
-                className="w-full rounded-md border border-border px-2 py-1.5 text-xs font-mono resize-y"
+                className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-xs font-mono resize-y"
                 rows={10}
                 placeholder="Paste any text or hex bytes to sign…"
                 value={rawInput}
@@ -498,7 +498,7 @@ function ArchivedKeySignModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Recipient address</label>
                 <input
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
                   placeholder="0x…"
                   value={recipient}
                   onChange={e => setRecipient(e.target.value)}
@@ -508,7 +508,7 @@ function ArchivedKeySignModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Amount (ETH)</label>
                 <input
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   placeholder="0.01"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
@@ -524,7 +524,7 @@ function ArchivedKeySignModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Contract</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={selectedContractId}
                   onChange={e => { setSelectedContractId(e.target.value); setSelectedFnName(""); setArgValues([]); }}
                   disabled={busy}
@@ -539,7 +539,7 @@ function ArchivedKeySignModal({
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Function</label>
                   <select
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                     value={selectedFnName}
                     onChange={e => { setSelectedFnName(e.target.value); setArgValues([]); }}
                     disabled={busy}
@@ -557,7 +557,7 @@ function ArchivedKeySignModal({
                     {inp.name || `arg${i}`} <span className="text-muted-foreground">({inp.type})</span>
                   </label>
                   <input
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
                     placeholder={inp.type}
                     value={argValues[i] ?? ""}
                     onChange={e => setArgValues(prev => { const next = [...prev]; next[i] = e.target.value; return next; })}

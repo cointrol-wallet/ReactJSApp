@@ -595,6 +595,7 @@ function CreateRecoveryModal({
       }}
     >
       <div
+        className="bg-background text-foreground"
         onClick={(e) => e.stopPropagation()}
         style={{
           marginTop: 32,
@@ -603,8 +604,6 @@ function CreateRecoveryModal({
           borderRadius: 12,
           padding: 16,
           boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          background: "#fff",
-          color: "#111",
         }}
       >
         <h2 className="mb-3 text-base font-semibold material-gold-text">Create Recoverable</h2>
@@ -620,7 +619,7 @@ function CreateRecoveryModal({
               <p className="text-xs text-muted">No folio accounts found. Create one in Portfolio first.</p>
             ) : (
               <select
-                className="w-full rounded-md border px-2 py-1 text-sm"
+                className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                 value={selectedFolioId}
                 onChange={(e) => setSelectedFolioId(e.target.value)}
                 disabled={submitting}
@@ -648,7 +647,7 @@ function CreateRecoveryModal({
               type="number"
               min={1}
               max={Math.max(1, participantRows.length)}
-              className="w-full rounded-md border px-2 py-1 text-sm"
+              className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
               value={threshold}
               onChange={(e) => setThreshold(Math.max(1, Number(e.target.value)))}
               disabled={submitting}
@@ -885,6 +884,7 @@ function ImportRecoveryModal({
       }}
     >
       <div
+        className="bg-background text-foreground"
         onClick={(e) => e.stopPropagation()}
         style={{
           marginTop: 32,
@@ -893,8 +893,6 @@ function ImportRecoveryModal({
           borderRadius: 12,
           padding: 16,
           boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          background: "#fff",
-          color: "#111",
         }}
       >
         <h2 className="mb-3 text-base font-semibold material-gold-text">Import Recovery</h2>
@@ -908,7 +906,7 @@ function ImportRecoveryModal({
           <div className="space-y-2">
             <label className="text-xs font-medium">Account</label>
             <select
-              className="w-full rounded-md border px-2 py-1 text-sm"
+              className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
               value={accountType}
               disabled={submitting}
               onChange={(e) => setAccountType(e.target.value as "manual" | "folio" | "contact")}
@@ -923,7 +921,7 @@ function ImportRecoveryModal({
                 <p className="text-xs text-muted">No folio accounts found.</p>
               ) : (
                 <select
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={selectedFolioId}
                   disabled={submitting}
                   onChange={(e) => setSelectedFolioId(e.target.value)}
@@ -940,7 +938,7 @@ function ImportRecoveryModal({
             {accountType === "contact" && (
               <>
                 <select
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={contactId}
                   disabled={submitting}
                   onChange={(e) => { setContactId(e.target.value); setContactWalletIdx(0); }}
@@ -957,7 +955,7 @@ function ImportRecoveryModal({
                     <p className="text-xs text-muted">This contact has no wallets.</p>
                   ) : (
                     <select
-                      className="w-full rounded-md border px-2 py-1 text-sm"
+                      className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                       value={contactWalletIdx}
                       disabled={submitting}
                       onChange={(e) => setContactWalletIdx(Number(e.target.value))}
@@ -976,14 +974,14 @@ function ImportRecoveryModal({
             {accountType === "manual" && (
               <>
                 <input
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   placeholder="0x account address"
                   value={manualName}
                   disabled={submitting}
                   onChange={(e) => setManualName(e.target.value)}
                 />
                 <select
-                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                   value={manualChainId}
                   disabled={submitting}
                   onChange={(e) => setManualChainId(Number(e.target.value))}
@@ -1009,7 +1007,7 @@ function ImportRecoveryModal({
             <div className="space-y-1">
               <label className="text-xs font-medium">Paymaster address</label>
               <input
-                className="w-full rounded-md border px-2 py-1 text-sm"
+                className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
                 placeholder="0x paymaster address"
                 value={manualPaymaster}
                 disabled={submitting}
@@ -1025,7 +1023,7 @@ function ImportRecoveryModal({
               <span className="text-muted font-normal">(leave blank if not yet deployed)</span>
             </label>
             <input
-              className="w-full rounded-md border px-2 py-1 text-sm"
+              className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
               placeholder="0x address or leave blank"
               value={recoverableAddress}
               disabled={submitting}
@@ -1040,7 +1038,7 @@ function ImportRecoveryModal({
               type="number"
               min={1}
               max={Math.max(1, participantRows.length)}
-              className="w-full rounded-md border px-2 py-1 text-sm"
+              className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
               value={threshold}
               onChange={(e) => setThreshold(Math.max(1, Number(e.target.value)))}
               disabled={submitting}
@@ -1268,6 +1266,7 @@ function EditRecoveryModal({
       }}
     >
       <div
+        className="bg-background text-foreground"
         onClick={(e) => e.stopPropagation()}
         style={{
           marginTop: 32,
@@ -1276,8 +1275,6 @@ function EditRecoveryModal({
           borderRadius: 12,
           padding: 16,
           boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          background: "#fff",
-          color: "#111",
         }}
       >
         <div className="flex items-center justify-between mb-4">
@@ -1504,14 +1501,13 @@ function PlaceholderModal({
       }}
     >
       <div
+        className="bg-background text-foreground"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(420px, calc(100vw - 32px))",
           borderRadius: 12,
           padding: 16,
           boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-          background: "#fff",
-          color: "#111",
         }}
       >
         <h2 className="mb-2 text-base font-semibold material-gold-text">{title}</h2>
@@ -1790,7 +1786,7 @@ function CreateAttestationModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Domain</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={chainId}
                   onChange={e => {
                     setChainId(Number(e.target.value));
@@ -1809,7 +1805,7 @@ function CreateAttestationModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Account to Recover</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={accountMode}
                   onChange={e => {
                     setAccountMode(e.target.value as "manual" | "contact");
@@ -1824,7 +1820,7 @@ function CreateAttestationModal({
                 {accountMode === "manual" && (
                   <>
                     <input
-                      className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                      className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
                       placeholder="0x… or name.eth"
                       value={accountInput}
                       onChange={e => setAccountInput(e.target.value)}
@@ -1838,7 +1834,7 @@ function CreateAttestationModal({
                 )}
                 {accountMode === "contact" && (
                   <select
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                     value={selectedContactKey}
                     onChange={e => setSelectedContactKey(e.target.value)}
                     disabled={!chainId}
@@ -1856,7 +1852,7 @@ function CreateAttestationModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Recoverable Contract Address</label>
                 <input
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
                   placeholder="0x… or name.eth"
                   value={recoverableInput}
                   onChange={e => setRecoverableInput(e.target.value)}
@@ -1901,7 +1897,7 @@ function CreateAttestationModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Keypair</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={formKeypairId}
                   onChange={e => setFormKeypairId(e.target.value)}
                   disabled={step2Busy}
@@ -2300,7 +2296,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Load from attestation</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={selectedAttestationId}
               onChange={e => applyAttestation(e.target.value)}
               disabled={isBusy}
@@ -2323,7 +2319,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Domain</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={domain?.chainId ?? 0}
               onChange={e => {
                 const d = domains.find(dom => dom.chainId === Number(e.target.value)) ?? null;
@@ -2346,7 +2342,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Account to Recover</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={accountMode}
               onChange={e => {
                 setAccountMode(e.target.value as "manual" | "contact");
@@ -2362,7 +2358,7 @@ function InitiateRecoveryModal({
             {accountMode === "manual" && (
               <>
                 <input
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
                   placeholder="0x… or name.eth"
                   value={accountInput}
                   onChange={e => setAccountInput(e.target.value)}
@@ -2375,7 +2371,7 @@ function InitiateRecoveryModal({
             )}
             {accountMode === "contact" && (
               <select
-                className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                 value={selectedContactKey}
                 onChange={e => {
                   setSelectedContactKey(e.target.value);
@@ -2402,7 +2398,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Recoverable Contract Address</label>
             <input
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
               placeholder="0x… or name.eth"
               value={recoverableInput}
               onChange={e => setRecoverableInput(e.target.value)}
@@ -2417,7 +2413,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Paymaster <span className="text-red-500">*</span></label>
             <input
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm font-mono"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm font-mono"
               placeholder="0x…"
               value={paymaster}
               onChange={e => setPaymaster(e.target.value)}
@@ -2429,7 +2425,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Falcon Level</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={falconLevel}
               onChange={e => { setFalconLevel(Number(e.target.value) as 512 | 1024); setKeypairId(""); }}
               disabled={isBusy}
@@ -2443,7 +2439,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Keypair (new key to sign with)</label>
             <select
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               value={keypairId}
               onChange={e => setKeypairId(e.target.value)}
               disabled={isBusy}
@@ -2464,7 +2460,7 @@ function InitiateRecoveryModal({
           <div className="space-y-1">
             <label className="text-xs font-medium">Account name</label>
             <input
-              className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
               placeholder="e.g. My Main Account"
               value={folioName}
               onChange={e => setFolioName(e.target.value)}
@@ -2711,7 +2707,7 @@ function MigrateAccountModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Domain</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={domain?.chainId ?? 0}
                   onChange={e => {
                     const d = domains.find(dom => dom.chainId === Number(e.target.value)) ?? null;
@@ -2738,7 +2734,7 @@ function MigrateAccountModal({
               <div className="space-y-1">
                 <label className="text-xs font-medium">Account (from contacts)</label>
                 <select
-                  className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                   value={selectedContactKey}
                   onChange={e => handleContactChange(e.target.value)}
                   disabled={!domain || generating || finishing}
@@ -2760,7 +2756,7 @@ function MigrateAccountModal({
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Falcon level (manual)</label>
                   <select
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                     value={manualFalconLevel ?? ""}
                     onChange={e => {
                       const v = e.target.value;
@@ -2783,7 +2779,7 @@ function MigrateAccountModal({
                 <div className="space-y-1">
                   <label className="text-xs font-medium">New keypair for this device</label>
                   <select
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1.5 text-sm"
                     value={formKeypairId}
                     onChange={e => { setFormKeypairId(e.target.value); setExportSharePayload(null); setExportKeyHex(null); }}
                     disabled={generating || finishing}
@@ -3195,14 +3191,13 @@ export function RecoveryPage() {
           }}
         >
           <div
+            className="bg-background text-foreground"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(448px, calc(100dvw - 32px))",
               borderRadius: 12,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-              background: "#fff",
-              color: "#111",
               maxHeight: "calc(100dvh - 32px)",
               overflowY: "auto",
             }}
