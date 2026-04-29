@@ -551,7 +551,7 @@ function CreateRecoveryModal({
       }) as Hex;
 
       const { startFlow } = useTx.getState();
-      await startFlow({ folio: selectedFolio, encoded, domain });
+      await startFlow({ folio: selectedFolio, encoded, domain, nonceKey: ADMIN_KEY });
 
       const txStatus = useTx.getState().status;
       if (txStatus.phase === "failed") {

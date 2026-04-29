@@ -11,7 +11,7 @@ import { Domain } from "@/storage/domainStore";
 import { useDomains } from "@/hooks/useDomains";
 import { useFolioList } from "@/hooks/useFolioList";
 import { useAddressList } from "@/hooks/useAddressList";
-import { useTx, BundlerAPI } from "@/lib/submitTransaction";
+import { useTx, BundlerAPI, ADMIN_KEY } from "@/lib/submitTransaction";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Abi, encodeFunctionData, createPublicClient, http, type Hex, parseEther } from "viem";
 import { parseAbiArg } from "@/lib/parseAbiArgs";
@@ -1140,20 +1140,34 @@ export function Transactions() {
         }
       }
 
-      // Wrap into QuantumAccount.execute(dest,value,innerData)
-      const wrappedCalldata = encodeFunctionData({
-        abi: quantumAccountAbi,
-        functionName: "execute",
-        args: [dest, value, innerData],
-      }) as `0x${string}`;
+      // When targeting the QuantumAccount itself, callData must be sent directly —
+      // not via execute() — because these functions require _requireFromEntryPoint().
+      const QA_ADMIN_FNS = new Set(["updatePublicKey", "createRecoverable", "updatePublicKeyViaRecoverable"]);
+
+      let encoded: `0x${string}`;
+      let txNonceKey: bigint | undefined;
+
+      if (builtInContract === "quantumAccount") {
+        encoded = innerData as `0x${string}`;
+        if (selectedFn && QA_ADMIN_FNS.has(selectedFn.name)) {
+          txNonceKey = ADMIN_KEY;
+        }
+      } else {
+        encoded = encodeFunctionData({
+          abi: quantumAccountAbi,
+          functionName: "execute",
+          args: [dest, value, innerData],
+        }) as `0x${string}`;
+      }
 
       const _folio = selectFolio as Folio;
       const _domain = selectDomain as Domain;
 
       await startFlow({
         folio: _folio,
-        encoded: wrappedCalldata,
+        encoded,
         domain: _domain,
+        nonceKey: txNonceKey,
       });
 
       const currentStatus = useTx.getState().status;
