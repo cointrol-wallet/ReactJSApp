@@ -3,6 +3,8 @@ import {
   encodeShareText,
   decodeShareText,
   decodeShareAny,
+  encodeShareJson,
+  decodeShareJson,
   COINTROL_TEXT_HEADER,
 } from "../shareTextFormat";
 import { encodeSharePayload } from "../sharePayload";
@@ -341,20 +343,20 @@ describe("decodeShareText error cases", () => {
 // ---------------------------------------------------------------------------
 
 describe("decodeShareAny format detection", () => {
-  it("decodes text format correctly", () => {
+  it("decodes JSON format correctly", () => {
     const p: SharePayload = { v: 1, t: "contact", data: { name: "Alice" } };
-    expect(decodeShareAny(encodeShareText(p))).toEqual(p);
+    expect(decodeShareAny(encodeShareJson(p))).toEqual(p);
   });
 
-  it("falls back to compressed format for QR payloads", () => {
+  it("decodes compressed QR format", () => {
     const p: SharePayload = { v: 1, t: "contact", data: { name: "Alice" } };
     expect(decodeShareAny(encodeSharePayload(p))).toEqual(p);
   });
 
-  it("falls back to compressed format when text has whitespace prefix", () => {
+  it("decodes compressed QR format with leading/trailing whitespace trimmed", () => {
     const p: SharePayload = { v: 1, t: "contact", data: { name: "Alice" } };
     const compressed = encodeSharePayload(p);
-    expect(decodeShareAny(compressed)).toEqual(p);
+    expect(decodeShareAny(`  ${compressed}  `)).toEqual(p);
   });
 });
 
@@ -377,5 +379,115 @@ describe("encodeShareText header format", () => {
   it("contains 'Source: Cointrol'", () => {
     const p: SharePayload = { v: 1, t: "contact", data: { name: "X" } };
     expect(encodeShareText(p)).toContain("Source: Cointrol");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JSON format — encodeShareJson / decodeShareJson
+// ---------------------------------------------------------------------------
+
+describe("JSON format", () => {
+  const ADDR = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const CHAIN_ID = 11155111;
+
+  function makeRawHex(bytes: number): string {
+    return "0x" + "09".repeat(bytes);
+  }
+
+  // Round-trips
+
+  it("round-trips a contact payload", () => {
+    const p: SharePayload = {
+      v: 1, t: "contact",
+      data: {
+        name: "Alice", surname: "Smith",
+        wallets: [{ chainId: 1, address: ADDR, name: "Main" }],
+      },
+    };
+    expect(decodeShareJson(encodeShareJson(p))).toEqual(p);
+  });
+
+  it("round-trips a recovery payload", () => {
+    const p: SharePayload = {
+      v: 1, t: "recovery",
+      data: {
+        name: ADDR, chainId: CHAIN_ID,
+        recoverableAddress: ADDR, paymaster: ADDR,
+        threshold: 2, status: true,
+        participants: [ADDR],
+      },
+    };
+    expect(decodeShareJson(encodeShareJson(p))).toEqual(p);
+  });
+
+  it("round-trips a txrequest with Falcon-512 publicKeyBytes (1026 bytes)", () => {
+    const p: SharePayload = {
+      v: 1, t: "txrequest",
+      data: {
+        type: "contract", chainId: CHAIN_ID,
+        contractAddress: ADDR, contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { publicKeyBytes: makeRawHex(1026) },
+      },
+    };
+    expect(decodeShareJson(encodeShareJson(p))).toEqual(p);
+  });
+
+  it("round-trips a txrequest with Falcon-1024 publicKeyBytes (2050 bytes)", () => {
+    const p: SharePayload = {
+      v: 1, t: "txrequest",
+      data: {
+        type: "contract", chainId: CHAIN_ID,
+        contractAddress: ADDR, contractName: "QuantumAccount",
+        functionName: "updatePublicKey",
+        args: { publicKeyBytes: makeRawHex(2050) },
+      },
+    };
+    expect(decodeShareJson(encodeShareJson(p))).toEqual(p);
+  });
+
+  // Regression: publicKeyBytes survives unchanged
+  it("publicKeyBytes is recovered verbatim from JSON round-trip", () => {
+    const hex = makeRawHex(1026);
+    const p: SharePayload = {
+      v: 1, t: "txrequest",
+      data: {
+        type: "contract", chainId: CHAIN_ID, contractAddress: ADDR,
+        functionName: "updatePublicKey", args: { publicKeyBytes: hex },
+      },
+    };
+    const decoded = decodeShareJson(encodeShareJson(p)) as Extract<SharePayload, { t: "txrequest" }>;
+    expect(decoded.data.args!["publicKeyBytes"]).toBe(hex);
+  });
+
+  // decodeShareAny routing
+  it("decodeShareAny routes JSON (starts with '{') to decodeShareJson", () => {
+    const p: SharePayload = { v: 1, t: "contact", data: { name: "Bob" } };
+    expect(decodeShareAny(encodeShareJson(p))).toEqual(p);
+  });
+
+  it("decodeShareAny still decodes compressed QR format", () => {
+    const p: SharePayload = { v: 1, t: "contact", data: { name: "Bob" } };
+    expect(decodeShareAny(encodeSharePayload(p))).toEqual(p);
+  });
+
+  // Output properties
+  it("encodeShareJson produces valid JSON", () => {
+    const p: SharePayload = { v: 1, t: "contact", data: { name: "X" } };
+    expect(() => JSON.parse(encodeShareJson(p))).not.toThrow();
+  });
+
+  it("encodeShareJson output is pretty-printed (contains newlines)", () => {
+    const p: SharePayload = { v: 1, t: "contact", data: { name: "X" } };
+    expect(encodeShareJson(p)).toContain("\n");
+  });
+
+  // Error handling
+  it("decodeShareJson throws on invalid JSON", () => {
+    expect(() => decodeShareJson("not json")).toThrow();
+  });
+
+  it("decodeShareJson throws a Zod error on missing required fields", () => {
+    expect(() => decodeShareJson(JSON.stringify({ v: 1, t: "contact", data: {} }))).toThrow();
   });
 });

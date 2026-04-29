@@ -2,6 +2,18 @@ import { decodeSharePayload, encodeSharePayload } from "./sharePayload";
 import type { SharePayload } from "./sharePayload";
 import { zSharePayload } from "./sharePayload";
 
+// ---------------------------------------------------------------------------
+// JSON format (primary export format — replaces the line-based text format)
+// ---------------------------------------------------------------------------
+
+export function encodeShareJson(payload: SharePayload): string {
+  return JSON.stringify(payload, null, 2);
+}
+
+export function decodeShareJson(text: string): SharePayload {
+  return zSharePayload.parse(JSON.parse(text));
+}
+
 export { encodeSharePayload };
 
 export const COINTROL_TEXT_HEADER = "=== Cointrol Share v1 ===";
@@ -44,7 +56,7 @@ function makeFilename(payload: SharePayload): string {
   }
 
   const safe = rawName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 40);
-  return `cointrol-${payload.t}-${safe}-${ts}.txt`;
+  return `cointrol-${payload.t}-${safe}-${ts}.json`;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +324,7 @@ function parseIndexedArgs(body: Record<string, string>): Record<string, string> 
 
 export function decodeShareAny(text: string): SharePayload {
   const t = text.trim();
-  if (t.startsWith(COINTROL_TEXT_HEADER)) return decodeShareText(t);
+  if (t.startsWith("{")) return decodeShareJson(t);
   return decodeSharePayload(t);
 }
 
@@ -321,5 +333,5 @@ export function decodeShareAny(text: string): SharePayload {
 // ---------------------------------------------------------------------------
 
 export function downloadShareTextFile(payload: SharePayload, filename?: string): void {
-  downloadTextFile(filename ?? makeFilename(payload), encodeShareText(payload));
+  downloadTextFile(filename ?? makeFilename(payload), encodeShareJson(payload));
 }
