@@ -16,6 +16,7 @@ export type Recovery = {
   recoverableAddress: string;  // address of recoverable
   threshold: number;  // number of recovery addresses required to recover
   status: boolean;  // recoverable status on chain
+  consumed: boolean;  // true when used for recovery and pending reinitialisation
   participants: string[];  // list of wallet addresses able to recover the account
   createdAt: number;       // ms since epoch
   updatedAt: number;       // ms since epoch
@@ -91,7 +92,8 @@ async function ensureRecoverySchemaMigrated(): Promise<void> {
 async function loadRecoveryRaw(): Promise<Recovery[]> {
   await ensureRecoverySchemaMigrated();
   const recovery = await get<Recovery[] | undefined>(recoveryKey());
-  return recovery ?? []; 
+  if (!recovery) return [];
+  return recovery.map((r: any) => ({ consumed: false, ...r } as Recovery));
 }
 
 async function saveRecoveryRaw(recovery: Recovery[]): Promise<void> {
@@ -126,6 +128,7 @@ export async function addRecovery(input: {
     threshold: input.threshold ?? 1,
     chainId: input.chainId ?? 0,
     status: input.status ?? false,
+    consumed: false,
     createdAt: now,
     updatedAt: now,
   };

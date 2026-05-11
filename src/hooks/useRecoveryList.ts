@@ -29,12 +29,16 @@ export function useRecoveryList(options: UseRecoveryListOptions = {}) {
       list = list.filter(c => c.chainId === chainId);
     }
 
-    if (status == "enabled") {      
-        list = list.filter(c => c.status === true);
+    if (status === "consumed") {
+      list = list.filter(c => c.consumed === true);
     }
 
-    if (status == "disabled") {      
-        list = list.filter(c => c.status === false);
+    if (status === "enabled") {
+      list = list.filter(c => c.status === true && !c.consumed);
+    }
+
+    if (status === "disabled") {
+      list = list.filter(c => c.status === false && !c.consumed);
     }
 
     return sortRecovery(list, sortMode);

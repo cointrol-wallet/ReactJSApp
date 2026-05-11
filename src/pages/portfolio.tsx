@@ -206,7 +206,6 @@ export function Folios() {
   const { uuid } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [editingFolio, setEditingFolio] = React.useState<Folio | null>(null);
   const [folioToDelete, setFolioToDelete] = React.useState<string | null>(null);
   const [folioNameToDelete, setFolioNameToDelete] = React.useState<string | null>(null);
   const [selectDomain, setSelectDomain] = React.useState<any>(null);
@@ -444,15 +443,8 @@ export function Folios() {
     setIsModalOpen(true);
   }
 
-  function openEditModal(folio: Folio) {
-    setEditingFolio(folio);
-    setFormName(folio.name ?? "");
-    setIsModalOpen(true);
-  }
-
   function closeModal() {
     setIsModalOpen(false);
-    setEditingFolio(null);
     setSubmitState({ status: "idle" });
     resetForm();
   }
@@ -473,75 +465,71 @@ export function Folios() {
     try {
       setSubmitState({
         status: "pending",
-        message: editingFolio ? "Saving changes…" : "Submitting account creation…",
+        message: "Submitting account creation…",
       });
 
-      if (editingFolio) {
-        await updateFolio(editingFolio.id, { name: trimmedName });
-      } else {
-        if (!uuid) {
-          setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." });
-          return;
-        }
-
-        // Enforce unique folio name per chain (salt depends on it; same name on different chains is intentional)
-        if (folios.some(f => f.name === trimmedName && f.chainId === selectDomain?.chainId)) {
-          setSubmitState({ status: "error", message: "An account with this name already exists on this network. Choose a unique name." });
-          return;
-        }
-
-        // ECC accounts are not yet supported
-        if (formFalconLevel === "ECC") {
-          setSubmitState({ status: "error", message: "ECC accounts are coming soon and are not yet supported." });
-          return;
-        }
-
-        // Resolve the falcon domain entry matching the selected level
-        const falconDomainForLevel = selectDomain.falconDomain?.find(
-          (fd: any) => String(fd.falconLevel) === String(formFalconLevel)
-        );
-        if (!falconDomainForLevel) {
-          setSubmitState({ status: "error", message: `No falcon domain configured for level ${formFalconLevel}.` });
-          return;
-        }
-
-        // Resolve or generate keypair
-        let keypairId = formKeypairId;
-        if (!keypairId) {
-          setSubmitState({ status: "pending", message: `Generating Falcon-${formFalconLevel} keypair…` });
-          const meta = await generateAndStoreKeypair(formFalconLevel as 512 | 1024);
-          keypairId = meta.id;
-          setFormKeypairId(keypairId);
-          setKeypairs(await listKeypairs());
-        }
-
-        const salt = deriveFolioSalt(uuid, trimmedName);
-        const sender = await predictAddressFromKeypair(keypairId, salt, falconDomainForLevel);
-
-        // Check if a contract is already deployed at this address on-chain
-        setSubmitState({ status: "pending", message: "Checking if account already exists…" });
-        const client = createPublicClient({ transport: http(selectDomain.rpcUrl) });
-        const code = await client.getCode({ address: sender as Address });
-        if (code && code !== "0x") {
-          closeModal();
-          setAccountExistsWarning(
-            `An account with that name already exists in ${selectDomain.name}. If it is on another device, use the Migrate Account option on the Recovery page.`
-          );
-          return;
-        }
-
-        // Check for similar names across all existing folios
-        if (folios.length > 0) {
-          const match = folios.map(f => f.name).find(name => isSimilarFolioName(trimmedName, name));
-          if (match) {
-            setSimilarNameWarning({ trimmedName, keypairId, matchingFolioName: match, sender, salt });
-            setSubmitState({ status: "idle" });
-            return;
-          }
-        }
-
-        await proceedWithAccountCreation({ trimmedName, keypairId, sender, salt });
+      if (!uuid) {
+        setSubmitState({ status: "error", message: "No user UUID found. Account creation is not possible." });
+        return;
       }
+
+      // Enforce unique folio name per chain (salt depends on it; same name on different chains is intentional)
+      if (folios.some(f => f.name === trimmedName && f.chainId === selectDomain?.chainId)) {
+        setSubmitState({ status: "error", message: "An account with this name already exists on this network. Choose a unique name." });
+        return;
+      }
+
+      // ECC accounts are not yet supported
+      if (formFalconLevel === "ECC") {
+        setSubmitState({ status: "error", message: "ECC accounts are coming soon and are not yet supported." });
+        return;
+      }
+
+      // Resolve the falcon domain entry matching the selected level
+      const falconDomainForLevel = selectDomain.falconDomain?.find(
+        (fd: any) => String(fd.falconLevel) === String(formFalconLevel)
+      );
+      if (!falconDomainForLevel) {
+        setSubmitState({ status: "error", message: `No falcon domain configured for level ${formFalconLevel}.` });
+        return;
+      }
+
+      // Resolve or generate keypair
+      let keypairId = formKeypairId;
+      if (!keypairId) {
+        setSubmitState({ status: "pending", message: `Generating Falcon-${formFalconLevel} keypair…` });
+        const meta = await generateAndStoreKeypair(formFalconLevel as 512 | 1024);
+        keypairId = meta.id;
+        setFormKeypairId(keypairId);
+        setKeypairs(await listKeypairs());
+      }
+
+      const salt = deriveFolioSalt(uuid, trimmedName);
+      const sender = await predictAddressFromKeypair(keypairId, salt, falconDomainForLevel);
+
+      // Check if a contract is already deployed at this address on-chain
+      setSubmitState({ status: "pending", message: "Checking if account already exists…" });
+      const client = createPublicClient({ transport: http(selectDomain.rpcUrl) });
+      const code = await client.getCode({ address: sender as Address });
+      if (code && code !== "0x") {
+        closeModal();
+        setAccountExistsWarning(
+          `An account with that name already exists in ${selectDomain.name}. If it is on another device, use the Migrate Account option on the Recovery page.`
+        );
+        return;
+      }
+
+      // Check for similar names across all existing folios
+      if (folios.length > 0) {
+        const match = folios.map(f => f.name).find(name => isSimilarFolioName(trimmedName, name));
+        if (match) {
+          setSimilarNameWarning({ trimmedName, keypairId, matchingFolioName: match, sender, salt });
+          setSubmitState({ status: "idle" });
+          return;
+        }
+      }
+
+      await proceedWithAccountCreation({ trimmedName, keypairId, sender, salt });
 
       closeModal();
     } catch (err: any) {
@@ -761,17 +749,6 @@ export function Folios() {
                         </summary>
 
                         <div className="absolute left-0 sm:right-0 sm:left-auto mt-1 w-40 rounded-md border border-border bg-background shadow-lg z-50">
-                          <button
-                            className="block w-full px-4 py-3 text-left text-sm sm:px-3 sm:py-2 sm:text-xs hover:bg-primary hover:text-primary-foreground"
-                            onClick={(e) => {
-                              (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
-                              folio && openEditModal(folio);
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <div className="my-1 border-t border-border" />
-
                           {folio?.address && (
                             <button
                               className="block w-full px-4 py-3 text-left text-sm sm:px-3 sm:py-2 sm:text-xs hover:bg-primary hover:text-primary-foreground"
@@ -837,7 +814,7 @@ export function Folios() {
             }}
           >
             <h2 className="mb-3 text-base font-semibold material-gold-text">
-              {editingFolio ? "Change Label" : "Create Account"}
+              Create Account
             </h2>
 
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -868,7 +845,7 @@ export function Folios() {
                 />
               </div>
 
-              {!editingFolio && domains.length > 0 && (
+              {domains.length > 0 && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Domain</label>
                   <select
@@ -891,7 +868,7 @@ export function Folios() {
                 </div>
               )}
 
-              {!editingFolio && selectDomain?.falconDomain?.length > 0 && (
+              {selectDomain?.falconDomain?.length > 0 && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Account type</label>
                   <select
@@ -912,30 +889,28 @@ export function Folios() {
                 </div>
               )}
 
-              {!editingFolio && (
-                <div className="space-y-1">
-                  <label className="text-xs font-medium">Keypair</label>
-                  <select
-                    className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
-                    value={formKeypairId}
-                    onChange={e => setFormKeypairId(e.target.value)}
-                    disabled={isPending}
-                  >
-                    <option value="">
-                      {formFalconLevel === "ECC"
-                        ? "Generate new ECC keypair"
-                        : `Generate new Falcon-${formFalconLevel} keypair`}
-                    </option>
-                    {keypairs
-                      .filter(k => String(k.level) === String(formFalconLevel))
-                      .map(k => (
-                        <option key={k.id} value={k.id}>
-                          Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              )}
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Keypair</label>
+                <select
+                  className="w-full rounded-md border bg-background text-foreground px-2 py-1 text-sm"
+                  value={formKeypairId}
+                  onChange={e => setFormKeypairId(e.target.value)}
+                  disabled={isPending}
+                >
+                  <option value="">
+                    {formFalconLevel === "ECC"
+                      ? "Generate new ECC keypair"
+                      : `Generate new Falcon-${formFalconLevel} keypair`}
+                  </option>
+                  {keypairs
+                    .filter(k => String(k.level) === String(formFalconLevel))
+                    .map(k => (
+                      <option key={k.id} value={k.id}>
+                        Falcon-{k.level}{k.label ? ` — ${k.label}` : ""} ({new Date(k.createdAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                </select>
+              </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -951,9 +926,7 @@ export function Folios() {
                   className="rounded-md bg-primary px-4 py-3 text-sm sm:px-3 sm:py-1 sm:text-xs font-medium text-primary-foreground"
                   disabled={isPending}
                 >
-                  &nbsp;{isPending
-                    ? (editingFolio ? "Saving…" : "Creating…")
-                    : (editingFolio ? "Save changes" : "Create account")}&nbsp;
+                  &nbsp;{isPending ? "Creating…" : "Create account"}&nbsp;
                 </button>
               </div>
             </form>

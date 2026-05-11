@@ -21,6 +21,7 @@ const ALPHA = {
   name: "Alpha",
   chainId: 1,
   status: true,
+  consumed: false,
   threshold: 2,
   participants: ["0xA", "0xB"],
   createdAt: 300,
@@ -34,6 +35,7 @@ const BETA = {
   name: "Beta",
   chainId: 11155111,
   status: false,
+  consumed: false,
   threshold: 1,
   participants: ["0xC"],
   createdAt: 100,
@@ -47,12 +49,27 @@ const GAMMA = {
   name: "Gamma",
   chainId: 1,
   status: true,
+  consumed: false,
   threshold: 3,
   participants: ["0xD", "0xE", "0xF"],
   createdAt: 200,
   updatedAt: 200,
   paymaster: "0xPay3",
   recoverableAddress: "0xRec3",
+};
+
+const DELTA = {
+  id: "r4",
+  name: "Delta",
+  chainId: 1,
+  status: false,
+  consumed: true,
+  threshold: 1,
+  participants: ["0xG"],
+  createdAt: 50,
+  updatedAt: 50,
+  paymaster: "0xPay4",
+  recoverableAddress: "0xRec4",
 };
 
 const baseResult = {
@@ -128,16 +145,16 @@ describe("useRecoveryList — chainId filter", () => {
 });
 
 describe("useRecoveryList — status filter", () => {
-  it('status "enabled" shows only enabled recoveries', () => {
+  it('status "enabled" shows only enabled, non-consumed recoveries', () => {
     const { result } = renderHook(() => useRecoveryList({ status: "enabled" }));
-    // ALPHA and GAMMA are enabled
+    // ALPHA and GAMMA are enabled and not consumed
     expect(result.current.recoveries).toHaveLength(2);
-    expect(result.current.recoveries.every(r => r.status === true)).toBe(true);
+    expect(result.current.recoveries.every(r => r.status === true && !r.consumed)).toBe(true);
   });
 
-  it('status "disabled" shows only disabled recoveries', () => {
+  it('status "disabled" shows only disabled, non-consumed recoveries', () => {
     const { result } = renderHook(() => useRecoveryList({ status: "disabled" }));
-    // BETA is disabled
+    // BETA is disabled and not consumed
     expect(result.current.recoveries).toHaveLength(1);
     expect(result.current.recoveries[0].id).toBe("r2");
   });
@@ -145,6 +162,44 @@ describe("useRecoveryList — status filter", () => {
   it('empty status string shows all', () => {
     const { result } = renderHook(() => useRecoveryList({ status: "" }));
     expect(result.current.recoveries).toHaveLength(3);
+  });
+});
+
+describe("useRecoveryList — consumed status filter", () => {
+  beforeEach(() => {
+    mockUseRecovery.mockReturnValue({
+      ...baseResult,
+      recoveries: [ALPHA, BETA, GAMMA, DELTA],
+    });
+  });
+
+  it('status "consumed" returns only consumed recoveries', () => {
+    const { result } = renderHook(() => useRecoveryList({ status: "consumed" }));
+    expect(result.current.recoveries).toHaveLength(1);
+    expect(result.current.recoveries[0].id).toBe("r4");
+  });
+
+  it('status "enabled" excludes consumed items even when status is true', () => {
+    // Add a consumed item that also has status: true to ensure the filter works
+    const consumedEnabled = { ...ALPHA, id: "r5", name: "Epsilon", consumed: true, status: true };
+    mockUseRecovery.mockReturnValue({
+      ...baseResult,
+      recoveries: [ALPHA, BETA, GAMMA, DELTA, consumedEnabled],
+    });
+    const { result } = renderHook(() => useRecoveryList({ status: "enabled" }));
+    expect(result.current.recoveries.every(r => !r.consumed)).toBe(true);
+    expect(result.current.recoveries.map(r => r.id)).not.toContain("r5");
+  });
+
+  it('status "disabled" excludes consumed items even when status is false', () => {
+    // DELTA is consumed and status: false — must not appear under "disabled"
+    const { result } = renderHook(() => useRecoveryList({ status: "disabled" }));
+    expect(result.current.recoveries.map(r => r.id)).not.toContain("r4");
+  });
+
+  it('empty status shows all including consumed', () => {
+    const { result } = renderHook(() => useRecoveryList({ status: "" }));
+    expect(result.current.recoveries).toHaveLength(4);
   });
 });
 

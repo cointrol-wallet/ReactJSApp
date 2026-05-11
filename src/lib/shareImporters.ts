@@ -10,7 +10,7 @@ type ImportDeps = {
   folios?: Folio[];
   updateFolio?: (
     id: string,
-    patch: Partial<Omit<Folio, "id" | "createdAt">>
+    patch: Partial<Omit<Folio, "id" | "createdAt" | "address" | "chainId" | "name">>
   ) => Promise<Folio[]>;
 };
 

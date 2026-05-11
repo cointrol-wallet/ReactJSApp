@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRecoveryList } from "@/hooks/useRecoveryList";
-import { Recovery, getAllRecoveries } from "@/storage/recoveryStore";
+import { Recovery, getAllRecoveries, updateRecovery as updateRecoveryInStore } from "@/storage/recoveryStore";
 import { useFolios } from "@/hooks/useFolios";
 import { useDomains } from "@/hooks/useDomains";
 import { useContactsList } from "@/hooks/useContactList";
@@ -441,6 +441,7 @@ function RecoveryFiltersDropdown({
               <option value="">All statuses</option>
               <option value="enabled">Enabled</option>
               <option value="disabled">Disabled</option>
+              <option value="consumed">Consumed</option>
             </select>
 
             <div className="mt-3 flex justify-between">
@@ -2111,7 +2112,9 @@ function InitiateRecoveryModal({
   const [keypairs, setKeypairs] = React.useState<KeypairMeta[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [done, setDone] = React.useState(false);
+  type ResetPhase = null | "prompt" | "resetting" | "success" | "failed";
+  const [resetPhase, setResetPhase] = React.useState<ResetPhase>(null);
+  const [resetError, setResetError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listKeypairs().then(setKeypairs).catch(() => {});
@@ -2274,7 +2277,15 @@ function InitiateRecoveryModal({
         updatedAt: Date.now(),
       });
 
-      setDone(true);
+      // Mark any local recovery records for this recoverable as consumed
+      const allRecoveries = await getAllRecoveries();
+      for (const r of allRecoveries) {
+        if (r.recoverableAddress.toLowerCase() === recoverableResolved!.toLowerCase()) {
+          await updateRecoveryInStore(r.id, { consumed: true });
+        }
+      }
+
+      setResetPhase("prompt");
     } catch (e: any) {
       setError(e?.message ?? "Transaction failed.");
     } finally {
@@ -2284,17 +2295,97 @@ function InitiateRecoveryModal({
 
   const isBusy = busy || (txStatus.phase !== "idle" && txStatus.phase !== "finalized" && txStatus.phase !== "failed");
 
-  if (done) {
+  async function handleResetNow() {
+    const account = getEffectiveAccount();
+    if (!account || !recoverableResolved || !domain || !paymaster.trim() || !keypairId) return;
+    setResetPhase("resetting");
+    setResetError(null);
+    try {
+      const innerData = encodeFunctionData({
+        abi: paymasterAbi,
+        functionName: "reinitializeRecoverable",
+        args: [recoverableResolved as Address],
+      }) as Hex;
+      const encoded = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "execute",
+        args: [paymaster.trim() as Address, 0n, innerData],
+      }) as Hex;
+      const tempFolio: Folio = {
+        id: crypto.randomUUID(),
+        address: account,
+        name: folioName || "Recovered Account",
+        chainId: domain.chainId,
+        paymaster: paymaster.trim(),
+        type: 0,
+        bundler: domain.bundler,
+        keypairId,
+        wallet: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const { startFlow } = useTx.getState();
+      await startFlow({ folio: tempFolio, encoded, domain, nonceKey: ADMIN_KEY });
+      const txResult = useTx.getState().status;
+      if (txResult.phase === "failed") {
+        setResetPhase("failed");
+        setResetError(txResult.message ?? "Transaction failed.");
+        return;
+      }
+      const allRecoveries = await getAllRecoveries();
+      for (const r of allRecoveries) {
+        if (r.recoverableAddress.toLowerCase() === recoverableResolved.toLowerCase()) {
+          await updateRecoveryInStore(r.id, { consumed: false, status: true });
+        }
+      }
+      setResetPhase("success");
+    } catch (e: any) {
+      setResetPhase("failed");
+      setResetError(e?.message ?? "Transaction failed.");
+    }
+  }
+
+  if (resetPhase !== null) {
     return createPortal(
-      <div
-        style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
-      >
+      <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}>
         <div className="bg-background rounded-xl border border-border shadow-xl w-full p-5" style={{ maxWidth: 420 }}>
-          <h2 className="text-base font-semibold material-gold-text mb-2">Recovery Complete</h2>
-          <p className="text-sm text-muted-foreground mb-4">The account has been successfully recovered and added to your portfolio.</p>
-          <div className="flex justify-end">
-            <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Done</button>
-          </div>
+          {resetPhase === "prompt" && (
+            <>
+              <h2 className="text-base font-semibold material-gold-text mb-2">Recovery Complete</h2>
+              <p className="text-sm text-muted-foreground mb-3">The account has been successfully recovered and added to your portfolio.</p>
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-4">
+                The recoverable contract has been consumed and must be reset before it can be used for future recovery. Resetting will deduct <strong>2 transaction credits</strong>.
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Later</button>
+                <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={handleResetNow}>Reset Now</button>
+              </div>
+            </>
+          )}
+          {resetPhase === "resetting" && (
+            <>
+              <h2 className="text-base font-semibold material-gold-text mb-2">Resetting Recoverable</h2>
+              <p className="text-sm text-muted-foreground">Submitting reset transaction…</p>
+            </>
+          )}
+          {resetPhase === "success" && (
+            <>
+              <h2 className="text-base font-semibold material-gold-text mb-2">Recoverable Reset</h2>
+              <p className="text-sm text-muted-foreground mb-4">The recoverable has been successfully reset and is ready for future use.</p>
+              <div className="flex justify-end">
+                <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Done</button>
+              </div>
+            </>
+          )}
+          {resetPhase === "failed" && (
+            <>
+              <h2 className="text-base font-semibold material-gold-text mb-2">Reset Failed</h2>
+              <div className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-600 mb-4">{resetError}</div>
+              <div className="flex justify-end">
+                <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Later</button>
+              </div>
+            </>
+          )}
         </div>
       </div>,
       document.body
@@ -2517,6 +2608,126 @@ function InitiateRecoveryModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── ResetRecoverableModal ─────────────────────────────────────────────────────
+
+function ResetRecoverableModal({
+  recovery,
+  folios,
+  domains,
+  updateRecovery,
+  onClose,
+}: {
+  recovery: Recovery;
+  folios: Folio[];
+  domains: Domain[];
+  updateRecovery: (id: string, patch: Partial<Recovery>) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const txStatus = useTx(s => s.status);
+  const [phase, setPhase] = React.useState<"confirm" | "resetting" | "success" | "failed">("confirm");
+  const [txError, setTxError] = React.useState<string | null>(null);
+
+  const folio = folios.find(
+    f => f.address.toLowerCase() === recovery.name.toLowerCase() && f.chainId === recovery.chainId
+  ) ?? null;
+  const domain = domains.find(d => d.chainId === recovery.chainId) ?? null;
+
+  async function handleReset() {
+    if (!folio || !domain) return;
+    setPhase("resetting");
+    setTxError(null);
+    try {
+      const innerData = encodeFunctionData({
+        abi: paymasterAbi,
+        functionName: "reinitializeRecoverable",
+        args: [recovery.recoverableAddress as Address],
+      }) as Hex;
+      const encoded = encodeFunctionData({
+        abi: quantumAccountAbi,
+        functionName: "execute",
+        args: [recovery.paymaster as Address, 0n, innerData],
+      }) as Hex;
+      const { startFlow } = useTx.getState();
+      await startFlow({ folio, encoded, domain, nonceKey: ADMIN_KEY });
+      const result = useTx.getState().status;
+      if (result.phase === "failed") {
+        setPhase("failed");
+        setTxError(result.message ?? "Transaction failed.");
+        return;
+      }
+      await updateRecovery(recovery.id, { consumed: false, status: true });
+      setPhase("success");
+    } catch (e: any) {
+      setPhase("failed");
+      setTxError(e?.message ?? "Transaction failed.");
+    }
+  }
+
+  const backdrop = { position: "fixed" as const, inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" };
+
+  if (!folio || !domain) {
+    return createPortal(
+      <div style={backdrop} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="bg-background rounded-xl border border-border shadow-xl w-full p-5" style={{ maxWidth: 420 }}>
+          <h2 className="text-base font-semibold material-gold-text mb-2">Reset Recoverable</h2>
+          <p className="text-sm text-red-600 mb-4">Account not found in your portfolio.</p>
+          <div className="flex justify-end">
+            <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  return createPortal(
+    <div style={backdrop} onClick={(e) => { if (e.target === e.currentTarget && phase !== "resetting") onClose(); }}>
+      <div className="bg-background rounded-xl border border-border shadow-xl w-full p-5" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        {phase === "confirm" && (
+          <>
+            <h2 className="text-base font-semibold material-gold-text mb-2">Reset Recoverable</h2>
+            <p className="text-sm text-muted-foreground mb-3">
+              Resetting this recoverable will allow it to be used for future account recovery.
+            </p>
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-4">
+              This will deduct <strong>2 transaction credits</strong>. Do you wish to proceed?
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Cancel</button>
+              <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={handleReset}>Reset</button>
+            </div>
+          </>
+        )}
+        {phase === "resetting" && (
+          <>
+            <h2 className="text-base font-semibold material-gold-text mb-2">Resetting Recoverable</h2>
+            <p className="text-sm text-muted-foreground">Submitting reset transaction…</p>
+          </>
+        )}
+        {phase === "success" && (
+          <>
+            <h2 className="text-base font-semibold material-gold-text mb-2">Reset Successful</h2>
+            <p className="text-sm text-muted-foreground mb-4">The recoverable has been successfully reset and is ready for future use.</p>
+            <div className="flex justify-end">
+              <button type="button" className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium" onClick={onClose}>Done</button>
+            </div>
+          </>
+        )}
+        {phase === "failed" && (
+          <>
+            <h2 className="text-base font-semibold material-gold-text mb-2">Reset Failed</h2>
+            <div className="rounded-md border border-red-300 px-3 py-2 text-xs text-red-600 mb-4">{txError}</div>
+            <div className="flex justify-end">
+              <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm" onClick={onClose}>Close</button>
+            </div>
+          </>
+        )}
       </div>
     </div>,
     document.body
@@ -3010,7 +3221,10 @@ function FetchRecoverableModal({
             && r.recoverableAddress.toLowerCase() === addrLower
         );
         if (matched) {
-          await updateRecovery(matched.id, { status: entry.isActive });
+          await updateRecovery(matched.id, {
+            status: entry.isActive,
+            consumed: entry.isActive ? false : matched.consumed,
+          });
           synced.push({ address: entry.recoverableAddress, isActive: entry.isActive, action: "updated" });
           continue;
         }
@@ -3022,7 +3236,11 @@ function FetchRecoverableModal({
             && !r.recoverableAddress
         );
         if (unaddressed) {
-          await updateRecovery(unaddressed.id, { recoverableAddress: entry.recoverableAddress, status: entry.isActive });
+          await updateRecovery(unaddressed.id, {
+            recoverableAddress: entry.recoverableAddress,
+            status: entry.isActive,
+            consumed: entry.isActive ? false : unaddressed.consumed,
+          });
           synced.push({ address: entry.recoverableAddress, isActive: entry.isActive, action: "addressPatched" });
           continue;
         }
@@ -3176,6 +3394,7 @@ export function RecoveryPage() {
   const [isAttestationOpen, setIsAttestationOpen] = React.useState(false);
   const [attestationPrefill, setAttestationPrefill] = React.useState<AttestationPrefill | null>(null);
   const [isFetchOpen, setIsFetchOpen] = React.useState(false);
+  const [resettingRecovery, setResettingRecovery] = React.useState<Recovery | null>(null);
 
   // ── Data hooks ───────────────────────────────────────────────────────────
   const {
@@ -3376,12 +3595,14 @@ export function RecoveryPage() {
                     <div className="min-w-0">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          r.status
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-600"
+                          r.consumed
+                            ? "bg-amber-100 text-amber-800"
+                            : r.status
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-600"
                         }`}
                       >
-                        {r.status ? "Enabled" : "Disabled"}
+                        {r.consumed ? "Consumed" : r.status ? "Enabled" : "Disabled"}
                       </span>
                       <div className="mt-0.5 text-xs text-muted">{r.threshold}/{r.participants.length} threshold</div>
                     </div>
@@ -3448,6 +3669,20 @@ export function RecoveryPage() {
                           >
                             Create Attestation
                           </button>
+                          {r.consumed && (
+                            <>
+                              <div className="my-1 border-t border-border" />
+                              <button
+                                className="block w-full px-4 py-3 text-left text-sm sm:px-3 sm:py-2 sm:text-xs hover:bg-primary hover:text-primary-foreground"
+                                onClick={(e) => {
+                                  (e.currentTarget.closest("details") as HTMLDetailsElement)?.removeAttribute("open");
+                                  setResettingRecovery(r);
+                                }}
+                              >
+                                Reset
+                              </button>
+                            </>
+                          )}
                         </div>
                       </details>
                     </div>
@@ -3620,6 +3855,17 @@ export function RecoveryPage() {
           contacts={contacts}
           domains={domains}
           onClose={() => { setIsAttestationOpen(false); setAttestationPrefill(null); }}
+        />
+      )}
+
+      {/* ── Reset recoverable modal ── */}
+      {resettingRecovery && (
+        <ResetRecoverableModal
+          recovery={resettingRecovery}
+          folios={folios}
+          domains={domains}
+          updateRecovery={updateRecovery}
+          onClose={() => setResettingRecovery(null)}
         />
       )}
     </div>

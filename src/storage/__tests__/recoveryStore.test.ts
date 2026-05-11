@@ -75,6 +75,11 @@ describe("addRecovery", () => {
     expect(result[0].status).toBe(true);
   });
 
+  it("sets consumed to false by default", async () => {
+    const result = await addRecovery(BASE_RECOVERY);
+    expect(result[0].consumed).toBe(false);
+  });
+
   it("defaults null fields to sensible values", async () => {
     const result = await addRecovery({
       name: "0xAbc",
@@ -157,6 +162,44 @@ describe("updateRecovery", () => {
     expect(updated.chainId).toBe(11155111);
     expect(updated.paymaster).toBe(BASE_RECOVERY.paymaster);
     expect(updated.recoverableAddress).toBe(""); // null input → empty string
+  });
+
+  it("can patch the consumed field", async () => {
+    const added = await addRecovery(BASE_RECOVERY);
+    const id = added[0].id;
+
+    await updateRecovery(id, { consumed: true });
+    const withConsumed = (await getAllRecoveries()).find(r => r.id === id)!;
+    expect(withConsumed.consumed).toBe(true);
+
+    await updateRecovery(id, { consumed: false });
+    const cleared = (await getAllRecoveries()).find(r => r.id === id)!;
+    expect(cleared.consumed).toBe(false);
+  });
+});
+
+describe("consumed field — legacy record migration", () => {
+  it("defaults consumed to false for records loaded from disk that lack the field", async () => {
+    // Simulate a legacy v1 record stored on disk without the consumed field
+    const legacyRecord = {
+      id: "recovery:legacy-001",
+      name: "0xLegacyAddress000000000000000000000001",
+      paymaster: "0xPaymaster0000000000000000000000000001",
+      recoverableAddress: "0xRecoverable00000000000000000000000001",
+      participants: [],
+      threshold: 1,
+      chainId: 11155111,
+      status: true,
+      createdAt: 1000,
+      updatedAt: 1000,
+      // no `consumed` field — as it would be on disk before this change
+    };
+    const { set: idbSet } = await import("idb-keyval");
+    (idbSet as any)("cointrol:recovery:v1:test-uid", [legacyRecord]);
+
+    const all = await getAllRecoveries();
+    expect(all).toHaveLength(1);
+    expect(all[0].consumed).toBe(false);
   });
 });
 

@@ -155,7 +155,7 @@ export async function addFolio(input: {
 
 export async function updateFolio(
   id: string,
-  patch: Partial<Omit<Folio, "id" | "createdAt">>
+  patch: Partial<Omit<Folio, "id" | "createdAt" | "address" | "chainId" | "name">>
 ): Promise<Folio[]> {
   const folios = await loadFoliosRaw();
   const now = Date.now();

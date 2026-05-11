@@ -82,16 +82,16 @@ describe("addFolio", () => {
 });
 
 describe("updateFolio", () => {
-  it("patches the matching folio and updates updatedAt", async () => {
+  it("patches allowed fields and updates updatedAt", async () => {
     const added = await addFolio(BASE_FOLIO);
     const id = added[0].id;
     const before = added[0].updatedAt;
 
     await new Promise(r => setTimeout(r, 2));
-    const result = await updateFolio(id, { name: "Renamed Wallet" });
+    const result = await updateFolio(id, { bundler: "0xNewBundler" });
 
     const updated = result.find(f => f.id === id)!;
-    expect(updated.name).toBe("Renamed Wallet");
+    expect(updated.bundler).toBe("0xNewBundler");
     expect(updated.updatedAt).toBeGreaterThan(before);
   });
 
@@ -100,7 +100,7 @@ describe("updateFolio", () => {
     const added2 = await addFolio({ ...BASE_FOLIO, name: "Second" });
     const id2 = added2.find(f => f.name === "Second")!.id;
 
-    await updateFolio(id2, { name: "Second Updated" });
+    await updateFolio(id2, { bundler: "0xUpdatedBundler" });
     const all = await getAllFolios();
     expect(all.some(f => f.name === "My Wallet")).toBe(true);
   });
