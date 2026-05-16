@@ -14,7 +14,7 @@ import { getCurrentUser } from "@/storage/currentUser";
 const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 const CLOUDFLARE_ETH_RPC = "https://cloudflare-eth.com";
 
-export const MAX_BLOCK_RANGE = 50_000n;
+export const MAX_BLOCK_RANGE = 2_000n;
 
 export async function chunkedGetLogs<T>(
   fetch: (fromBlock: bigint, toBlock: bigint) => Promise<T[]>,
