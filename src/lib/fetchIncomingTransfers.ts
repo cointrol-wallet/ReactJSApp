@@ -14,6 +14,25 @@ import { getCurrentUser } from "@/storage/currentUser";
 const ENS_REGEX = /^[a-z0-9-]+\.eth$/i;
 const CLOUDFLARE_ETH_RPC = "https://cloudflare-eth.com";
 
+export const MAX_BLOCK_RANGE = 50_000n;
+
+export async function chunkedGetLogs<T>(
+  fetch: (fromBlock: bigint, toBlock: bigint) => Promise<T[]>,
+  startBlock: bigint,
+  endBlock: bigint
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = startBlock;
+  while (from <= endBlock) {
+    const to = from + MAX_BLOCK_RANGE - 1n < endBlock
+      ? from + MAX_BLOCK_RANGE - 1n
+      : endBlock;
+    all.push(...await fetch(from, to));
+    from = to + 1n;
+  }
+  return all;
+}
+
 function lastFetchedBlockKey(chainId: number): string {
   return `cointrol:txns:lastFetchedBlock:${getCurrentUser()}:${chainId}`;
 }
@@ -109,15 +128,19 @@ export async function fetchIncomingTransfers(
   // ---- ERC-20 + ERC-721 Transfer events ------------------------------------
   // topic0 = keccak256("Transfer(address,address,uint256)") — same for both
   try {
-    const transferLogs = await client.getLogs({
-      event: parseAbiItem(
-        "event Transfer(address indexed from, address indexed to, uint256 value)"
-      ),
-      address: coinAddresses,
-      args: { to: folioAddresses },
-      fromBlock: startBlock,
-      toBlock: latestBlock,
-    });
+    const transferLogs = await chunkedGetLogs(
+      (from, to) => client.getLogs({
+        event: parseAbiItem(
+          "event Transfer(address indexed from, address indexed to, uint256 value)"
+        ),
+        address: coinAddresses,
+        args: { to: folioAddresses },
+        fromBlock: from,
+        toBlock: to,
+      }),
+      startBlock,
+      latestBlock
+    );
 
     for (const log of transferLogs) {
       try {
@@ -177,15 +200,19 @@ export async function fetchIncomingTransfers(
 
   // ---- ERC-1155 TransferSingle events --------------------------------------
   try {
-    const singleLogs = await client.getLogs({
-      event: parseAbiItem(
-        "event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)"
-      ),
-      address: coinAddresses,
-      args: { to: folioAddresses },
-      fromBlock: startBlock,
-      toBlock: latestBlock,
-    });
+    const singleLogs = await chunkedGetLogs(
+      (from, to) => client.getLogs({
+        event: parseAbiItem(
+          "event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)"
+        ),
+        address: coinAddresses,
+        args: { to: folioAddresses },
+        fromBlock: from,
+        toBlock: to,
+      }),
+      startBlock,
+      latestBlock
+    );
 
     for (const log of singleLogs) {
       try {
@@ -237,15 +264,19 @@ export async function fetchIncomingTransfers(
 
   // ---- ERC-1155 TransferBatch events ---------------------------------------
   try {
-    const batchLogs = await client.getLogs({
-      event: parseAbiItem(
-        "event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)"
-      ),
-      address: coinAddresses,
-      args: { to: folioAddresses },
-      fromBlock: startBlock,
-      toBlock: latestBlock,
-    });
+    const batchLogs = await chunkedGetLogs(
+      (from, to) => client.getLogs({
+        event: parseAbiItem(
+          "event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)"
+        ),
+        address: coinAddresses,
+        args: { to: folioAddresses },
+        fromBlock: from,
+        toBlock: to,
+      }),
+      startBlock,
+      latestBlock
+    );
 
     for (const log of batchLogs) {
       try {

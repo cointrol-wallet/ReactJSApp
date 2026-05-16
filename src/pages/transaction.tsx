@@ -898,6 +898,9 @@ export function Transactions() {
 
   React.useEffect(() => {
     if (!selectedFnName) return;
+    // If a target function is still pending selection, wait — applying now would
+    // use the wrong function name and get cleared when the right one is selected.
+    if (pendingPrefillFnRef.current && pendingPrefillFnRef.current !== selectedFnName) return;
 
     // clear BOTH types of inputs whenever function changes (apply pending prefill if set)
     if (pendingArgValuesRef.current) {
