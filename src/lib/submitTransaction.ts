@@ -1,16 +1,17 @@
 import { create } from "zustand";
-import { 
-  Address, 
-  keccak256, 
-  bytesToHex, 
-  hexToBytes, 
-  concatHex, 
-  padHex, 
-  toHex, 
-  http, 
-  createPublicClient, 
-  Hex, 
-  hashTypedData 
+import {
+  Address,
+  keccak256,
+  stringToHex,
+  bytesToHex,
+  hexToBytes,
+  concatHex,
+  padHex,
+  toHex,
+  http,
+  createPublicClient,
+  Hex,
+  hashTypedData
 } from "viem";
 import { createFalconWorkerClient } from "@/crypto/falconInterface";
 import { getSecretKey, listKeypairs } from "@/storage/keyStore";
@@ -323,16 +324,22 @@ export const useTx = create<TxStore>((set, get) => ({
 
     if (userOpHash.length !== 66) throw new Error(`Invalid userOpHash length`);
 
-    const falcon = createFalconWorkerClient();
-    const sk = await getSecretKey(folio.keypairId);
-    if (!sk) throw new Error("Falcon secret key not available");
+    const UKVR_SELECTOR = keccak256(stringToHex("updatePublicKeyViaRecoverable(address,bytes)")).slice(0, 10);
+    const isUKVR = (encoded as string).toLowerCase().startsWith(UKVR_SELECTOR);
 
-    const signature = await falcon.sign(meta.level, hexToBytes(userOpHash), sk);
-
-    const userOp: PackedUserOperation = { ...userOpBase, signature: bytesToHex(signature) } as PackedUserOperation;
-
-    sk.fill(0); // zero out secret key from memory as soon as possible
-    falcon.terminate(); // terminate worker to clear its copy of the SK
+    let userOp: PackedUserOperation;
+    if (isUKVR) {
+      // Contract bypasses signature check for recovery ops; send empty signature
+      userOp = { ...userOpBase, signature: "0x" } as PackedUserOperation;
+    } else {
+      const falcon = createFalconWorkerClient();
+      const sk = await getSecretKey(folio.keypairId);
+      if (!sk) throw new Error("Falcon secret key not available");
+      const signature = await falcon.sign(meta.level, hexToBytes(userOpHash), sk);
+      userOp = { ...userOpBase, signature: bytesToHex(signature) } as PackedUserOperation;
+      sk.fill(0);
+      falcon.terminate();
+    }
 
     // 4) Send
     set({ status: { phase: "preparing", message: "Submitting to bundler" } });
